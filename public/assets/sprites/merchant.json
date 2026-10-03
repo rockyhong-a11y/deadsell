@@ -1,0 +1,23 @@
+{
+ "image": "merchant.png",
+ "frameW": 128,
+ "frameH": 128,
+ "anchor": [
+  64,
+  116
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 8,
+   "fps": 8,
+   "loop": true
+  },
+  "talk": {
+   "row": 1,
+   "frames": 10,
+   "fps": 10,
+   "loop": true
+  }
+ }
+}

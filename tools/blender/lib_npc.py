@@ -186,9 +186,12 @@ class NPC:
             a["an_" + s] = LH.angnorm(-low)
         return a
 
-    def frame(self, angles, hip=(0.0, 0.0), off=None, sc=None, tw=None, blink=0.0):
-        """Assemble a render_animation pose tuple (angles, offsets, scales, twists)."""
+    def frame(self, angles, hip=(0.0, 0.0), off=None, sc=None, tw=None, blink=0.0, lift=0.0):
+        """Assemble a render_animation pose tuple (angles, offsets, scales, twists).
+        `lift` raises the whole character (world units) to put the soles exactly on the anchor row."""
         o = {"hips": (hip[0], 0.0, hip[1])}
+        if lift:
+            o["root"] = (0.0, 0.0, lift)
         o.update(off or {})
         s = {"root": (self.k, self.k, self.k)}
         if blink > 0:

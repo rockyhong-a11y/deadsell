@@ -225,11 +225,11 @@ def pose(t, talk=False, blink=0.0):
         off[jn] = (0.012 * math.sin(N.TAU * (t * w + ph)), 0.0, 0.034 * math.sin(N.TAU * (t * w * (1 if k % 2 else 1) + ph * 1.7)))
         s = 1.0 + 0.16 * math.sin(N.TAU * (t * w + ph * 2.3))
         sc[jn] = (s, s, s)
-    hip = (0.0, 0.006 * br)
+    hip = (0.0, -0.02 + 0.006 * br)
     a.update(npc.legs(hip_dx=hip[0], hip_dz=hip[1], xn=0.065, xf=-0.11))
     sc["head"] = (1.16, 1.16, 1.16)                       # bigger head reads better at 64 px
     tw = {"head": -26 + (5.0 * math.sin(N.TAU * t) if talk else 1.5 * br2), "neck": -4}
-    return npc.frame(a, hip=hip, off=off, sc=sc, tw=tw, blink=blink)
+    return npc.frame(a, hip=hip, off=off, sc=sc, tw=tw, blink=blink, lift=1.0 / 32)
 
 
 def idle_fn(i, n):

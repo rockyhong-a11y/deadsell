@@ -256,7 +256,7 @@ def pose(t, talk=False, blink=0.0):
         a["scB%d" % k] = pend(t, 7.0 * amp, 0.2 * (k + 1), w) - (22 if k == 0 else 0)
     for k in range(4):
         a["br%d" % k] = pend(t, 5.0 * amp, 0.15 * (k + 1), w)
-    hip = (0.0, 0.005 * br)
+    hip = (0.0, -0.02 + 0.005 * br)
     a.update(npc.legs(hip_dx=hip[0], hip_dz=hip[1], xn=0.07, xf=-0.11))
     sc = {"head": (1.16, 1.16, 1.16)}
     tw = {"head": -24 + (5.0 * math.sin(N.TAU * t) if talk else 1.5 * br2), "neck": -4}

@@ -92,6 +92,8 @@ interface Arc {
   kind: 'jump' | 'fall' | 'drop';
   /** horizontal distance (px) the player keeps pressing the direction for */
   cut: number;
+  /** takeoff speed (px/s, jumps only) */
+  vy0: number;
   /** vertical offsets by vertical step (px, positive = down) */
   oy: Float32Array;
 }
@@ -111,11 +113,11 @@ const FALL_OY = makeOy(0);
 const ARCS: Arc[] = [];
 for (const v of [456, 380, 290]) {
   const oy = makeOy(v);
-  ARCS.push({ kind: 'jump', cut: 0, oy });
-  for (const c of [24, 48, 72, 96, 120, 1e9]) ARCS.push({ kind: 'jump', cut: c, oy });
+  ARCS.push({ kind: 'jump', cut: 0, oy, vy0: v });
+  for (const c of [24, 48, 72, 96, 120, 1e9]) ARCS.push({ kind: 'jump', cut: c, oy, vy0: v });
 }
-for (const c of [24, 36, 48, 72, 96, 1e9]) ARCS.push({ kind: 'fall', cut: c, oy: FALL_OY });
-for (const c of [0, 24, 48, 72, 1e9]) ARCS.push({ kind: 'drop', cut: c, oy: FALL_OY });
+for (const c of [24, 36, 48, 72, 96, 1e9]) ARCS.push({ kind: 'fall', cut: c, oy: FALL_OY, vy0: 0 });
+for (const c of [0, 24, 48, 72, 1e9]) ARCS.push({ kind: 'drop', cut: c, oy: FALL_OY, vy0: 0 });
 
 /**
  * Run an arc from a standing cell. `dir` = +1/-1. The player holds the direction until `cut` px
@@ -448,7 +450,7 @@ export function edgesFrom(grid: NavGrid, node: number): NavEdge[] {
     for (const d of arc.cut === 0 ? [1] : [-1, 1]) {
       if (arc.kind === 'fall' && standableC(g, x + d, y)) continue;
       const to = runArc(g, arc, d, sx, sy);
-      if (to >= 0 && to !== node) out.push({ from: node, to, kind: arc.kind, vy0: arc.kind === 'jump' ? JUMP_PROFILES[arc.oy[0] > 0 ? 0 : 0] : 0, cut: arc.cut, dir: d });
+      if (to >= 0 && to !== node) out.push({ from: node, to, kind: arc.kind, vy0: arc.vy0, cut: arc.cut, dir: d });
     }
   }
   return out;

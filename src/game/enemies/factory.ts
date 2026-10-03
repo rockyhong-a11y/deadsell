@@ -1,10 +1,14 @@
-import { Actor } from '../entity';
-import type { DamageInfo } from '../combat';
-import { hitArea } from '../combat';
-
-export type EnemyKind = 'ghoul' | 'jailer' | 'archer' | 'bomber' | 'harpy' | 'lancer';
-
+import type { Actor } from '../entity';
 import type { BiomeId } from '../run';
+import { Ghoul } from './ghoul';
+import { Jailer } from './jailer';
+import { Archer } from './archer';
+import { Bomber } from './bomber';
+import { Harpy } from './harpy';
+import { Lancer } from './lancer';
+import type { EnemyKind, EnemyOpts } from './base';
+
+export type { EnemyKind, EnemyOpts } from './base';
 
 /** Which enemies appear in which biome (weights). 'flyer' spawn markers use FLYERS. */
 export const ENEMY_POOLS: Record<BiomeId, { kind: EnemyKind; weight: number }[]> = {
@@ -14,61 +18,20 @@ export const ENEMY_POOLS: Record<BiomeId, { kind: EnemyKind; weight: number }[]>
 };
 export const FLYERS: Record<BiomeId, EnemyKind[]> = { prison: ['harpy'], ramparts: ['harpy'], tower: [] };
 
-export interface EnemyOpts {
-  /** 1 = prison, 2 = ramparts (scales hp/damage) */
-  tier: number;
-  elite: boolean;
-}
-
-/**
- * Create an enemy. OWNER: enemies agent — this stub makes a dumb walker so the core runs.
- */
-export function createEnemy(kind: EnemyKind, x: number, y: number, opts: EnemyOpts): Actor {
-  return new StubEnemy(kind, x, y, opts);
-}
-
-class StubEnemy extends Actor {
-  private kind: EnemyKind;
-  private cd = 1;
-
-  constructor(kind: EnemyKind, x: number, y: number, _o: EnemyOpts) {
-    super(x, y);
-    this.kind = kind;
-    this.w = 16;
-    this.h = 40;
-    this.hp = this.maxHp = 40;
-  }
-
-  init(): void {
-    this.setSheet(this.world.assets.sheet(this.kind));
-  }
-
-  update(dt: number): void {
-    this.updateStatus(dt);
-    const p = this.world.player;
-    if (!this.dying && !this.incapacitated) {
-      const dx = p.x - this.x;
-      this.facing = dx > 0 ? 1 : -1;
-      this.vx = Math.abs(dx) > 30 ? this.facing * 40 : 0;
-      this.cd -= dt;
-      if (this.cd <= 0 && Math.abs(dx) < 40) {
-        this.cd = 1.5;
-        hitArea(this.world, { x: this.x - 30, y: this.y - 40, w: 60, h: 40 }, 'enemy', { amount: 8, dir: this.facing, kind: 'melee', knockback: 150 });
-      }
-    } else if (!this.dying) this.vx *= 0.9;
-    super.update(dt);
-    this.anim?.play(this.dying ? 'death' : Math.abs(this.vx) > 1 ? 'walk' : 'idle');
-    if (this.dying && this.anim?.finished) this.dead = true;
-  }
-
-  die(info: DamageInfo): void {
-    super.die(info);
-    this.vx = 0;
-    this.anim?.play('death', true);
-    this.world.emit({ type: 'enemyKilled', enemy: this, elite: false });
-  }
-
-  draw(ctx: CanvasRenderingContext2D): void {
-    this.drawSprite(ctx);
+/** Create an enemy of the given kind. `tier` 2 = ×1.6 hp, ×1.4 damage; `elite` = ×3 hp, 1.3× scale, aura. */
+export function createEnemy(kind: EnemyKind, x: number, y: number, opts: Partial<EnemyOpts> = {}): Actor {
+  switch (kind) {
+    case 'ghoul':
+      return new Ghoul(x, y, opts);
+    case 'jailer':
+      return new Jailer(x, y, opts);
+    case 'archer':
+      return new Archer(x, y, opts);
+    case 'bomber':
+      return new Bomber(x, y, opts);
+    case 'harpy':
+      return new Harpy(x, y, opts);
+    case 'lancer':
+      return new Lancer(x, y, opts);
   }
 }

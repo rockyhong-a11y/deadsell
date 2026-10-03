@@ -10,7 +10,7 @@ export interface SaveData {
   wins: number;
   bestTime: number | null;
   totalKills: number;
-  settings: { sfx: number; music: number; hints: boolean };
+  settings: { sfx: number; music: number; hints: boolean; muted: boolean };
 }
 
 const KEY = 'deadsell.save.v1';
@@ -24,7 +24,7 @@ export function defaultSave(): SaveData {
     wins: 0,
     bestTime: null,
     totalKills: 0,
-    settings: { sfx: 0.8, music: 0.5, hints: true },
+    settings: { sfx: 0.8, music: 0.5, hints: true, muted: false },
   };
 }
 

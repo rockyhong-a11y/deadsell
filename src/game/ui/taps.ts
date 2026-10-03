@@ -15,6 +15,9 @@ export interface TapRegion {
   onTap: () => void;
   /** optional: called on release (for hold buttons) */
   onRelease?: () => void;
+  /** optional: finger moved by (dx, dy) virtual px while pressed on this region (map panning, scrolling).
+   *  A region with onDrag does not fire onTap when the finger travelled further than the tap slop. */
+  onDrag?: (dx: number, dy: number) => void;
 }
 
 export class TapRegistry {

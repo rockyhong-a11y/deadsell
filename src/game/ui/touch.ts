@@ -105,6 +105,8 @@ interface Finger {
   oy: number;
   // ui
   region: TapRegion | null;
+  /** ui finger has moved past the tap slop (drag regions) */
+  dragging: boolean;
 }
 
 const OPPOSITE: Record<SwipeDir, SwipeDir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
@@ -147,6 +149,11 @@ export class GestureRecognizer {
     return this.fingers.size;
   }
 
+  /** current joystick output (-1..1) */
+  get axis(): { x: number; y: number } {
+    return { x: this.axisX, y: this.axisY };
+  }
+
   down(id: number, x: number, y: number, t: number): GestureAction[] {
     const out: GestureAction[] = [];
     this.view.now = t;
@@ -154,7 +161,7 @@ export class GestureRecognizer {
     const f: Finger = {
       id, kind: 'gesture', sx: x, sy: y, st: t, x, y, maxD: 0,
       ax: x, ay: y, lastDir: null, lastFired: false, swiped: false, hold: false, jumpHeld: false, jumpAt: 0,
-      ox: x, oy: y, region: null,
+      ox: x, oy: y, region: null, dragging: false,
     };
     const region = this.hitTest(x, y);
     if (region) {
@@ -180,7 +187,14 @@ export class GestureRecognizer {
     f.y = y;
     f.maxD = Math.max(f.maxD, Math.hypot(x - f.sx, y - f.sy));
     if (f.kind === 'ui') {
-      if (f.region?.onDrag && (x !== px || y !== py)) out.push({ t: 'ui', phase: 'drag', region: f.region, dx: x - px, dy: y - py });
+      if (f.region?.onDrag && f.maxD >= this.cfg.tapSlop) {
+        // drag starts once the finger leaves the tap slop; the first delta carries the distance travelled so far
+        const first = !f.dragging;
+        f.dragging = true;
+        const dx = first ? x - f.sx : x - px;
+        const dy = first ? y - f.sy : y - py;
+        if (dx !== 0 || dy !== 0) out.push({ t: 'ui', phase: 'drag', region: f.region, dx, dy });
+      }
     } else if (f.kind === 'joy') {
       this.moveJoy(f, out);
     } else {
@@ -447,8 +461,13 @@ export function attachTouch(game: Game): void {
   window.addEventListener('blur', dropAll);
   document.addEventListener('visibilitychange', () => { if (document.hidden) dropAll(); });
 
+  // first key press also unlocks WebAudio (desktop / tests)
+  window.addEventListener('keydown', () => game.audio.unlock(), { once: true });
+
   const tick = () => {
     apply(rec.update(nowSecs()));
+    // scene changes reset game.input (axes included): keep the stick alive while the thumb is down
+    if (rec.view.joy) game.input.setAxis('touch', rec.axis.x, rec.axis.y);
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);

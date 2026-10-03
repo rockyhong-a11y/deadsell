@@ -49,6 +49,7 @@ _G = {}
 def new_scene():
     sc = common.reset_scene()
     sc.view_settings.view_transform = "Raw"
+    sc.render.dither_intensity = 0.0
     _G.clear()
     m = bpy.data.materials.new("GBUF")
     m.use_nodes = True

@@ -277,6 +277,23 @@ def claw(name, length, r, mat_, bend=0.5, segs=6):
     return tube(name, pts, [r, r * 0.8, r * 0.6, r * 0.35, 0.002], mat_, segs=segs)
 
 
+def bake(ob):
+    """Apply the object's location/rotation/scale into its mesh (origin back at 0), so a part
+    built with loc=/rot= keeps that placement when attached with Rig.attach."""
+    bpy.ops.object.select_all(action="DESELECT")
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    return ob
+
+
+def joined(name, objs):
+    """Bake every part, then join them into one object (origin at 0)."""
+    for ob in objs:
+        bake(ob)
+    return join(objs, name)
+
+
 def disc(name, r, thick, mat_, loc=(0, 0, 0), rot=(0, 0, 0), segs=16):
     bpy.ops.mesh.primitive_cylinder_add(vertices=segs, radius=r, depth=thick, location=loc,
                                         rotation=[math.radians(a) for a in rot])
@@ -376,15 +393,15 @@ def lowest(objs):
     return mz
 
 
-def ground(rig, pose, objs, target=0.0):
-    """pose = (angles, offsets, scales).  Adds a root z offset so the lowest vertex of
-    `objs` (world space) lands on z = target."""
+def ground(rig, pose, objs, target=0.0, joint="root"):
+    """pose = (angles, offsets, scales).  Adds a z offset to `joint` (root by default) so the
+    lowest vertex of `objs` (world space) lands on z = target."""
     ang, off, sc = pose
     rig.pose(ang, off, sc)
     mz = lowest(objs)
     off = dict(off)
-    rx, ry, rz = off.get("root", (0.0, 0.0, 0.0))
-    off["root"] = (rx, ry, rz + target - mz)
+    rx, ry, rz = off.get(joint, (0.0, 0.0, 0.0))
+    off[joint] = (rx, ry, rz + target - mz)
     return ang, off, sc
 
 
@@ -407,6 +424,65 @@ def feet_flat(p, toe_n=0.0, toe_f=0.0):
     """Set ankle angles so both feet are level (plus optional toe tilt)."""
     for sd, toe in (("n", toe_n), ("f", toe_f)):
         p["an_" + sd] = -(p.get("root", 0) + p.get("hips", 0) + p.get("th_" + sd, 0) + p.get("kn_" + sd, 0)) + toe
+    return p
+
+
+def joint_xz(rig, name, local=(0.0, 0.0, 0.0)):
+    """World (x, z) of a point given in joint `name`'s space (pose must already be applied)."""
+    w = world_matrix(rig.joints[name]) @ Vector(local)
+    return w.x, w.z
+
+
+def _down_angle(m):
+    """Screen-plane angle (deg, 0 = pointing down, + toward +X) of matrix m's local -Z axis."""
+    d = m.to_3x3() @ Vector((0, 0, -1))
+    return math.degrees(math.atan2(d.x, -d.z))
+
+
+def ik2(rig, p, upper, lower, end, target, bend=1.0, end_offset=None):
+    """Two-bone screen-plane IK.  Sets p[upper], p[lower] so joint `end` (or end_offset in the
+    lower joint's space) reaches world target (x, z).  bend=+1 flexes like an elbow (CCW),
+    -1 like a knee.  Returns p (modified)."""
+    q = dict(p)
+    q[upper] = 0.0
+    q[lower] = 0.0
+    rig.pose(*split(q))
+    mu = world_matrix(rig.joints[upper])
+    px, pz = mu.translation.x, mu.translation.z
+    phi0 = _down_angle(mu)
+    l1 = (rig.world_rest[lower] - rig.world_rest[upper]).length
+    if end_offset is not None:
+        l2 = Vector(end_offset).length
+    else:
+        l2 = (rig.world_rest[end] - rig.world_rest[lower]).length
+    # account for joint scales (uniform) on the chain parent
+    sc = mu.to_scale().x
+    l1 *= sc
+    l2 *= sc
+    tx, tz = target
+    dx, dz = tx - px, tz - pz
+    d = max(abs(l1 - l2) + 1e-4, min(l1 + l2 - 1e-4, math.hypot(dx, dz)))
+    phit = math.degrees(math.atan2(dx, -dz))
+    a = math.degrees(math.acos(max(-1, min(1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)))))
+    b = math.degrees(math.acos(max(-1, min(1, (l1 * l1 + l2 * l2 - d * d) / (2 * l1 * l2)))))
+    p[upper] = phit - bend * a - phi0
+    p[lower] = bend * (180.0 - b)
+    while p[upper] - p.get("_ref_" + upper, 0.0) > 180:
+        p[upper] -= 360
+    while p[upper] - p.get("_ref_" + upper, 0.0) < -180:
+        p[upper] += 360
+    return p
+
+
+def point_at(rig, p, joint, target, rest_dir=-90.0):
+    """Swing `joint` so that its local -Z axis points from the joint toward world target (x, z)."""
+    q = dict(p)
+    q[joint] = 0.0
+    rig.pose(*split(q))
+    m = world_matrix(rig.joints[joint])
+    phi0 = _down_angle(m)
+    dx, dz = target[0] - m.translation.x, target[1] - m.translation.z
+    p[joint] = math.degrees(math.atan2(dx, -dz)) - phi0
     return p
 
 
@@ -448,10 +524,12 @@ class Sheet:
         return ob
 
     def render(self, name, frames, pose_fn, fps=12, loop=False, wa=None, vis_fn=None, ground_objs=None,
-               ground_fn=None, extra_fn=None):
+               ground_fn=None, extra_fn=None, grounds=None):
         """pose_fn(i, n) -> flat pose dict.  vis_fn(i, n) -> {object name: visible}.
         ground_objs: meshes whose lowest vertex is kept on z=0 each frame.
         ground_fn(i, n) -> list of meshes (overrides ground_objs per frame) or None (no grounding).
+        grounds: [(joint, meshes), ...] -- each group is grounded by shifting that joint (in its
+        parent's space; parent must be unrotated), applied after ground_objs.
         wa: (windup, active, recover) for attack animations."""
         for ob, _ in self.props.values():
             ob.animation_data_clear()
@@ -461,6 +539,8 @@ class Sheet:
             objs = ground_fn(i, n) if ground_fn else ground_objs
             if objs:
                 pose = ground(self.rig, pose, objs)
+            for j, gobjs in (grounds or []):
+                pose = ground(self.rig, pose, gobjs, joint=j)
             return pose
 
         def ef(i, n, frame):

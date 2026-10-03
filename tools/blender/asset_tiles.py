@@ -23,7 +23,7 @@ U = 1.0 / E.PPU                # one pixel in Blender units
 
 
 def masonry(seed, heights, lengths, gap_px, depth, bevel_px, chip_px, matids, rot_jit=1.5,
-            depth_jit_px=0.8, mortar="mortar", mortar_y=None, w_cells=FILL_W, h_cells=FILL_H,
+            depth_jit_px=0.8, segs=2, mortar="mortar", mortar_y=None, w_cells=FILL_W, h_cells=FILL_H,
             big=None):
     """Periodic stone wall, w_cells x h_cells, bottom-left at world (0,0)."""
     rnd = random.Random(seed)
@@ -44,7 +44,8 @@ def masonry(seed, heights, lengths, gap_px, depth, bevel_px, chip_px, matids, ro
 
         def mk(ddx, ddz, cx=cx, cz=cz, sw=sw, sh=sh, mat=mat, s=s, rid=rid, dy=dy, rot=rot):
             return E.block(sw, sh, depth, (cx + ddx, depth / 2 + dy, cz + ddz), matid=mat,
-                           bevel=bevel_px * U, chip=chip_px * U, seed=s, rot=rot, rid=rid)
+                           bevel=bevel_px * U, chip=chip_px * U, seed=s, rot=rot, rid=rid,
+                           segs=segs)
         E.periodic(mk, cx, cz, sw + 0.1, sh + 0.1, w_cells, h_cells)
     my = mortar_y if mortar_y is not None else bevel_px * U + 2.5 * U
     E.block(w_cells + 4, h_cells + 4, 0.1, (w_cells / 2, my + 0.05, h_cells / 2), matid=mortar,
@@ -54,9 +55,9 @@ def masonry(seed, heights, lengths, gap_px, depth, bevel_px, chip_px, matids, ro
 
 BIOMES = {
     "prison": dict(
-        fill=dict(seed=11, heights=(9, 15), lengths=(14, 40), gap_px=1.6, depth=0.5, bevel_px=2.2,
-                  chip_px=1.6, matids=["stone", "stone", "stone", "stone2"], rot_jit=2.5),
-        back=dict(seed=21, heights=(7, 10), lengths=(12, 26), gap_px=1.4, depth=0.4, bevel_px=1.5,
+        fill=dict(seed=11, heights=(11, 19), lengths=(18, 46), gap_px=1.6, depth=0.5, bevel_px=3.5,
+                  chip_px=1.8, matids=["stone", "stone", "stone", "stone2"], rot_jit=2.5),
+        back=dict(seed=21, heights=(8, 12), lengths=(14, 30), gap_px=1.4, depth=0.4, bevel_px=2.0,
                   chip_px=1.0, matids=["back", "back", "back2"], rot_jit=1.5, mortar="backmortar"),
     ),
     "ramparts": dict(

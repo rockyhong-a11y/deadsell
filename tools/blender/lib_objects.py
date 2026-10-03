@@ -78,10 +78,10 @@ def write_spec(out_dir, frame_w, frame_h, anchor, anims, extra=None):
         json.dump(spec, f, indent=1)
 
 
-def clear_objects():
-    """Delete every object (keeps materials / lights data cache valid)."""
+def clear_objects(cameras=False):
+    """Delete every object except lights (and cameras unless cameras=True); materials stay cached."""
     for ob in list(bpy.data.objects):
-        if ob.type in ("LIGHT", "CAMERA"):
+        if ob.type == "LIGHT" or (ob.type == "CAMERA" and not cameras):
             continue
         bpy.data.objects.remove(ob, do_unlink=True)
     for me in list(bpy.data.meshes):
@@ -469,28 +469,27 @@ def face_camera(ob):
 
 
 def chain(name, n, link_len, m, start=(0, 0, 0), direction=(0, 0, -1), r_wire=0.022, twist0=0.0,
-          width_ratio=0.62):
-    """Chain of n oval links from `start` along `direction` (alternating 90 deg twist)."""
+          width_ratio=0.6):
+    """Chain of n oval links from `start` along `direction`, alternating 90 deg twists.
+
+    Even links face the camera (-Y) when the chain is vertical; odd links are edge-on.
+    """
     d = Vector(direction).normalized()
+    ref = Vector((0, 1, 0)) if abs(d.y) < 0.9 else Vector((1, 0, 0))
+    n0 = (ref - d * ref.dot(d)).normalized()
+    n0 = (Matrix.Rotation(math.radians(twist0), 3, d) @ n0).normalized()
+    n1 = d.cross(n0).normalized()
+    R = link_len / 2 - r_wire
+    step = link_len - 2.4 * r_wire
     objs = []
-    step = link_len * 0.72
-    q = d.to_track_quat("Z", "Y")
     for i in range(n):
+        nrm = n0 if i % 2 == 0 else n1
+        wid = d.cross(nrm).normalized()
         c = Vector(start) + d * (step * i + link_len / 2)
-        R = link_len / 2
-        ob = torus("%s_%d" % (name, i), R - r_wire, r_wire, m, segs=12, rsegs=6,
-                   scale=(width_ratio, 1, 1))
-        # torus lies in XY; stand it up so the long axis is local Z of the chain
-        ob.rotation_euler = (0, 0, 0)
-        e = Euler((math.radians(90), 0, math.radians(twist0 + (90 if i % 2 else 0))), "XYZ")
-        bpy.context.view_layer.update()
-        ob.matrix_world = Matrix.Translation(c) @ q.to_matrix().to_4x4() @ \
-            Euler((0, 0, math.radians(twist0 + (90 if i % 2 else 0))), "XYZ").to_matrix().to_4x4() @ \
-            Euler((math.radians(90), 0, 0), "XYZ").to_matrix().to_4x4()
-        # torus default plane XY, rotate 90 about X -> plane XZ (long axis now Z after scaling X)
+        ob = torus("%s_%d" % (name, i), R, r_wire, m, segs=12, rsegs=6, scale=(width_ratio, 1, 1))
+        rotm = Matrix((wid, d, nrm)).transposed()  # columns: local X->wid, Y->d, Z->nrm
+        ob.matrix_world = Matrix.Translation(c) @ rotm.to_4x4()
         objs.append(ob)
-        del e
-    # scale was applied along X (width) before rotation; long axis = original Y -> becomes Z
     return objs
 
 
@@ -596,9 +595,9 @@ def m_rusty_sword():
     return group("rusty_sword", parts)
 
 
-def m_blood_sword():
-    hi = glow("#ff4d63")
-    lo = glow("#b0103a")
+def m_blood_sword(aura=False):
+    hi = glow("#ff3a55")
+    lo = glow("#b80f38")
     stations = []
     for i in range(14):
         z = 0.02 + i * 0.05
@@ -607,15 +606,18 @@ def m_blood_sword():
         stations.append((z, w + wav, w - wav))
     stations.append((0.78, 0.0, 0.0))
     parts = [ridged_blade("bs_blade", stations, hi, lo, t=0.022)]
-    parts.append(box("bs_core", (0.014, 0.01, 0.56), glow("#ffd0d8"), loc=(0, -0.022, 0.32)))
+    parts.append(box("bs_core", (0.016, 0.01, 0.5), glow("#ffc2cc"), loc=(-0.008, -0.022, 0.3)))
+    if aura:
+        st2 = [(z, wl + 0.03, wr + 0.03) for z, wl, wr in stations[:-1]] + [(0.84, 0.0, 0.0)]
+        parts.append(ridged_blade("bs_aura", st2, glow("#6e0a2a"), glow("#6e0a2a"), t=0.01, loc=(0, 0.04, 0)))
     # winged guard
-    wing = [(-0.17, 0.07), (-0.1, 0.02), (0.0, 0.0), (0.1, 0.02), (0.17, 0.07), (0.15, -0.0),
-            (0.06, -0.04), (-0.06, -0.04), (-0.15, -0.0)]
-    parts.append(prism("bs_guard", wing, 0.07, mat("iron_dark"), bevel=0.008))
-    parts.append(sphere("bs_gem", 0.028, glow("#ff2a4a"), loc=(0, -0.04, -0.005)))
+    wing = [(-0.18, 0.08), (-0.1, 0.02), (0.0, 0.0), (0.1, 0.02), (0.18, 0.08), (0.16, -0.0),
+            (0.06, -0.045), (-0.06, -0.045), (-0.16, -0.0)]
+    parts.append(prism("bs_guard", wing, 0.07, mat("gold"), bevel=0.008))
+    parts.append(sphere("bs_gem", 0.032, glow("#ff2a4a"), loc=(0, -0.04, -0.008)))
     parts.append(cyl("bs_grip", 0.03, 0.17, mat("leather_red"), loc=(0, 0, -0.19)))
     for i, z in enumerate((-0.16, -0.11, -0.06)):
-        parts.append(torus("bs_wrap%d" % i, 0.031, 0.008, mat("iron_dark"), loc=(0, 0, z), segs=12, rsegs=4))
+        parts.append(torus("bs_wrap%d" % i, 0.031, 0.008, mat("gold"), loc=(0, 0, z), segs=12, rsegs=4))
     parts.append(cone("bs_pommel", 0.05, 0.0, 0.08, mat("gold"), loc=(0, 0, -0.19), rot=(180, 0, 0)))
     return group("blood_sword", parts)
 
@@ -663,28 +665,48 @@ def m_war_hammer(haft=1.05):
     return group("war_hammer", parts)
 
 
-def m_hunter_bow(string_r=0.012):
-    # recurve limb (upper half), mirrored for the lower half; bow faces +X (string at -X)
-    up = [(0.0, 0, 0.0), (-0.025, 0, 0.14), (-0.085, 0, 0.3), (-0.135, 0, 0.44), (-0.14, 0, 0.53),
-          (-0.105, 0, 0.6), (-0.06, 0, 0.635)]
-    curve = [Vector((x, y, -z)) for x, y, z in reversed(up[1:])] + [Vector(p) for p in up]
-    pts = catmull(curve, per=4)
+def m_hunter_bow(string_r=0.012, curve=1.0, thick=1.0):
+    """Recurve bow facing +X: the limbs bow toward the archer (-X), tips curl forward,
+    the string runs straight between the string-contact points (most -X)."""
+    up = [(0.0, 0.0), (-0.03, 0.15), (-0.09, 0.3), (-0.15, 0.43), (-0.19, 0.53), (-0.2, 0.58),
+          (-0.185, 0.64), (-0.145, 0.68)]
+    up = [(x * curve, z) for x, z in up]
+    curve_pts = [Vector((x, 0, -z)) for x, z in reversed(up[1:])] + [Vector((x, 0, z)) for x, z in up]
+    pts = catmull(curve_pts, per=4)
     n = len(pts)
     radii = []
     for i in range(n):
         s = abs(i - (n - 1) / 2) / ((n - 1) / 2)
-        radii.append(0.042 * (1 - s) + 0.016 * s)
+        radii.append((0.05 * (1 - s) + 0.02 * s) * thick)
     parts = [tube("hb_limbs", pts, radii, mat("wood"), segs=8)]
-    parts.append(cyl("hb_grip", 0.05, 0.16, mat("cloth_purple"), loc=(0, 0, -0.08)))
-    for z in (-0.08, 0.08):
-        parts.append(torus("hb_ring", 0.05, 0.01, mat("gold"), loc=(0, 0, z), segs=12, rsegs=4))
-    tip_u = Vector(up[-1])
+    parts.append(cyl("hb_grip", 0.056 * thick, 0.18, mat("cloth_purple"), loc=(0, 0, -0.09)))
+    for z in (-0.09, 0.09):
+        parts.append(torus("hb_ring", 0.056 * thick, 0.012, mat("gold"), loc=(0, 0, z), segs=12, rsegs=4))
+    cu = Vector((up[5][0] - 0.012, 0, up[5][1]))
+    cd = Vector((cu.x, 0, -cu.z))
+    tip_u = Vector((up[-1][0], 0, up[-1][1]))
     tip_d = Vector((tip_u.x, 0, -tip_u.z))
     for i, tp in enumerate((tip_u, tip_d)):
-        parts.append(sphere("hb_tip%d" % i, 0.025, mat("gold"), loc=tp, segs=8, rings=6))
-    parts.append(tube("hb_string", [tip_u + Vector((-0.005, 0, 0)), Vector((-0.11, 0, 0)), tip_d + Vector((-0.005, 0, 0))],
-                      string_r, mat("cloth_cream"), segs=6))
+        parts.append(sphere("hb_tip%d" % i, 0.026 * thick, mat("gold"), loc=tp, segs=8, rings=6))
+    parts.append(tube("hb_string", [tip_u, cu, cd, tip_d], string_r, mat("cloth_cream"), segs=6))
     return group("hunter_bow", parts)
+
+
+def m_arrow(length=0.82, shaft_r=0.02, fletch="cloth_red"):
+    """Arrow along +X, centred on the origin (tip at +length/2)."""
+    h = length / 2
+    parts = [cyl("ar_shaft", shaft_r, length - 0.1, mat("wood_light"), loc=(-h, 0, 0), rot=(0, 90, 0), segs=6)]
+    head = [(0.0, 0.0), (-0.11, 0.055), (-0.085, 0.0), (-0.11, -0.055)]
+    parts.append(prism("ar_head", head, 0.025, mat("steel"), loc=(h, 0, 0)))
+    parts.append(cyl("ar_ferrule", shaft_r * 1.4, 0.04, mat("iron"), loc=(h - 0.13, 0, 0), rot=(0, 90, 0), segs=6))
+    fl = [(0.0, 0.0), (-0.16, 0.0), (-0.2, 0.06), (-0.05, 0.035)]
+    for sz in (1, -1):
+        parts.append(prism("ar_fl%d" % sz, [(x, sz * z) for x, z in fl], 0.012, mat(fletch),
+                           loc=(-h + 0.21, -0.004 * sz, sz * shaft_r * 0.5)))
+    parts.append(prism("ar_flc", [(x, z * 0.6) for x, z in fl], 0.012, mat("cloth_cream"),
+                       loc=(-h + 0.21, -0.03, 0.0), rot=(90, 0, 0)))
+    parts.append(box("ar_nock", (0.03, 0.03, 0.045), mat("cloth_cream"), loc=(-h + 0.0, 0, 0)))
+    return group("arrow", parts)
 
 
 def m_old_shield(R=0.42):
@@ -721,40 +743,35 @@ def m_old_shield(R=0.42):
     return group("old_shield", parts)
 
 
-def flame(name, h, r, layers=("#b8202a", "#ff5a1e", "#ffb43a", "#fff2b0"), seed=0, sway=0.0, loc=(0, 0, 0)):
-    """Layered emissive teardrop flame (camera-facing slabs), base at loc."""
+def flame(name, h, r, layers=("#b8202a", "#ff5a1e", "#ffb43a", "#fff2b0"), seed=0, sway=0.0,
+          loc=(0, 0, 0), squash=(1.0, 1.0)):
+    """Layered emissive teardrop flame (flat slabs in the XZ plane), base centre at loc.
+
+    Inner layers are smaller, sit lower and slightly in front so all bands show.
+    """
     rng = random.Random(seed)
     objs = []
+    nl = len(layers)
     for li, col in enumerate(layers):
-        f = 1.0 - li * 0.22
-        hh = h * f * rng.uniform(0.9, 1.08)
-        rr = r * f
-        pts = []
-        n = 14
-        for k in range(n + 1):
-            a = math.pi * k / n  # 0..pi along the right side bottom->top->left
-            s = k / n
-            # teardrop: wide round base, pointy top that sways
-            x = rr * math.sin(math.pi * s) ** 0.7 * (1 if s < 0.5 else 1)
-            z = 0
-            del a
+        f = 1.0 - li * (0.62 / max(1, nl - 1))
+        hh = h * f * rng.uniform(0.9, 1.08) * squash[1]
+        rr = r * f * squash[0]
+        sw = sway * (1.0 + 0.3 * li) + rng.uniform(-0.08, 0.08)
         pts = []
         steps = 10
         for k in range(steps + 1):
-            s = k / steps  # 0 = base, 1 = tip
-            w = rr * (math.sin(math.pi * min(1.0, 0.18 + s * 0.82)) ** 0.9) * (1 - s) ** 0.35
-            sx = sway * hh * s * s
-            pts.append((sx + w, s * hh))
-        for k in range(steps, -1, -1):
             s = k / steps
-            w = rr * (math.sin(math.pi * min(1.0, 0.18 + s * 0.82)) ** 0.9) * (1 - s) ** 0.35
-            sx = sway * hh * s * s
-            pts.append((sx - w, s * hh))
-        # rounded bottom
-        for k in range(1, 6):
-            a = math.pi + math.pi * k / 6
-            pts.append((rr * 0.95 * math.cos(a) * -1 if False else rr * math.cos(a + 0) * 1.0 * -1 * -1, rr * 0.55 * math.sin(a)))
-        ob = prism("%s_%d" % (name, li), pts, 0.01, glow(col), loc=(loc[0], loc[1] - 0.01 * li, loc[2] + li * h * 0.03))
+            w = rr * math.cos(math.pi / 2 * s) ** 1.25
+            pts.append((sw * hh * s * s + w, s * hh))
+        for k in range(steps - 1, -1, -1):
+            s = k / steps
+            w = rr * math.cos(math.pi / 2 * s) ** 1.25
+            pts.append((sw * hh * s * s - w, s * hh))
+        for k in range(1, 8):
+            a = math.pi + math.pi * k / 8
+            pts.append((rr * math.cos(a), rr * 0.85 * math.sin(a)))
+        ob = prism("%s_%d" % (name, li), pts, 0.01, glow(col),
+                   loc=(loc[0], loc[1] - 0.012 * li, loc[2] - r * 0.15 * li))
         objs.append(ob)
     return objs
 
@@ -984,7 +1001,8 @@ def set_turret(P, deploy=1.0, draw=1.0, recoil=0.0, bolt=True, flash=False, eye=
     for side in ("n", "f"):
         ob = bpy.data.objects.get("t_limbtip_" + side)
         tips.append(head.matrix_world.inverted() @ ob.matrix_world.translation)
-    nock = Vector((0.2 - 0.12 - 0.17 * draw * d, 0, 0.06))
+    mid = (tips[0] + tips[1]) / 2
+    nock = Vector((mid.x - 0.17 * draw * d, 0, mid.z + 0.05 * d))
     s = tube("t_string", [tips[0], nock, tips[1]], 0.008, mat("cloth_cream"), segs=5, ref=(0, 0, 1))
     s.parent = head
     P["string"] = s

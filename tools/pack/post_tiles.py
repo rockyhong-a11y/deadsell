@@ -37,34 +37,47 @@ def norm(v):
     return v / np.linalg.norm(v)
 
 
-def shade(gb, pal, key=(-0.4, -0.75, 0.55), amb=0.15, th=(0.32, 0.6, 0.81, 0.97),
-          rim=None, grit=0.06, seed=1, rid_var=0.12, outline_depth=0.02, wrap=False):
-    """Toon-shade a G-buffer.  pal: {matid: [c0..c4]} dark->bright (hex or rgb).
+def _nb(a, dy, dx, wrap):
+    h, w = a.shape[:2]
+    if wrap:
+        return np.roll(np.roll(a, dy, 0), dx, 1)
+    p = np.pad(a, ((1, 1), (1, 1)) + ((0, 0),) * (a.ndim - 2), mode="edge")
+    return p[1 + dy:1 + dy + h, 1 + dx:1 + dx + w]
 
-    rim: optional (dir, threshold, {matid: colour}) secondary coloured light: pixels whose
-         normal faces `dir` above threshold get that colour (Dead Cells style coloured rim).
-    Returns RGBA uint8 array.
+
+def shade(gb, pal, key=(-0.4, -0.75, 0.55), amb=0.15, th=(0.32, 0.6, 0.81, 0.97),
+          rim=None, grit=0.05, seed=1, shift=(0.12, 0.1), wrap=False, edge=True):
+    """Toon-shade a G-buffer.  pal: {matid: [c0..cN]} dark->bright (hex).
+
+    * band = number of thresholds `th` below the lambert intensity of light `key`
+    * shift = (p_down, p_up): fraction of objects (by rid) shifted one band down / up
+    * grit: density of 2x2 pits (one band darker) on lit faces
+    * edge: object boundaries facing down/right get one band darker (crisper stones)
+    * rim: optional (dir, threshold, {matid: hex}) coloured secondary light
+    Returns RGBA uint8.
     """
-    N, A, mat, rid, depth = gb["N"], gb["A"], gb["mat"], gb["rid"], gb["depth"]
+    N, A, mat, rid = gb["N"], gb["A"], gb["mat"], gb["rid"]
     h, w = A.shape
     L = norm(key)
     I = amb + (1 - amb) * np.clip((N * L).sum(-1), 0, 1)
-    # per-object brightness variation (stable by rid)
-    rv = ((rid * 37 + 11) % 17) / 16.0 - 0.5
-    I = I + rv * rid_var
-    rng = np.random.default_rng(seed)
-    if grit:
-        I = I + (rng.random((h, w)) < grit) * rng.choice([-0.12, 0.1], size=(h, w))
     band = np.zeros((h, w), np.int32)
     for t in th:
         band += (I > t).astype(np.int32)
-    # outline: darker pixel where a neighbour (rolled, periodic if wrap) is a different object
-    # and further away -> creates separated stones; also cavity where deeper than neighbours
-    def nb(a, dy, dx):
-        if wrap:
-            return np.roll(np.roll(a, dy, 0), dx, 1)
-        p = np.pad(a, 1, mode="edge")
-        return p[1 + dy:1 + dy + h, 1 + dx:1 + dx + w]
+    hsh = ((rid.astype(np.int64) * 2654435761) % 4294967296) / 4294967296.0
+    band -= ((hsh < shift[0]) & (rid > 0)).astype(np.int32)
+    band += ((hsh > 1 - shift[1]) & (rid > 0)).astype(np.int32)
+    if grit:
+        rng = np.random.default_rng(seed)
+        g = rng.random(((h + 1) // 2, (w + 1) // 2)) < grit
+        g = np.repeat(np.repeat(g, 2, 0), 2, 1)[:h, :w]
+        # keep only one pixel of some pits for irregularity
+        g &= rng.random((h, w)) < 0.7
+        band -= (g & (band >= 2)).astype(np.int32)
+    if edge:
+        for dy, dx in ((1, 0), (0, 1)):
+            o = _nb(rid, -dy, -dx, wrap)
+            oa = _nb(A, -dy, -dx, wrap)
+            band -= ((o != rid) & oa & A & (band > 1)).astype(np.int32)
     out = np.zeros((h, w, 4), np.uint8)
     for m, cols in pal.items():
         mm = (mat == m) & A

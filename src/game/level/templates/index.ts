@@ -3,6 +3,7 @@ import { mirrorDef, parseTemplate } from './parse';
 import type { ParsedTemplate, TemplateDef } from './types';
 import { PRISON_TEMPLATES } from './prison';
 import { RAMPARTS_TEMPLATES } from './ramparts';
+import { SPECIAL_TEMPLATES } from './special';
 
 export type { ParsedTemplate, TemplateDef, TemplateTag, Site, Side } from './types';
 export { siteKey, oppositeSide } from './types';
@@ -39,4 +40,10 @@ export function templatePool(biome: BiomeId): ParsedTemplate[] {
     out.push(parsed(mirrorDef(d)));
   }
   return out;
+}
+
+/** The passage room (A, H, X, torches) and the boss arena; free-size templates. */
+export function specialTemplate(id: 'passage' | 'boss_arena'): ParsedTemplate {
+  const def = SPECIAL_TEMPLATES.find((t) => t.id === id)!;
+  return parsed(def);
 }

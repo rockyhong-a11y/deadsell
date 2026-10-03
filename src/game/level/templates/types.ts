@@ -19,6 +19,8 @@ export interface TemplateDef {
   tags: TemplateTag[];
   /** selection weight for the generator (default 1) */
   weight?: number;
+  /** free-size template (passage, boss arena): size comes from `rows`, no door sites */
+  free?: boolean;
   rows: string[];
 }
 

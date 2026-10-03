@@ -379,3 +379,20 @@ export function analyzeTemplate(t: ParsedTemplate): TemplateAnalysis {
 export function sideOf(k: string): Side {
   return k[0] as Side;
 }
+
+/** Debug helper: ASCII picture of the cells reachable from a site ('*') on the template. */
+export function dumpReach(t: ParsedTemplate, fromKey: string, openBreakables = false): string {
+  const { g, siteNodes, ox, oy } = extendTemplate(t, openBreakables);
+  const r = reach(g, [siteNodes[fromKey]]);
+  const lines: string[] = [];
+  const glyph = [' ', '#', '=', '^', 'x'];
+  for (let y = 0; y < g.h; y++) {
+    let row = '';
+    for (let x = 0; x < g.w; x++) {
+      const tt = g.tiles[y * g.w + x];
+      row += r.visited[y * g.w + x] ? '*' : tt === 0 ? (x >= ox && x < ox + t.tw && y >= oy && y < oy + t.th ? '.' : ' ') : glyph[tt];
+    }
+    lines.push(String(y - oy).padStart(3) + ' ' + row);
+  }
+  return lines.join('\n');
+}

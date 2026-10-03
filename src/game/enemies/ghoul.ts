@@ -25,7 +25,7 @@ export class Ghoul extends Enemy {
   }
 
   protected shouldAttack(p: Player): boolean {
-    return Math.abs(p.x - this.x) < 50 && Math.abs(p.y - this.y) < 38;
+    return Math.abs(p.x - this.x) < 50 * this.scale && Math.abs(p.y - this.y) < 38;
   }
 
   protected startAttack(p: Player): void {
@@ -44,7 +44,7 @@ export class Ghoul extends Enemy {
     const f = this.facing;
     hitArea(
       this.world,
-      { x: f > 0 ? this.x - 4 : this.x - 42, y: this.y - this.h, w: 46, h: this.h },
+      { x: f > 0 ? this.x - 4 : this.x - 42 * this.scale, y: this.y - this.h, w: 46 * this.scale, h: this.h },
       'enemy',
       { amount: this.dmg(9), dir: f, kind: 'melee', source: this, knockback: 190, hitstun: 0.25 },
       this.hitSet,
@@ -57,6 +57,7 @@ export class Ghoul extends Enemy {
 
   protected drawTelegraph(ctx: CanvasRenderingContext2D, p: number): void {
     const f = this.facing;
-    warnRect(ctx, f > 0 ? this.x : this.x - 52, this.y - this.h, 52, this.h, p, this.time);
+    const reach = 52 * this.scale;
+    warnRect(ctx, f > 0 ? this.x : this.x - reach, this.y - this.h, reach, this.h, p, this.time);
   }
 }

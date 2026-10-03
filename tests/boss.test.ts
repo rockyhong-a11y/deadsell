@@ -278,7 +278,7 @@ describe('Iron Matron: phase 2 and death', () => {
     expect(w2 / w1).toBeLessThan(0.9);
     expect(w2 / w1).toBeGreaterThan(0.7);
     // she can be hurt again
-    for (let i = 0; i < 900 && t.boss.state === 'roar'; i++) t.run(1);
+    for (let i = 0; i < 900 && (t.boss.state as string) === 'roar'; i++) t.run(1);
     expect(t.boss.takeDamage({ amount: 10, dir: 1, kind: 'melee', source: t.p }).applied).toBe(true);
   });
 

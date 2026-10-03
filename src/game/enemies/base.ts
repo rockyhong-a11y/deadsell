@@ -181,6 +181,7 @@ export abstract class Enemy extends Actor {
     this.time += dt;
     if (this.attackCd > 0) this.attackCd -= dt;
     if (this.dying) {
+      if (this.anim) this.anim.speed = 1;
       this.vx = approach(this.vx, 0, 700 * dt);
       if (this.stateT >= DEATH_TIME) this.dead = true;
       super.update(dt);

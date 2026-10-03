@@ -88,7 +88,7 @@ export class Jailer extends Enemy {
 
   protected shouldAttack(p: Player): boolean {
     const front = (p.x - this.x) * this.facing > 0;
-    return front && Math.abs(p.x - this.x) < 58 && Math.abs(p.y - this.y) < 38;
+    return front && Math.abs(p.x - this.x) < 58 * this.scale && Math.abs(p.y - this.y) < 38;
   }
 
   protected startAttack(): void {
@@ -106,7 +106,7 @@ export class Jailer extends Enemy {
     const f = this.facing;
     hitArea(
       this.world,
-      { x: f > 0 ? this.x - 4 : this.x - 62, y: this.y - this.h - 4, w: 66, h: this.h + 4 },
+      { x: f > 0 ? this.x - 4 : this.x - 62 * this.scale, y: this.y - this.h - 4, w: 66 * this.scale, h: this.h + 4 },
       'enemy',
       { amount: this.dmg(12), dir: f, kind: 'melee', source: this, knockback: 280, hitstun: 0.3 },
       this.hitSet,
@@ -114,6 +114,7 @@ export class Jailer extends Enemy {
   }
 
   protected drawTelegraph(ctx: CanvasRenderingContext2D, p: number): void {
-    warnRect(ctx, this.facing > 0 ? this.x : this.x - 58, this.y - this.h - 4, 58, this.h + 4, p, this.time);
+    const reach = 58 * this.scale;
+    warnRect(ctx, this.facing > 0 ? this.x : this.x - reach, this.y - this.h - 4, reach, this.h + 4, p, this.time);
   }
 }

@@ -185,9 +185,9 @@ PAL = {
             "mortar": P5(*["#04070a"] * 5),
             "lip": P5("#0e1c22", "#1c3a42", "#2f6068", "#58a39e", "#a6e8c2"),
             "rubble": P5("#0c1216", "#17262c", "#27414a", "#3d6670", "#6aa0a0"),
-            "back": P5("#080d12", "#0d161d", "#13222b", "#1a2f3a", "#243f4c"),
-            "back2": P5("#0a0f14", "#101a21", "#17262f", "#1f3541", "#2b4a58"),
-            "backmortar": P5(*["#04070a"] * 5),
+            "back": P5("#05090c", "#080e13", "#0b141a", "#0f1b22", "#14242d"),
+            "back2": P5("#06090d", "#0a1015", "#0e171d", "#121f27", "#182a34"),
+            "backmortar": P5(*["#03060a"] * 5),
             "trim": P5("#0a1218", "#12202a", "#1d3440", "#2c5060", "#477a8a"),
             "wood": P5("#150e0b", "#241812", "#3b2819", "#5a3d24", "#7f5832"),
             "iron": P5("#090c10", "#141a22", "#242e3b", "#3f5064", "#7690a8"),
@@ -215,8 +215,8 @@ PAL = {
             "mortar": P5(*["#0c0a18"] * 5),
             "lip": P5("#26244a", "#4a4878", "#7c78ac", "#b9b6e0", "#f0eeff"),
             "rubble": P5("#1a1830", "#2e2c4a", "#4c4a70", "#7a78a0", "#aeacd0"),
-            "back": P5("#0a0916", "#100e22", "#171430", "#201c40", "#2c2756"),
-            "back2": P5("#0c0a1a", "#13112a", "#1b1838", "#252148", "#322c60"),
+            "back": P5("#07060f", "#0b0a18", "#100e22", "#16132f", "#1d1a3d"),
+            "back2": P5("#080710", "#0d0b1c", "#131127", "#1a1636", "#231f48"),
             "backmortar": P5(*["#060410"] * 5),
             "trim": P5("#100e22", "#1b1a38", "#2c2a52", "#434070", "#645f94"),
             "wood": P5("#1a1218", "#2a1c22", "#40292c", "#5e3d38", "#82573f"),
@@ -246,8 +246,8 @@ PAL = {
             "mortar": P5(*["#050202"] * 5),
             "lip": P5("#240d09", "#4a1a10", "#8a3418", "#d86a28", "#ffc060"),
             "rubble": P5("#180b09", "#2c1511", "#4a241a", "#73382a", "#a45a38"),
-            "back": P5("#060304", "#0b0506", "#12090a", "#1b0d0d", "#291410"),
-            "back2": P5("#070304", "#0d0607", "#150a0b", "#1f1011", "#2f1812"),
+            "back": P5("#040203", "#080405", "#0d0607", "#140909", "#1d0e0b"),
+            "back2": P5("#050203", "#090405", "#0f0708", "#170b0c", "#22100d"),
             "backmortar": P5(*["#030102"] * 5),
             "trim": P5("#0e0708", "#1a0d0e", "#2c1614", "#44241e", "#663a2a"),
             "wood": P5("#14100c", "#241a12", "#3a2a1a", "#58402a", "#7c5a38"),
@@ -858,8 +858,8 @@ def build_biome(biome, quiet=False):
 
     # ---------------- spikes
     PADS = meta["groups"]["spikes"]["margin"]
-    simg = shade_group(biome, "spikes", P, grit=0.0, edge=False, seed=15,
-                       rim=rim_for(P, ["iron"]))
+    simg = shade_group(biome, "spikes", P, grit=0.0, edge=False, seed=15, amb=0.42, key=(-0.5, -0.4, 0.6),
+                       th=(0.45, 0.62, 0.8, 0.93), rim=rim_for(P, ["iron"]))
     sp = {}
     for nm in ("up0", "up1", "up2", "down", "left", "right"):
         x, y, w, h = meta["groups"]["spikes"]["pieces"]["spike_" + nm]
@@ -893,7 +893,7 @@ def build_biome(biome, quiet=False):
                   "special2": [2, 2], "slit": [1, 2]}
     bd["chance"] = {"arch": 0.035, "special": 0.03, "window": 0.020, "slit": 0.022, "niche": 0.016,
                     "special2": 0.016, "chain": 0.040}
-    bd["pillar_chance"] = 0.20
+    bd["pillar_chance"] = 0.12
     atlas["backdeco"] = bd
 
     # ---------------- finish
@@ -1054,30 +1054,32 @@ def outline_edge_darken(cell, P):
 # preview
 
 
-MOCK_ROOM = {
-    "prison": [
-        "#################################",
-        "####..........#####.......,,,,,###",
-        "###............#####......,,,,,,,#",
-        "###.....................=====,,,,,#",
-        "#...........................,,,,,,#",
-        "#..===.......=====..........,,,,,,#",
-        "#.........................=.....###",
-        "#........#####.......#..........###",
-        "#...==...#####.......#.....xx...###",
-        "#........#####..=====#....#xx....##",
-        "#........#####.......#....#xx.....#",
-        "#...=====.....................^^^.#",
-        "#.............................###.#",
-        "#####...^^^^..#####...........###.#",
-        "#################################",
-    ],
-}
-
-
 def mock_rows(biome):
-    rows = MOCK_ROOM["prison"]
-    return rows
+    """33 x 15 cell mock room (792 x 360 px) exercising every tile type."""
+    W_, H_ = 33, 15
+    g = [["#"] * W_ for _ in range(H_)]
+
+    def rect(x0, y0, x1, y1, c):
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                g[y][x] = c
+    rect(3, 2, 29, 11, ".")                    # main hall
+    rect(0, 8, 3, 11, ".")                     # entrance corridor on the left
+    rect(20, 3, 28, 8, ",")                    # open sky / far background window
+    rect(9, 8, 13, 11, "#")                    # raised block
+    rect(15, 2, 18, 3, "#")                    # ceiling stalactite block
+    rect(22, 9, 26, 11, "#")                   # right pedestal
+    rect(1, 12, 2, 12, ".")                    # a pit
+    rect(5, 6, 7, 6, "=")                      # platforms
+    rect(15, 6, 19, 6, "=")
+    rect(10, 4, 11, 4, "=")
+    rect(23, 6, 23, 6, "=")
+    rect(16, 11, 19, 11, "^")                  # spikes on the floor
+    rect(14, 11, 14, 11, "^")
+    g[11][3] = "x"; g[10][3] = "x"; g[9][3] = "x"   # breakable wall
+    g[4][3] = "^"                              # wall spike
+    g[3][21] = ","
+    return ["".join(r) for r in g]
 
 
 def ascii_to_map(rows):

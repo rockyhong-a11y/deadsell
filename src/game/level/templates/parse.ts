@@ -13,8 +13,8 @@ export function isSolidChar(ch: string): boolean {
 
 /** Parse the ASCII rows of a template; collects (never throws) problems. */
 export function parseTemplate(def: TemplateDef): ParsedTemplate {
-  const tw = def.w * CHUNK_W;
-  const th = def.h * CHUNK_H;
+  const tw = def.free ? (def.rows[0]?.length ?? 0) : def.w * CHUNK_W;
+  const th = def.free ? def.rows.length : def.h * CHUNK_H;
   const problems: string[] = [];
   if (def.rows.length !== th) problems.push(`${def.id}: expected ${th} rows, got ${def.rows.length}`);
   const tiles = new Uint8Array(tw * th);
@@ -51,7 +51,7 @@ export function parseTemplate(def: TemplateDef): ParsedTemplate {
       else bg[y * tw + x] = nearestBg(raw, x, y, tw, th, def.biome === 'ramparts' ? BG.Sky : BG.Wall);
     }
   }
-  const sites = detectSites(tiles, tw, th, def.w, def.h, def.id, problems);
+  const sites = def.free ? [] : detectSites(tiles, tw, th, def.w, def.h, def.id, problems);
   return {
     def,
     id: def.id,

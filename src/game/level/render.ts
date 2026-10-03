@@ -330,7 +330,7 @@ export function layerPlacement(
   const slide = Math.min(Math.max(0, ih - viewH), Math.max(0, (maxY - viewY) * vpar));
   const y = Math.round(viewH - ih + slide + yOff);
   const sx = Math.floor(viewX * parallax);
-  const x0 = -(((sx % iw) + iw) % iw);
+  const x0 = 0 - (((sx % iw) + iw) % iw);
   return { x0, y, step: iw };
 }
 

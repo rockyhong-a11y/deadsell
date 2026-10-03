@@ -44,14 +44,14 @@ export class Lancer extends Enemy {
     const dx = Math.abs(p.x - this.x);
     const level = Math.abs(p.y - this.y) < 36;
     if (!level) return false;
-    if (dx < 62) return true;
+    if (dx < 62 * this.scale) return true;
     if (dx >= 130 && dx <= 300) return this.sees(p);
     return false;
   }
 
   protected startAttack(p: Player): void {
     this.facePlayer(p);
-    if (Math.abs(p.x - this.x) < 62) {
+    if (Math.abs(p.x - this.x) < 62 * this.scale) {
       this.mode = 'thrust';
       this.beginAttack(0.45, 0.14, 0.55, 'thrust');
       this.attackCd = 0.9;
@@ -82,7 +82,7 @@ export class Lancer extends Enemy {
       this.vx *= 0.9;
       hitArea(
         this.world,
-        { x: f > 0 ? this.x : this.x - 70, y: this.y - this.h * 0.8, w: 70, h: this.h * 0.5 },
+        { x: f > 0 ? this.x : this.x - 70 * this.scale, y: this.y - this.h * 0.8, w: 70 * this.scale, h: this.h * 0.5 },
         'enemy',
         { amount: this.dmg(11), dir: f, kind: 'melee', source: this, knockback: 220, hitstun: 0.25 },
         this.hitSet,
@@ -126,7 +126,8 @@ export class Lancer extends Enemy {
   protected drawTelegraph(ctx: CanvasRenderingContext2D, p: number): void {
     const f = this.facing;
     if (this.mode === 'thrust') {
-      warnRect(ctx, f > 0 ? this.x : this.x - 72, this.y - this.h * 0.8, 72, this.h * 0.5, p, this.time);
+      const reach = 72 * this.scale;
+      warnRect(ctx, f > 0 ? this.x : this.x - reach, this.y - this.h * 0.8, reach, this.h * 0.5, p, this.time);
       return;
     }
     const run = this.chargeRunway();

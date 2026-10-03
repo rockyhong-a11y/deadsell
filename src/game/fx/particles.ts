@@ -2,7 +2,7 @@ import type { Camera } from '../../engine/camera';
 import { TILE } from '../../engine/config';
 import type { TileMap } from '../tilemap';
 import { T } from '../tilemap';
-import { glowSink, type GlowSink } from './glow';
+import { fxEnv, glowSink, type GlowSink } from './glow';
 
 /**
  * Particle system (world space). Pooled structure-of-arrays storage with a hard
@@ -20,6 +20,9 @@ import { glowSink, type GlowSink } from './glow';
  *  - `ambient(biome, camera, dt?, map?)` emits biome atmosphere around the view; call it
  *                   once per simulation step (prison: water drips + dust motes, ramparts: wind
  *                   leaves + dust streaks, tower: rising embers, passage: warm motes).
+ *                   `autoAmbient` (default true) calls it for you from update(): `Lighting.setBiome`
+ *                   publishes the biome through `fxEnv` and `draw()` records the camera view, so no
+ *                   caller has to do anything. Set `autoAmbient = false` to drive it by hand.
  *  - `count` active particle count; `MAX_PARTICLES` the pool size.
  */
 export type ParticlePreset =
@@ -77,7 +80,7 @@ interface Ramp {
 }
 
 // ---------------------------------------------------------------- colours
-function parseHex(hex: string): [number, number, number] {
+export function parseHex(hex: string): [number, number, number] {
   let h = hex.trim();
   if (h[0] === '#') h = h.slice(1);
   if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
@@ -159,6 +162,10 @@ export class Particles {
   glow: GlowSink = glowSink;
   /** global multiplier on emitted counts (lower it on weak devices) */
   density = 1;
+  /** emit biome atmosphere automatically from update() (see ambient()) */
+  autoAmbient = true;
+  /** last drawn camera view (world px), recorded by draw() for the auto atmosphere */
+  private readonly view = { x: 0, y: 0, w: 0, h: 0, ok: false };
 
   private n = 0;
   private steal = 0;
@@ -302,10 +309,11 @@ export class Particles {
       case 'spark': {
         const n = cnt(12);
         const spread = dir || o.angle !== undefined ? 1.0 : Math.PI;
+        const sr = o.color ? rampFor(o.color, 'glow') : R.spark;
         for (let i = 0; i < n; i++) {
           const a = base + rr(-spread, spread) - (dir ? 0.3 : 0);
           const s = rr(150, 400) * pw;
-          this.add(px(), py(), Math.cos(a) * s + ivx, Math.sin(a) * s + ivy, rr(0.18, 0.42) * lm, R.spark, 1, 1, 650, 2.5, ADD | STREAK | BOUNCE, 1, i < 2 ? 12 : 0, 1);
+          this.add(px(), py(), Math.cos(a) * s + ivx, Math.sin(a) * s + ivy, rr(0.18, 0.42) * lm, sr, 1, 1, 650, 2.5, ADD | STREAK | BOUNCE, 1, i < 2 ? 12 : 0, 1);
         }
         this.add(x, y, 0, 0, 0.08, R.flash, 3, 1, 0, 0, ADD, 1, 28);
         break;
@@ -612,6 +620,7 @@ export class Particles {
   update(dt: number): void {
     if (dt <= 0) return;
     this.time += dt;
+    if (this.autoAmbient && fxEnv.ambient && this.view.ok) this.ambient(fxEnv.ambient, this.view, dt);
     const map = this.map;
     const X = this.x, Y = this.y, VX = this.vx, VY = this.vy, L = this.life, F = this.flags;
     let amb = 0;
@@ -710,16 +719,22 @@ export class Particles {
   draw(ctx: CanvasRenderingContext2D): void {
     const sink = this.glow;
     sink.reset();
-    if (!this.n) return;
     // view culling from the current transform (camera translation)
     let cx0 = -Infinity, cy0 = -Infinity, cx1 = Infinity, cy1 = Infinity;
     const tr = typeof ctx.getTransform === 'function' ? ctx.getTransform() : null;
     if (tr && ctx.canvas && tr.a === 1 && tr.d === 1) {
-      cx0 = -tr.e - 16;
-      cy0 = -tr.f - 16;
-      cx1 = cx0 + ctx.canvas.width + 32;
-      cy1 = cy0 + ctx.canvas.height + 32;
+      const v = this.view;
+      v.x = -tr.e;
+      v.y = -tr.f;
+      v.w = ctx.canvas.width;
+      v.h = ctx.canvas.height;
+      v.ok = true;
+      cx0 = v.x - 16;
+      cy0 = v.y - 16;
+      cx1 = v.x + v.w + 16;
+      cy1 = v.y + v.h + 16;
     }
+    if (!this.n) return;
     const prevOp = ctx.globalCompositeOperation;
     const prevAlpha = ctx.globalAlpha;
     this.drawPass(ctx, false, cx0, cy0, cx1, cy1);

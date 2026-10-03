@@ -16,7 +16,7 @@ export interface LevelData {
 
 export type SpawnType =
   | 'enemy' | 'flyer' | 'chest' | 'altar' | 'pedestal' | 'merchant' | 'alchemist' | 'exit' | 'boss'
-  | 'torch' | 'deco' | 'shop' | 'fountain';
+  | 'torch' | 'deco' | 'shop' | 'fountain' | 'gate';
 
 export interface Spawn {
   type: SpawnType;
@@ -25,6 +25,8 @@ export interface Spawn {
   tx: number;
   ty: number;
   roomId: number;
+  /** optional style hint (deco: 'barrel' | 'crates' | 'bones' | 'banner' | 'chains' | 'cage' | 'bell') */
+  variant?: string;
 }
 
 export interface RoomInfo {
@@ -36,4 +38,6 @@ export interface RoomInfo {
   w: number;
   h: number;
   tags: string[];
+  /** 0..1 position along the main path (branches inherit their root's value); drives elites */
+  progress?: number;
 }

@@ -436,9 +436,9 @@ class Heroine:
         self._add_prop("sword", [bl, ru1, ru2, grip, pom, guard], "ha_n", (0.0, -0.01, -0.04), (0, 90, 0))
         self.tip_local = {"sword": (Vector((0, 0, L)), Vector((0, 0, 0.30)))}
         # ---- spear (grip at the rear hand; tip 1.62 ahead)
-        shaft = limb("sp_shaft", 1.55, 0.028, 0.028, M["wood"])
+        shaft = limb("sp_shaft", 1.55, 0.034, 0.034, M["wood"])
         place(shaft, (0, 0, 1.2))  # limb hangs down from origin: top at 1.2, bottom at -0.35
-        tip_pts = [(-0.06, 0.0), (-0.035, 0.2), (0.0, 0.34), (0.035, 0.2), (0.06, 0.0), (0.0, -0.05)]
+        tip_pts = [(-0.08, 0.0), (-0.05, 0.2), (0.0, 0.40), (0.05, 0.2), (0.08, 0.0), (0.0, -0.05)]
         tipm = prism("sp_tip", tip_pts, 0.024, M["blade"])
         place(tipm, (0, 0, 1.25))
         sock = cone("sp_sock", 0.035, 0.03, 0.08, M["iron"], loc=(0, 0, 1.18))
@@ -447,33 +447,33 @@ class Heroine:
         wrap = limb("sp_wrap", 0.12, 0.034, 0.034, M["leather"])
         place(wrap, (0, 0, 0.06))
         self._add_prop("spear", [shaft, tipm, sock, tas, butt, wrap], "ha_n", (0.0, -0.01, -0.04), (0, 90, 0))
-        self.tip_local["spear"] = (Vector((0, 0, 1.58)), Vector((0, 0, 1.2)))
+        self.tip_local["spear"] = (Vector((0, 0, 1.65)), Vector((0, 0, 1.2)))
         # ---- twin daggers
         for s in ("n", "f"):
             st = M["blade"]
-            dp = [(-0.03, 0.04), (-0.03, 0.2), (0.0, 0.31), (0.03, 0.2), (0.03, 0.04)]
+            dp = [(-0.04, 0.04), (-0.04, 0.24), (0.0, 0.40), (0.04, 0.24), (0.04, 0.04)]
             db = prism("dg_blade_" + s, dp, 0.02, st)
             dgr = box("dg_grip_" + s, (0.035, 0.035, 0.1), M["leather"], loc=(0, 0, -0.01))
-            dgu = box("dg_guard_" + s, (0.11, 0.045, 0.03), M["gold"], loc=(0, 0, 0.045))
+            dgu = box("dg_guard_" + s, (0.14, 0.05, 0.035), M["gold"], loc=(0, 0, 0.045))
             dpo = ellipsoid("dg_pom_" + s, (0.045, 0.045, 0.04), M["gold"], loc=(0, 0, -0.065))
             self._add_prop("dagger_" + s, [db, dgr, dgu, dpo], "ha_" + s, (0.0, -0.01 if s == "n" else 0.01, -0.04), (0, 90, 0))
-            self.tip_local["dagger_" + s] = (Vector((0, 0, 0.31)), Vector((0, 0, 0.12)))
+            self.tip_local["dagger_" + s] = (Vector((0, 0, 0.40)), Vector((0, 0, 0.16)))
         self.props["daggers"] = self.props["dagger_n"] + self.props["dagger_f"]
         # ---- war hammer (grip at z=0, head at z~0.86)
-        hnd = limb("hm_handle", 1.12, 0.032, 0.03, M["wood_d"])
+        hnd = limb("hm_handle", 1.12, 0.038, 0.036, M["wood_d"])
         place(hnd, (0, 0, 0.86))
         w1 = limb("hm_wrap1", 0.14, 0.039, 0.039, M["leather"])
         place(w1, (0, 0, 0.08))
         w2 = limb("hm_wrap2", 0.1, 0.039, 0.039, M["leather"])
         place(w2, (0, 0, 0.62))
-        head = box("hm_head", (0.46, 0.25, 0.27), M["iron"], loc=(0.0, 0, 0.88), bevel=0.03)
-        face = box("hm_face", (0.05, 0.27, 0.29), M["steel"], loc=(0.235, 0, 0.88), bevel=0.012)
-        band1 = box("hm_band1", (0.05, 0.27, 0.29), M["wood_d"], loc=(0.09, 0, 0.88))
-        band2 = box("hm_band2", (0.05, 0.27, 0.29), M["wood_d"], loc=(-0.09, 0, 0.88))
-        spike = cone("hm_spike", 0.08, 0.0, 0.16, M["steel"], loc=(-0.23, 0, 0.88), rot=(0, -90, 0))
-        topk = cone("hm_top", 0.035, 0.0, 0.08, M["steel"], loc=(0, 0, 1.01))
+        head = box("hm_head", (0.62, 0.30, 0.32), M["iron"], loc=(0.0, 0, 0.90), bevel=0.035)
+        face = box("hm_face", (0.06, 0.32, 0.34), M["steel"], loc=(0.31, 0, 0.90), bevel=0.012)
+        band1 = box("hm_band1", (0.05, 0.32, 0.34), M["wood_d"], loc=(0.11, 0, 0.90))
+        band2 = box("hm_band2", (0.05, 0.32, 0.34), M["wood_d"], loc=(-0.11, 0, 0.90))
+        spike = cone("hm_spike", 0.09, 0.0, 0.18, M["steel"], loc=(-0.31, 0, 0.90), rot=(0, -90, 0))
+        topk = cone("hm_top", 0.04, 0.0, 0.09, M["steel"], loc=(0, 0, 1.06))
         self._add_prop("hammer", [hnd, w1, w2, head, face, band1, band2, spike, topk], "ha_n", (0.0, -0.02, -0.04), (0, 90, 0))
-        self.tip_local["hammer"] = (Vector((0.2, 0, 0.88)), Vector((0, 0, 0.6)))
+        self.tip_local["hammer"] = (Vector((0.30, 0, 0.90)), Vector((0, 0, 0.6)))
         # ---- hunter bow (in the far hand; +X of bow space = shooting direction)
         bp = []
         for k in range(-8, 9):
@@ -531,7 +531,7 @@ class Heroine:
         for k in range(4):
             self.fx["heal%d" % k] = ellipsoid("heal%d" % k, (0.045, 0.03, 0.045), M["heal"])
         for k in range(3):
-            self.fx["streak%d" % k] = limb("streak%d" % k, 0.4, 0.012, 0.012, M["smear"], segs=6)
+            self.fx["streak%d" % k] = limb("streak%d" % k, 1.0, 0.004, 0.03, M["smear"], segs=6)
         for ob in self.fx.values():
             ob.hide_render = True
         for lst in self.props.values():
@@ -784,6 +784,9 @@ def solve_frame(h, spec):
                 continue
             base = wpos(rig, "th_" + s)
             ps = wswing(rig, "hips")
+            if math.hypot(t[0] - base.x, t[1] - base.z) > (LEG_L1 + LEG_L2) * 1.0:
+                print("WARN leg %s stretched frame %s: reach %.2f > %.2f" % (
+                    s, spec.get("_i"), math.hypot(t[0] - base.x, t[1] - base.z), LEG_L1 + LEG_L2))
             up, lo, low = ik2((base.x, base.z), (t[0], t[1]), LEG_L1, LEG_L2, ps, -1)
             a["th_" + s] = up
             a["kn_" + s] = lo
@@ -815,6 +818,9 @@ def solve_frame(h, spec):
             bend = t[3] if len(t) > 3 else 1
         base = wpos(rig, "sh_" + s)
         ps = wswing(rig, "chest")
+        dd = math.hypot(target[0] - base.x, target[1] - base.z)
+        if dd > (ARM_L1 + ARM_L2) * 1.1:
+            print("WARN arm %s clamped frame %s: reach %.2f > %.2f" % (s, spec.get("_i"), dd, ARM_L1 + ARM_L2))
         up, lo, low = ik2((base.x, base.z), target, ARM_L1, ARM_L2, ps, bend)
         a["sh_" + s] = up
         a["el_" + s] = lo
@@ -851,7 +857,8 @@ def solve_frames(h, specs, fps, loop, pre=None, wind=(0.0, 0.0), seed_phase=0.0)
     """Turn frame specs into fully posed frames (with chains + skirt)."""
     rig = h.rig
     base = []
-    for sp in specs:
+    for _i, sp in enumerate(specs):
+        sp["_i"] = _i
         a, off = solve_frame(h, sp)
         # measure chain anchors / refs / colliders on the solved pose
         _pose(rig, a, off)

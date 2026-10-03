@@ -159,9 +159,23 @@ def brickify(img, mask, rng, ch=11, cw=(22, 38), line=0.55, var=0.10, seed=0):
     return np.clip(out, 0, 255)
 
 
+def lift(img, g):
+    if g == 1.0:
+        return img
+    out = img.copy()
+    m = out[..., 3] > 0
+    out[..., :3][m] = np.clip(np.power(out[..., :3][m].astype(np.float32) / 255.0, g) * 255.0 + 0.5, 0, 255).astype(np.uint8)
+    return out
+
+
+LIFT = {"prison": 0.82, "ramparts": 1.0, "tower": 0.85}   # gamma < 1 lifts the darks (the game multiplies by ambient)
+
+
 def write_layers(biome, layers, sky, params):
     os.makedirs(os.path.join(OUT, "bg"), exist_ok=True)
     meta = {"sky": sky, "layers": []}
+    g = LIFT[biome]
+    layers = [lift(l, g) for l in layers]
     for i, (img, p) in enumerate(zip(layers, params)):
         name = "%s_%d.png" % (biome, i)
         Image.fromarray(img).save(os.path.join(OUT, "bg", name), optimize=True)
@@ -444,6 +458,7 @@ def build_tower():
     layer = glow_up(layer, 0.55, 0.55)
     ec, ea = embers(rng, 90, emb, 0.2)
     layer = over(layer, ec, ea * 0.9)
+    layer[..., :3] *= 0.86
     L1 = to_img(layer)
 
     # ---- L2: big bells + gears
@@ -460,6 +475,7 @@ def build_tower():
     layer = glow_up(layer, 0.5, 0.65)
     ec, ea = embers(rng, 70, emb, 0.35)
     layer = over(layer, ec, ea)
+    layer[..., :3] *= 0.9
     L2 = to_img(layer)
 
     # ---- L3: near silhouettes

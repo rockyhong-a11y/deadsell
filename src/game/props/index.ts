@@ -1,0 +1,12 @@
+export { Prop } from './common';
+export { ExitDoor } from './exitDoor';
+export { Chest } from './chest';
+export { Altar } from './altar';
+export { Pedestal, drawItemIcon } from './pedestal';
+export { ShopItem, Merchant } from './shop';
+export { Alchemist } from './alchemist';
+export { Fountain } from './fountain';
+export { Torch } from './torch';
+export { Deco, pickDeco, type DecoKind } from './deco';
+export { BossGate } from './bossGate';
+export { RoomTracker } from './roomTracker';

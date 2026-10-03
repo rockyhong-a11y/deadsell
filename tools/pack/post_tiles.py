@@ -183,7 +183,7 @@ PAL = {
             "stone": P5("#0a1015", "#121d24", "#1d323a", "#2c4c56", "#4a7a80"),
             "stone2": P5("#0d1214", "#17201f", "#243530", "#35504a", "#587a6c"),
             "mortar": P5(*["#04070a"] * 5),
-            "lip": P5("#0e1c22", "#1c3a42", "#2f6068", "#58a39e", "#a6e8c2"),
+            "lip": P5("#10242c", "#245058", "#3e8a8a", "#78d0b8", "#d8fff0"),
             "rubble": P5("#0c1216", "#17262c", "#27414a", "#3d6670", "#6aa0a0"),
             "back": P5("#05090c", "#080e13", "#0b141a", "#0f1b22", "#14242d"),
             "back2": P5("#06090d", "#0a1015", "#0e171d", "#121f27", "#182a34"),
@@ -244,7 +244,7 @@ PAL = {
             "stone2": P5("#120a0a", "#221211", "#3a1d18", "#5c3025", "#8a5033"),
             "brick": P5("#100807", "#1f0d0b", "#361612", "#582519", "#8a3f22"),
             "mortar": P5(*["#050202"] * 5),
-            "lip": P5("#240d09", "#4a1a10", "#8a3418", "#d86a28", "#ffc060"),
+            "lip": P5("#2a0e08", "#5a2210", "#a84418", "#f08830", "#ffe090"),
             "rubble": P5("#180b09", "#2c1511", "#4a241a", "#73382a", "#a45a38"),
             "back": P5("#040203", "#080405", "#0d0607", "#140909", "#1d0e0b"),
             "back2": P5("#050203", "#090405", "#0f0708", "#170b0c", "#22100d"),
@@ -272,7 +272,7 @@ BIOME_CFG = {
                    shadow_a=0.55),
     "ramparts": dict(moss_chance=0.45, deco_chance=0.18, drip_chance=0.22, crack_chance=0.07,
                      shadow_a=0.50),
-    "tower": dict(moss_chance=0.30, deco_chance=0.20, drip_chance=0.20, crack_chance=0.12,
+    "tower": dict(moss_chance=0.30, deco_chance=0.20, drip_chance=0.20, crack_chance=0.0,
                   shadow_a=0.60),
 }
 
@@ -500,7 +500,11 @@ def autotile(m, atlas):
                 ops.append(("back", atlas["backwall"][(y & 3) * 8 + (x & 7)], x * T, y * T))
                 if hash01(x, y, 11) < cfg["crack_chance"]:
                     ops.append(("back", pick(atlas["backCrack"], hash01(x, y, 15)), x * T, y * T))
-    for (name, x, y, w, h) in plan_decor(m, atlas):
+    plan = plan_decor(m, atlas)
+    for (name, x, y, w, h) in plan:                       # erase the back wall behind see-through openings
+        if name in atlas["backdeco"].get("holes", {}):
+            ops.append(("hole", atlas["backdeco"]["holes"][name], x * T, y * T))
+    for (name, x, y, w, h) in plan:
         if name.startswith("pillar_"):
             reg = atlas["backdeco"]["pillar"][name[7:]]
         else:
@@ -620,23 +624,30 @@ def back_shadows(m, atlas):
 def compose(m, atlas, atlas_img, bg_base=None, w_px=None, h_px=None):
     """Rasterise the contract exactly as the game does (reference for previews)."""
     W, H = m.w * TILE, m.h * TILE
-    canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0)) if bg_base is None else bg_base.copy()
+    base = Image.new("RGBA", (W, H), (0, 0, 0, 0)) if bg_base is None else bg_base.copy()
     ops = autotile(m, atlas)
-    sh = back_shadows(m, atlas)
+    back = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+
+    def blit(canvas, reg, px, py):
+        sx, sy, sw, shh, ox, oy = reg
+        if px + ox >= 0 and py + oy >= 0:
+            canvas.alpha_composite(atlas_img.crop((sx, sy, sx + sw, sy + shh)), (px + ox, py + oy))
+        else:
+            _blit_clipped(canvas, atlas_img, reg, px, py)
+
+    for (p, reg, px, py) in ops:
+        if p == "back":
+            blit(back, reg, px, py)
+        elif p == "hole":                                   # destination-out
+            sx, sy, sw, shh, ox, oy = reg
+            a = np.asarray(back).copy()
+            mk = np.asarray(atlas_img.crop((sx, sy, sx + sw, sy + shh)))[..., 3] > 0
+            a[py + oy:py + oy + shh, px + ox:px + ox + sw][mk, 3] = 0
+            back = Image.fromarray(a)
+    # shadows go after back wall + cracks + deco
     col = hexc(atlas["colors"]["shadow"])
     a0 = atlas["cfg"]["shadow_a"]
-
-    def blit(reg, px, py):
-        sx, sy, sw, shh, ox, oy = reg
-        canvas.alpha_composite(atlas_img.crop((sx, sy, sx + sw, sy + shh)), (px + ox, py + oy)) \
-            if px + ox >= 0 and py + oy >= 0 else _blit_clipped(canvas, atlas_img, reg, px, py)
-
-    for ps in ("back",):
-        for (p, reg, px, py) in ops:
-            if p == ps:
-                blit(reg, px, py)
-    # shadows go after back wall + cracks but they must also dim deco -> draw after all back ops
-    for (x, y, w, h, side) in sh:
+    for (x, y, w, h, side) in back_shadows(m, atlas):
         g = np.zeros((h, w, 4), np.uint8)
         g[..., :3] = col
         n = {"t": h, "b": h, "l": w, "r": w}[side]
@@ -650,12 +661,13 @@ def compose(m, atlas, atlas_img, bg_base=None, w_px=None, h_px=None):
         else:
             al = np.ones((h, 1)) * ramp[::-1][None, :]
         g[..., 3] = np.clip(al * a0 * 255, 0, 255).astype(np.uint8)
-        canvas.alpha_composite(Image.fromarray(g), (x, y))
+        back.alpha_composite(Image.fromarray(g), (x, y))
+    base.alpha_composite(back)
     for ps in ("fill", "edge", "detail", "prop"):
         for (p, reg, px, py) in ops:
             if p == ps:
-                blit(reg, px, py)
-    return canvas
+                blit(base, reg, px, py)
+    return base
 
 
 def _blit_clipped(canvas, atlas_img, reg, px, py):
@@ -763,6 +775,108 @@ def paint_back_cracks(biome, P, rng):
     return outs
 
 
+
+def relight_lip(strip, P):
+    """Pixel-art lighting for the lip strip: 1-2 bright rows on top, mid body, dark bottom row.
+    Works per column on the lip silhouette; shading bands are recovered from the palette."""
+    pal = [hexc(c) for c in P["mats"]["lip"]]
+    out = strip.copy()
+    h, w = strip.shape[:2]
+    a = strip[..., 3] > 0
+    for x in range(w):
+        col = np.nonzero(a[:, x])[0]
+        if len(col) == 0:
+            continue
+        y0, y1 = col.min(), col.max()
+        n = y1 - y0 + 1
+        for y in col:
+            r = y - y0
+            c = tuple(int(v) for v in strip[y, x, :3])
+            band = min(range(5), key=lambda i: sum((c[k] - pal[i][k]) ** 2 for k in range(3)))
+            if r == 0:
+                b = 4
+            elif r <= 1:
+                b = 4 if band >= 3 else 3
+            elif y == y1:
+                b = 0
+            elif y >= y1 - 1 and n > 6:
+                b = 1
+            else:
+                b = min(band, 2) if r > 3 else min(max(band, 2), 3)
+            out[y, x, :3] = pal[b]
+    return out
+
+
+def belfry_screen(back, P):
+    """Tower back wall = louvred belfry screen: stone piers + timber bands with tall arched openings
+    (alpha 0) so the bell-tower parallax shows through even where bg == Wall.  Period 192 x 96."""
+    h, w = back.shape[:2]
+    out = back.copy()
+    Y, X = np.mgrid[0:h, 0:w]
+    hole = np.zeros((h, w), bool)
+    for bx in (0, 96):
+        x0, x1, y0, y1, rr = bx + 28, bx + 84, 6, 78, 15
+        inx = (X >= x0) & (X < x1) & (Y >= y0) & (Y < y1)
+        for cx, cy in ((x0 + rr, y0 + rr), (x1 - 1 - rr, y0 + rr)):
+            corner = (np.abs(X - cx) > 0) & (Y < y0 + rr) & ((X < x0 + rr) if cx == x0 + rr else (X > x1 - 1 - rr))
+            far = (X - cx) ** 2 + (Y - cy) ** 2 > rr * rr
+            inx &= ~(corner & far)
+        hole |= inx
+    band = (Y >= 78) | (Y < 6)
+    wood = [hexc(c) for c in P["mats"]["wood"]]
+    iron = [hexc(c) for c in P["mats"]["iron"]]
+    for y in range(h):
+        for x in range(w):
+            if not band[y, x]:
+                continue
+            r = (y - 78) % h            # 0..23 inside the band: three 8 px planks
+            pr, pi = r % 8, r // 8
+            c = wood[2 if (x // 22 + pi) % 3 else 1]
+            if pr == 0:
+                c = wood[0]              # seam
+            elif pr == 1:
+                c = wood[3]              # lit upper edge of each plank
+            elif pr == 7:
+                c = wood[1]
+            if (x * 5 + pi * 37) % 53 in (0, 1) and 2 <= pr <= 5:
+                c = wood[0]              # grain / nail holes
+            out[y, x, :3] = c
+            out[y, x, 3] = 255
+            hole[y, x] = False
+    # iron straps on the band where it meets the piers
+    for bx in (0, 96):
+        for sx in (bx + 20, bx + 90):
+            for y in list(range(78, h)) + list(range(0, 6)):
+                for k in range(8):
+                    out[y, (sx + k) % w, :3] = iron[2 if k in (0, 7) else 3]
+                    out[y, (sx + k) % w, 3] = 255
+            for y in (82, 90, 98 % h):
+                out[y % h, (sx + 1) % w, :3] = hexc(P["mats"]["gold"][3])
+    out[hole, 3] = 0
+    # outline: dark rim on pier pixels touching an opening, light rim on the left jamb
+    a = out[..., 3] > 0
+    rim = np.zeros_like(a)
+    for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        rim |= np.roll(np.roll(~a, dy, 0), dx, 1) & a
+    out[rim, :3] = hexc(P["outline"])
+    return out
+
+
+LIFT = {"prison": 0.80, "ramparts": 1.0, "tower": 0.82}     # gamma < 1 lifts the darks (the game multiplies by ambient)
+
+
+def lift_sheet(sheet, g, keep):
+    """Gamma-lift RGB of opaque pixels (leaves the outline colour alone so silhouettes stay crisp)."""
+    if g == 1.0:
+        return sheet
+    out = sheet.copy()
+    rgb_ = out[..., :3].astype(np.float32) / 255.0
+    lifted = np.power(rgb_, g) * 255.0
+    m = (out[..., 3] > 0) & ~np.all(out[..., :3] == np.array(keep, np.uint8), axis=-1)
+    out[..., :3][m] = np.clip(lifted[m] + 0.5, 0, 255).astype(np.uint8)
+    return out
+
+
 def build_biome(biome, quiet=False):
     P = PAL[biome]
     cfg = dict(BIOME_CFG[biome])
@@ -795,6 +909,8 @@ def build_biome(biome, quiet=False):
     # ---------------- back wall macro
     gb = load_gbuf(os.path.join(ENV, "tiles", biome, "back"))
     back = shade(gb, ids, key=P["key"], th=P["th"], wrap=True, seed=5, grit=0.03, edge=True)
+    if biome == "tower":
+        back = belfry_screen(back, P)
     atlas["backwall"] = cells(back, fw, fh)
     atlas["backCrack"] = [A.add(c) for c in paint_back_cracks(biome, P, rng)]
 
@@ -805,6 +921,7 @@ def build_biome(biome, quiet=False):
     sx0, sy0 = L["top0"][0], L["top0"][1]
     strip = np.zeros((TILE + PAD, 8 * TILE, 4), np.uint8)       # PAD rows above the cell
     strip[PAD:, :] = lipimg[sy0:sy0 + TILE, sx0:sx0 + 8 * TILE]
+    strip = relight_lip(strip, P)
     plain = outline(strip, ol, wrap_x=True)
     top = []
     for k in range(8):
@@ -868,7 +985,7 @@ def build_biome(biome, quiet=False):
     sp = {}
     for nm in ("up0", "up1", "up2", "down", "left", "right"):
         x, y, w, h = meta["groups"]["spikes"]["pieces"]["spike_" + nm]
-        sp[nm] = A.add(outline(slot(simg, x, y, w, h, PADS), ol), -PADS, -PADS)
+        sp[nm] = A.add(outline(tone(slot(simg, x, y, w, h, PADS), 1.45), ol), -PADS, -PADS)
     atlas["spikes"] = {"up": [sp["up0"], sp["up1"], sp["up2"]], "down": sp["down"],
                        "left": sp["left"], "right": sp["right"]}
 
@@ -888,21 +1005,40 @@ def build_biome(biome, quiet=False):
     dimg = tone(dimg, 0.88)
     DP = meta["groups"]["deco"]["pieces"]
 
+    dgb = load_gbuf(os.path.join(ENV, "tiles", biome, "deco"))
+    see_through = ("arch", "window", "slit", "special")   # void / glow areas become holes onto the parallax
+    holes = {}
+
     def dec(name):
         x, y, w, h = DP[name]
-        return A.add(outline(dimg[y:y + h, x:x + w].copy(), ol) if False else dimg[y:y + h, x:x + w].copy())
+        piece = dimg[y:y + h, x:x + w].copy()
+        if name in see_through and not (name == "special" and biome != "prison"):
+            mt = dgb["mat"][y:y + h, x:x + w]
+            hole = (mt == MAT["void"]) | (mt == MAT["glow"])
+            near = np.zeros_like(hole)
+            for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                near |= np.roll(np.roll(hole, dy, 0), dx, 1)
+            piece[near & ~hole, :3] = hexc(P["outline"])
+            piece[hole, 3] = 0
+            mask = np.zeros((h, w, 4), np.uint8)
+            mask[hole] = (255, 255, 255, 255)
+            holes[name] = A.add(mask)
+        return A.add(piece)
     bd = {"arch": dec("arch"), "window": dec("window"), "chain": dec("chain"), "special": dec("special"),
           "niche": dec("niche"), "special2": dec("special2"), "slit": dec("slit"),
           "pillar": {"bot": dec("pillar_bot"), "mid": dec("pillar_mid"), "top": dec("pillar_top")}}
     bd["size"] = {"arch": [3, 4], "window": [2, 2], "chain": [1, 3], "special": [2, 3], "niche": [1, 1],
                   "special2": [2, 2], "slit": [1, 2]}
-    bd["chance"] = {"arch": 0.035, "special": 0.03, "window": 0.020, "slit": 0.022, "niche": 0.016,
-                    "special2": 0.016, "chain": 0.040}
-    bd["pillar_chance"] = 0.12
+    bd["chance"] = {"arch": 0.022, "special": 0.014, "window": 0.008, "slit": 0.009, "niche": 0.007,
+                    "special2": 0.007, "chain": 0.022}
+    bd["pillar_chance"] = 0.10
+    if biome == "prison":
+        bd["chance"].update({"window": 0.012, "arch": 0.026})
+    bd["holes"] = holes
     atlas["backdeco"] = bd
 
     # ---------------- finish
-    sheet = A.finish()
+    sheet = lift_sheet(A.finish(), LIFT[biome], hexc(P["outline"]))
     atlas["cfg"] = {"moss_chance": cfg["moss_chance"], "deco_chance": cfg["deco_chance"],
                     "drip_chance": cfg["drip_chance"], "crack_chance": cfg["crack_chance"],
                     "shadow_a": cfg["shadow_a"], "shadow_w": [10, 6, 3]}
@@ -986,8 +1122,25 @@ def paint_lip_plant(biome, P, pt, rng, k):
         paint_tufts(pt, rng, 0, base + 1, plant, n=int(rng.integers(1, 3)), kind="moss", lo=2, hi=4)
         paint_hang(pt, rng, 0, base + 7, P["drip"], n=int(rng.integers(1, 3)), lo=3, hi=9)
     elif biome == "ramparts":
-        paint_tufts(pt, rng, 0, base + 1, plant, n=2, kind="grass", lo=3, hi=5, xmin=2, xmax=22)
-        paint_hang(pt, rng, 0, base + 7, P["drip"], n=int(rng.integers(1, 3)), lo=4, hi=10, leaf=True)
+        pal = [hexc(c) for c in plant]
+        # continuous grass fringe (1-3 px) with a couple of taller clumps and tiny flowers
+        for x in range(2, 22):
+            hgt = 1 + int(rng.integers(0, 3))
+            if rng.random() < 0.12:
+                continue
+            for dy in range(hgt):
+                pt.put(x, base - 1 - dy, pal[2 if dy < hgt - 1 else 3])
+        for _ in range(int(rng.integers(2, 4))):
+            cx = int(rng.integers(3, 21))
+            hgt = int(rng.integers(4, 8))
+            lean = int(rng.integers(-1, 2))
+            for dy in range(hgt):
+                pt.put(cx + (lean if dy > hgt // 2 else 0), base - 1 - dy, pal[3 if dy > hgt // 2 else 2])
+                if dy < 3:
+                    pt.put(cx + 1, base - 1 - dy, pal[1])
+            if rng.random() < 0.5:
+                pt.put(cx + (lean if hgt > 3 else 0), base - 1 - hgt, hexc("#f4f0ff") if rng.random() < 0.5 else hexc("#ffd0f0"))
+        paint_hang(pt, rng, 0, base + 9, P["drip"], n=int(rng.integers(1, 3)), lo=4, hi=10, leaf=True)
     else:
         em = [hexc(c) for c in P["mats"]["glow"]]
         for _ in range(int(rng.integers(3, 6))):
@@ -1084,6 +1237,15 @@ def mock_rows(biome):
     g[11][3] = "x"; g[10][3] = "x"; g[9][3] = "x"   # breakable wall
     g[4][3] = "^"                              # wall spike
     g[3][21] = ","
+    if biome == "ramparts":                    # open-air rampart: the sky comes down to the battlements
+        rect(3, 0, 29, 5, ",")
+        rect(3, 6, 4, 6, "#")
+        rect(28, 6, 29, 6, "#")
+        rect(12, 1, 12, 1, ",")
+    elif biome == "tower":                     # bell tower: a great shaft behind the walkways
+        rect(8, 2, 26, 9, ",")
+        rect(5, 6, 7, 6, "=")
+        rect(27, 6, 28, 6, "=")
     return ["".join(r) for r in g]
 
 
@@ -1154,6 +1316,30 @@ def heroine_frame():
     return S.process(p), (64, 100)
 
 
+AMBIENT = {"prison": "#41665f", "ramparts": "#8c8fc8", "tower": "#6d3d3a"}      # src/game/fx/lighting.ts MOODS
+VIGNETTE = {"prison": 0.5, "ramparts": 0.38, "tower": 0.6}
+TORCH = {"prison": "#ff9a3c", "ramparts": "#ffc070", "tower": "#ff7a30"}
+
+
+def lit_preview(img, biome):
+    """Approximation of the in-game lighting pass (ambient multiply + torch pools + vignette)."""
+    a = np.maximum(np.array(hexc(AMBIENT[biome]), np.float32), 52) / 255.0
+    w, h = img.size
+    Y, X = np.mgrid[0:h, 0:w].astype(np.float32)
+    lm = np.ones((h, w, 3), np.float32) * a
+    tc = np.array(hexc(TORCH[biome]), np.float32) / 255.0
+    for (tx, ty, r, k) in ((3.2 * TILE, 8.2 * TILE, 120, 0.9), (13 * TILE, 4.6 * TILE, 110, 0.8),
+                           (26 * TILE, 9 * TILE, 130, 0.9)):
+        d = np.sqrt((X - tx) ** 2 + (Y - ty) ** 2) / r
+        f = np.clip(1 - d, 0, 1) ** 1.6
+        lm += f[..., None] * tc * k
+    lm = np.clip(lm, 0, 1)
+    v = np.sqrt(((X - w / 2) / (w / 2)) ** 2 + ((Y - h * 0.55) / (h * 0.7)) ** 2)
+    vig = 1 - np.clip((v - 0.55) / 0.9, 0, 1) ** 1.5 * VIGNETTE[biome]
+    out = np.asarray(img.convert("RGB"), np.float32) * lm * vig[..., None]
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+
+
 def write_preview(biome, atlas, sheet_img):
     os.makedirs(PREVIEW, exist_ok=True)
     m = ascii_to_map(mock_rows(biome))
@@ -1197,6 +1383,7 @@ def synthetic_atlas():
                      "chance": {"arch": 0.06, "special": 0.05, "window": 0.05, "slit": 0.05, "niche": 0.04,
                                 "special2": 0.04, "chain": 0.06},
                      "pillar_chance": 0.5}
+    a["backdeco"]["holes"] = {k: r() for k in ("arch", "window", "slit", "special")}
     a["cfg"] = {"moss_chance": 0.4, "deco_chance": 0.25, "drip_chance": 0.3, "crack_chance": 0.12,
                 "shadow_a": 0.5, "shadow_w": [10, 6, 3]}
     a["colors"] = {"sky": "#000000", "solid": "#222222", "lip": "#888888", "back": "#111111",
@@ -1269,6 +1456,7 @@ def main(biomes):
             json.dump(atlas, f, separators=(",", ":"))
         pv = write_preview(b, atlas, img)
         pv.convert("RGB").save(os.path.join(PREVIEW, "env_%s.png" % b))
+        lit_preview(pv, b).save(os.path.join(PREVIEW, "env_%s_lit.png" % b))
         print("post_tiles: %s atlas %dx%d" % (b, img.width, img.height))
 
 

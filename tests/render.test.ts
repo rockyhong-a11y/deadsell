@@ -205,6 +205,7 @@ function fakeCanvas() {
     get: (t: any, k: string) => {
       if (k in t) return t[k];
       if (k === 'createImageData') return (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) });
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop() {} });
       return (...a: unknown[]) => { calls.push([k, ...a]); };
     },
     set: (t: any, k: string, v: unknown) => { t[k] = v; return true; },

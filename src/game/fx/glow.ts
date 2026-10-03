@@ -46,3 +46,9 @@ export class GlowSink {
 
 /** Shared sink: `Particles.draw` fills it, `Lighting.render` drains it. */
 export const glowSink = new GlowSink();
+
+/**
+ * Environment hand-off: `Lighting.setBiome` publishes the atmosphere key ('prison' | 'ramparts' |
+ * 'tower' | 'passage' | '' for none) and `Particles.update` reads it to emit biome ambience.
+ */
+export const fxEnv: { ambient: string } = { ambient: '' };

@@ -78,7 +78,10 @@ def a_tpose():
     return [{"a": {"sh_n": 20, "sh_f": -20, "el_n": 10, "el_f": 10}, "ground": 0.0}]
 
 
-@anim("idle", 10, loop=True)
+@anim("idle", 10, loop=True,
+      chain={"pony": dict(base=-72.0, base_stiff=0.25, curl=[0, 17, 16, 15, 12, 10],
+                          stiff=[0.0, 0.07, 0.06, 0.05, 0.05, 0.04], flutter=3.0),
+             "sa": dict(base=-16.0, flutter=5.0), "sb": dict(base=-8.0, flutter=4.0)})
 def a_idle():
     out = []
     n = 8
@@ -92,7 +95,7 @@ def a_idle():
                "sh_n": 12 + 4 * s2, "el_n": 28 + 4 * s2, "ha_n": -15,
                "sh_f": -14 + 4 * s2, "el_f": 32 + 3 * s2, "ha_f": -10},
             fn=plant(0.09), ff=plant(-0.22, 0),
-            wind=(-1.0 - 0.5 * S(TAU * t * 2), 0.25),
+            wind=(-0.55 - 0.25 * S(TAU * t * 2), 0.0),
         ))
     return out
 
@@ -136,6 +139,309 @@ def a_run():
 
 
 # ---------------------------------------------------------------------------
+# frame helpers for the combat poses
+
+
+def torso(lean=0.0, head=0.0):
+    """lean > 0 = forward lean (deg).  The head counter-rotates so she keeps looking ahead."""
+    return {"hips": -0.40 * lean, "spine": -0.30 * lean, "chest": -0.30 * lean,
+            "neck": 0.30 * lean, "head": 0.40 * lean + head}
+
+
+def F(lean=0.0, a=None, hip=(0.0, 0.0), fn=None, ff=None, hn=None, hf=None, show=(), vel=(0.0, 0.0),
+      ground=0.0, head=0.0, **kw):
+    aa = {"sh_n": 8, "el_n": 25, "ha_n": -10, "sh_f": -10, "el_f": 25, "ha_f": -10}
+    aa.update(torso(lean, head))
+    aa.update(a or {})
+    sp = {"a": aa, "hip": hip, "fn": fn or plant(0.12), "ff": ff or plant(-0.2), "ground": ground,
+          "vel": vel, "show": list(show)}
+    if hn is not None:
+        sp["hn"] = hn
+    if hf is not None:
+        sp["hf"] = hf
+    sp.update(kw)
+    return sp
+
+
+def SM(prop, frm, **kw):
+    d = {"prop": prop, "from": frm}
+    d.update(kw)
+    return d
+
+
+def grip(prop, t, bend=1):
+    return ("grip", prop, t, None, bend)
+
+
+def dust(x, z=0.04, sx=1.0, sz=1.0):
+    return ("obj", "dust_l", (x, -0.1, z), (sx, 1.0, sz), 0.0)
+
+
+# ---------------------------------------------------------------------------
+# SWORD
+
+SWORD = ["sword"]
+
+
+@anim("sword_1", 16, phases=(3, 2, 2))
+def a_sword_1():
+    return [
+        F(-8, hip=(-0.04, -0.06), fn=plant(0.14), ff=plant(-0.26), hn=(-0.28, 1.5, 135), show=SWORD),
+        F(-12, hip=(-0.07, -0.04), fn=plant(0.12), ff=plant(-0.28, -10), hn=(-0.34, 1.80, 165), show=SWORD),
+        F(-2, hip=(0.0, -0.08), fn=plant(0.26), ff=plant(-0.26, -6), hn=(0.12, 1.85, 100), show=SWORD, vel=(1.0, 0)),
+        F(14, hip=(0.10, -0.12), fn=plant(0.40), ff=plant(-0.30, -25), hn=(0.55, 1.40, 26), show=SWORD,
+          vel=(3.0, 0), smear=[SM("sword", 2, dir=-1, width=0.20)]),
+        F(20, hip=(0.15, -0.16), fn=plant(0.44), ff=plant(-0.28, -35), hn=(0.66, 0.98, -14), show=SWORD, vel=(3.2, 0)),
+        F(18, hip=(0.12, -0.14), fn=plant(0.42), ff=plant(-0.28, -30), hn=(0.52, 0.78, -44), show=SWORD, vel=(1.5, 0)),
+        F(6, hip=(0.04, -0.08), fn=plant(0.28), ff=plant(-0.22), hn=(0.30, 1.0, -5), show=SWORD, vel=(0.5, 0)),
+    ]
+
+
+@anim("sword_2", 16, phases=(2, 2, 3))
+def a_sword_2():
+    return [
+        F(10, hip=(0.05, -0.12), fn=plant(0.34), ff=plant(-0.22, -10), hn=(0.30, 0.82, -45), show=SWORD),
+        F(6, hip=(-0.02, -0.16), fn=plant(0.30), ff=plant(-0.28, -15), hn=(-0.20, 0.75, -150), show=SWORD),
+        F(10, hip=(0.10, -0.10), fn=plant(0.40), ff=plant(-0.28, -30), hn=(0.56, 1.18, 16), show=SWORD,
+          vel=(3.0, 0), smear=[SM("sword", 1, dir=1, width=0.22)]),
+        F(4, hip=(0.06, -0.04), fn=plant(0.32), ff=plant(-0.2, -40), hn=(0.30, 1.55, 78), show=SWORD, vel=(2.0, 0.5)),
+        F(-6, hip=(0.0, 0.0), fn=plant(0.24), ff=plant(-0.18, -20), hn=(-0.05, 1.70, 130), show=SWORD, vel=(0.5, 0)),
+        F(0, hip=(0.0, -0.03), fn=plant(0.2), ff=plant(-0.2), hn=(0.0, 1.45, 100), show=SWORD),
+        F(5, hip=(0.02, -0.06), fn=plant(0.22), ff=plant(-0.22), hn=(0.2, 1.05, 35), show=SWORD),
+    ]
+
+
+@anim("sword_3", 14, phases=(3, 2, 3))
+def a_sword_3():
+    g = grip("sword", -0.06)
+    return [
+        F(-6, hip=(-0.02, -0.04), fn=plant(0.16), ff=plant(-0.24), hn=(0.05, 1.5, 100), hf=g, show=SWORD),
+        F(-12, hip=(-0.06, 0.0), fn=plant(0.12, -10), ff=plant(-0.26, -15), hn=(-0.05, 1.85, 125), hf=g, show=SWORD),
+        F(-16, hip=(-0.08, 0.02), fn=plant(0.10, -15), ff=plant(-0.26, -20), hn=(-0.10, 1.95, 142), hf=g, show=SWORD),
+        F(22, hip=(0.20, -0.20), fn=plant(0.50), ff=plant(-0.25, -30), hn=(0.58, 1.22, 12), hf=g, show=SWORD,
+          vel=(3.4, -0.5), smear=[SM("sword", 2, dir=-1, width=0.24)]),
+        F(28, hip=(0.24, -0.26), fn=plant(0.54), ff=plant(-0.24, -35), hn=(0.62, 0.78, -36), hf=g, show=SWORD,
+          vel=(3.0, -1.0), fx=[("obj", "spark", (1.22, -0.2, 0.14), (1.2, 1, 1.2), 20),
+                              dust(0.9, 0.05, 1.2, 1.0)]),
+        F(26, hip=(0.22, -0.24), fn=plant(0.52), ff=plant(-0.24, -35), hn=(0.55, 0.74, -48), hf=g, show=SWORD,
+          vel=(1.0, 0), fx=[dust(1.0, 0.06, 1.5, 1.2)]),
+        F(18, hip=(0.14, -0.16), fn=plant(0.44), ff=plant(-0.24, -20), hn=(0.48, 0.86, -25), hf=g, show=SWORD),
+        F(6, hip=(0.04, -0.08), fn=plant(0.26), ff=plant(-0.22), hn=(0.3, 1.0, 5), show=SWORD),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# SPEAR
+
+SPEAR = ["spear"]
+
+
+@anim("spear_1", 16, phases=(2, 2, 2))
+def a_spear_1():
+    return [
+        F(-6, hip=(-0.08, -0.08), fn=plant(0.2), ff=plant(-0.3, -10), hn=(-0.25, 1.18, 6), hf=grip("spear", 0.6), show=SPEAR),
+        F(-10, hip=(-0.12, -0.10), fn=plant(0.18), ff=plant(-0.32, -15), hn=(-0.4, 1.15, 4), hf=grip("spear", 0.75), show=SPEAR),
+        F(14, hip=(0.18, -0.12), fn=plant(0.52), ff=plant(-0.30, -30), hn=(0.38, 1.12, 3), hf=grip("spear", 0.12), show=SPEAR,
+          vel=(3.5, 0)),
+        F(16, hip=(0.20, -0.12), fn=plant(0.55), ff=plant(-0.30, -32), hn=(0.46, 1.12, 2), hf=grip("spear", 0.1), show=SPEAR,
+          vel=(3.0, 0)),
+        F(8, hip=(0.12, -0.10), fn=plant(0.45), ff=plant(-0.28, -20), hn=(0.2, 1.12, 4), hf=grip("spear", 0.35), show=SPEAR,
+          vel=(1.0, 0)),
+        F(3, hip=(0.05, -0.07), fn=plant(0.30), ff=plant(-0.26), hn=(0.0, 1.1, 10), hf=grip("spear", 0.5), show=SPEAR),
+    ]
+
+
+@anim("spear_2", 16, phases=(2, 2, 2))
+def a_spear_2():
+    return [
+        F(4, hip=(-0.02, -0.18), fn=plant(0.30), ff=plant(-0.28, -10), hn=(-0.30, 0.9, -8), hf=grip("spear", 0.55), show=SPEAR),
+        F(8, hip=(0.0, -0.2), fn=plant(0.32), ff=plant(-0.30, -15), hn=(-0.36, 0.84, -14), hf=grip("spear", 0.65), show=SPEAR),
+        F(10, hip=(0.14, -0.12), fn=plant(0.50), ff=plant(-0.28, -35), hn=(0.34, 1.3, 20), hf=grip("spear", 0.12), show=SPEAR,
+          vel=(3.0, 1.0)),
+        F(8, hip=(0.16, -0.08), fn=plant(0.52), ff=plant(-0.28, -40), hn=(0.42, 1.36, 24), hf=grip("spear", 0.1), show=SPEAR,
+          vel=(2.5, 1.0)),
+        F(4, hip=(0.10, -0.08), fn=plant(0.42), ff=plant(-0.26, -20), hn=(0.2, 1.2, 14), hf=grip("spear", 0.35), show=SPEAR),
+        F(2, hip=(0.04, -0.06), fn=plant(0.28), ff=plant(-0.24), hn=(0.0, 1.1, 8), hf=grip("spear", 0.5), show=SPEAR),
+    ]
+
+
+@anim("spear_3", 14, phases=(2, 2, 3))
+def a_spear_3():
+    return [
+        F(-10, hip=(-0.1, -0.14), fn=plant(0.16), ff=plant(-0.34, -10), hn=(-0.38, 1.32, 14), hf=grip("spear", 0.7), show=SPEAR),
+        F(-14, hip=(-0.14, -0.18), fn=plant(0.14), ff=plant(-0.36, -15), hn=(-0.44, 1.4, 22), hf=grip("spear", 0.8), show=SPEAR),
+        F(20, hip=(0.24, -0.2), fn=plant(0.64), ff=plant(-0.30, -45), hn=(0.42, 1.2, -2), hf=grip("spear", 0.1), show=SPEAR,
+          vel=(4.5, 0)),
+        F(22, hip=(0.28, -0.22), fn=plant(0.68), ff=plant(-0.30, -48), hn=(0.50, 1.18, -3), hf=grip("spear", 0.08), show=SPEAR,
+          vel=(4.0, 0)),
+        F(14, hip=(0.20, -0.18), fn=plant(0.58), ff=plant(-0.30, -30), hn=(0.30, 1.14, 2), hf=grip("spear", 0.3), show=SPEAR,
+          vel=(1.5, 0)),
+        F(8, hip=(0.10, -0.12), fn=plant(0.40), ff=plant(-0.26, -15), hn=(0.1, 1.12, 8), hf=grip("spear", 0.45), show=SPEAR),
+        F(2, hip=(0.04, -0.06), fn=plant(0.26), ff=plant(-0.24), hn=(0.0, 1.1, 12), hf=grip("spear", 0.5), show=SPEAR),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# DAGGERS
+
+DAG = ["dagger_n", "dagger_f"]
+
+
+@anim("dagger_1", 20, phases=(1, 1, 2))
+def a_dagger_1():
+    return [
+        F(4, hip=(-0.02, -0.10), fn=plant(0.2), ff=plant(-0.24), hn=(0.05, 1.1, 70), hf=(0.30, 1.0, 20), show=DAG),
+        F(14, hip=(0.12, -0.10), fn=plant(0.40), ff=plant(-0.26, -20), hn=(0.56, 1.12, 8), hf=(-0.05, 1.05, 100), show=DAG,
+          vel=(2.5, 0), fx=[("trail", 0, "dagger_n", 0, 1.0)]),
+        F(8, hip=(0.08, -0.10), fn=plant(0.34), ff=plant(-0.26, -10), hn=(0.40, 1.05, 15), hf=(0.1, 1.05, 60), show=DAG),
+        F(3, hip=(0.03, -0.08), fn=plant(0.24), ff=plant(-0.24), hn=(0.28, 1.0, 35), hf=(0.22, 1.0, 40), show=DAG),
+    ]
+
+
+@anim("dagger_2", 20, phases=(1, 1, 2))
+def a_dagger_2():
+    return [
+        F(4, hip=(0.0, -0.10), fn=plant(0.24), ff=plant(-0.22), hn=(0.3, 1.0, 35), hf=(0.0, 1.15, 80), show=DAG),
+        F(14, hip=(0.12, -0.10), fn=plant(0.40), ff=plant(-0.26, -20), hn=(-0.05, 1.05, 100), hf=(0.56, 1.15, 5), show=DAG,
+          vel=(2.5, 0), fx=[("trail", 1, "dagger_f", 0, 1.0)]),
+        F(8, hip=(0.08, -0.10), fn=plant(0.34), ff=plant(-0.26, -10), hn=(0.1, 1.05, 60), hf=(0.4, 1.1, 12), show=DAG),
+        F(3, hip=(0.03, -0.08), fn=plant(0.24), ff=plant(-0.24), hn=(0.24, 1.0, 40), hf=(0.28, 1.05, 30), show=DAG),
+    ]
+
+
+@anim("dagger_3", 20, phases=(1, 1, 2))
+def a_dagger_3():
+    return [
+        F(6, hip=(0.0, -0.18), fn=plant(0.26), ff=plant(-0.26, -10), hn=(-0.05, 0.8, -60), hf=(-0.12, 0.85, -70), show=DAG),
+        F(12, hip=(0.12, -0.12), fn=plant(0.40), ff=plant(-0.26, -25), hn=(0.50, 1.32, 42), hf=(0.46, 1.12, 22), show=DAG,
+          vel=(2.5, 1.0), fx=[("trail", 0, "dagger_n", 0, 1.0), ("trail", 1, "dagger_f", 0, 1.0)]),
+        F(6, hip=(0.08, -0.08), fn=plant(0.34), ff=plant(-0.24, -10), hn=(0.38, 1.3, 55), hf=(0.34, 1.1, 40), show=DAG),
+        F(2, hip=(0.03, -0.06), fn=plant(0.24), ff=plant(-0.24), hn=(0.28, 1.05, 40), hf=(0.22, 1.0, 40), show=DAG),
+    ]
+
+
+@anim("dagger_4", 18, phases=(1, 2, 2))
+def a_dagger_4():
+    return [
+        F(-8, hip=(-0.08, -0.22), fn=plant(0.20), ff=plant(-0.30, -10), hn=(-0.30, 1.0, 120), hf=(-0.32, 1.12, 100), show=DAG),
+        F(18, hip=(0.26, -0.04), fn=plant(0.52, -10), ff=plant(-0.30, -45), hn=(0.50, 1.22, 12), hf=(0.46, 1.04, 4), show=DAG,
+          vel=(4.5, 0.5), ground=0.05, fx=[("trail", 0, "dagger_n", 0, 1.2), ("trail", 1, "dagger_f", 0, 1.2)]),
+        F(20, hip=(0.32, -0.02), fn=plant(0.56, -10), ff=plant(-0.30, -50), hn=(0.58, 1.18, 8), hf=(0.54, 1.0, 0), show=DAG,
+          vel=(4.0, 0.0), ground=0.04),
+        F(10, hip=(0.16, -0.12), fn=plant(0.42), ff=plant(-0.26, -20), hn=(0.40, 1.05, 20), hf=(0.34, 0.98, 20), show=DAG),
+        F(3, hip=(0.04, -0.08), fn=plant(0.24), ff=plant(-0.24), hn=(0.28, 1.0, 35), hf=(0.22, 1.0, 40), show=DAG),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# HAMMER
+
+HAM = ["hammer"]
+
+
+@anim("hammer_1", 12, phases=(4, 2, 4))
+def a_hammer_1():
+    g = grip("hammer", 0.22)
+    return [
+        F(2, hip=(0.0, -0.08), fn=plant(0.22), ff=plant(-0.24), hn=(0.30, 0.95, 40), hf=g, show=HAM),
+        F(-6, hip=(-0.03, -0.04), fn=plant(0.18), ff=plant(-0.26), hn=(0.15, 1.35, 75), hf=g, show=HAM),
+        F(-12, hip=(-0.06, 0.0), fn=plant(0.14, -10), ff=plant(-0.26, -10), hn=(-0.05, 1.75, 105), hf=g, show=HAM),
+        F(-18, hip=(-0.09, 0.02), fn=plant(0.12, -15), ff=plant(-0.28, -20), hn=(-0.15, 1.9, 126), hf=g, show=HAM),
+        F(22, hip=(0.18, -0.16), fn=plant(0.50), ff=plant(-0.26, -30), hn=(0.50, 1.28, 12), hf=g, show=HAM,
+          vel=(3.0, -1.0), smear=[SM("hammer", 3, dir=-1, width=0.34, bulge=1.02)]),
+        F(26, hip=(0.22, -0.22), fn=plant(0.56), ff=plant(-0.26, -35), hn=(0.62, 0.98, -34), hf=g, show=HAM,
+          vel=(2.0, -1.0), fx=[dust(1.45, 0.04, 1.6, 1.4), ("obj", "spark", (1.5, -0.2, 0.18), (1.3, 1, 1.3), 10)]),
+        F(25, hip=(0.20, -0.22), fn=plant(0.54), ff=plant(-0.26, -35), hn=(0.60, 0.96, -38), hf=g, show=HAM,
+          fx=[dust(1.5, 0.06, 2.0, 1.8)]),
+        F(20, hip=(0.16, -0.18), fn=plant(0.48), ff=plant(-0.26, -25), hn=(0.50, 1.08, -20), hf=g, show=HAM,
+          fx=[dust(1.55, 0.08, 1.8, 2.0)]),
+        F(12, hip=(0.10, -0.12), fn=plant(0.36), ff=plant(-0.26, -10), hn=(0.38, 1.1, 5), hf=g, show=HAM),
+        F(4, hip=(0.04, -0.08), fn=plant(0.26), ff=plant(-0.24), hn=(0.26, 1.05, 30), hf=g, show=HAM),
+    ]
+
+
+@anim("hammer_2", 12, phases=(3, 2, 4))
+def a_hammer_2():
+    g = grip("hammer", 0.18)
+    return [
+        F(4, hip=(0.0, -0.16), fn=plant(0.26), ff=plant(-0.26, -10), hn=(0.12, 0.95, -112), hf=g, show=HAM),
+        F(8, hip=(-0.06, -0.22), fn=plant(0.24), ff=plant(-0.34, -15), hn=(0.0, 0.95, -135), hf=g, show=HAM),
+        F(10, hip=(-0.04, -0.24), fn=plant(0.24), ff=plant(-0.36, -18), hn=(-0.12, 0.98, -150), hf=g, show=HAM),
+        F(18, hip=(0.18, -0.20), fn=plant(0.52), ff=plant(-0.28, -35), hn=(0.50, 0.96, -62), hf=g, show=HAM,
+          vel=(3.5, 0), smear=[SM("hammer", 2, dir=1, width=0.34, center=(0.0, 1.0))]),
+        F(20, hip=(0.22, -0.18), fn=plant(0.56), ff=plant(-0.28, -40), hn=(0.62, 1.0, -20), hf=g, show=HAM,
+          vel=(3.0, 0), fx=[dust(0.9, 0.04, 1.6, 1.2)]),
+        F(18, hip=(0.20, -0.16), fn=plant(0.52), ff=plant(-0.28, -35), hn=(0.58, 1.12, 20), hf=g, show=HAM, vel=(1.0, 0)),
+        F(12, hip=(0.14, -0.12), fn=plant(0.44), ff=plant(-0.26, -20), hn=(0.46, 1.1, 5), hf=g, show=HAM),
+        F(6, hip=(0.08, -0.1), fn=plant(0.34), ff=plant(-0.26, -10), hn=(0.34, 1.0, -10), hf=g, show=HAM),
+        F(2, hip=(0.04, -0.08), fn=plant(0.26), ff=plant(-0.24), hn=(0.26, 1.0, 20), hf=g, show=HAM),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# BOW
+
+BOW = ["bow"]
+
+
+def bow_pose(draw, lean=-3, **kw):
+    """draw 0..1: how far the string hand is pulled back."""
+    nx = lerp(0.30, -0.10, draw)
+    nz = lerp(1.30, 1.46, draw)
+    return F(lean, hip=(-0.02 * draw, -0.08), fn=plant(0.22), ff=plant(-0.24),
+             hn=(nx, nz, 90, -1), hf=(0.46, 1.40, 90), show=BOW, **kw)
+
+
+@anim("bow_draw", 12, loop=False)
+def a_bow_draw():
+    out = []
+    for i, d in enumerate((0.0, 0.35, 0.7, 1.0)):
+        out.append(bow_pose(d, fx=[("string", True), ("arrow",)]))
+    return out
+
+
+@anim("bow_shoot", 14, phases=(1, 1, 2))
+def a_bow_shoot():
+    return [
+        bow_pose(1.0, fx=[("string", True), ("arrow",)]),
+        F(-5, hip=(-0.04, -0.08), fn=plant(0.22), ff=plant(-0.24), hn=(-0.30, 1.44, 90, -1), hf=(0.50, 1.42, 92), show=BOW,
+          fx=[("string", False), ("line", 0, (0.7, -0.3, 1.40), (1.7, -0.3, 1.42), 0.8)], vel=(-0.5, 0)),
+        F(-1, hip=(0.0, -0.08), fn=plant(0.22), ff=plant(-0.24), hn=(-0.22, 1.3, 90, -1), hf=(0.44, 1.38, 95), show=BOW,
+          fx=[("string", False)]),
+        F(2, hip=(0.0, -0.08), fn=plant(0.2), ff=plant(-0.22), hn=(0.05, 1.05, 60), hf=(0.34, 1.18, 90), show=BOW,
+          fx=[("string", False)]),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# SHIELD
+
+SHD = ["shield"]
+
+
+@anim("shield_block", 12, loop=False)
+def a_shield_block():
+    return [
+        F(2, hip=(0.0, -0.08), fn=plant(0.2), ff=plant(-0.26), hn=(0.16, 1.34, 180), hf=(-0.1, 1.0, 20), show=SHD),
+        F(6, hip=(0.03, -0.12), fn=plant(0.26), ff=plant(-0.28, -5), hn=(0.28, 1.36, 180), hf=(-0.1, 1.0, 20), show=SHD),
+        F(8, hip=(0.04, -0.14), fn=plant(0.28), ff=plant(-0.3, -8), hn=(0.32, 1.37, 180), hf=(-0.12, 1.02, 20), show=SHD),
+    ]
+
+
+@anim("shield_parry", 16, phases=(1, 2, 2))
+def a_shield_parry():
+    return [
+        F(-4, hip=(-0.05, -0.12), fn=plant(0.22), ff=plant(-0.30, -5), hn=(0.05, 1.36, 180), hf=(-0.1, 1.0, 20), show=SHD),
+        F(14, hip=(0.14, -0.12), fn=plant(0.44), ff=plant(-0.28, -25), hn=(0.52, 1.36, 180), hf=(-0.05, 1.05, 30), show=SHD,
+          vel=(3.0, 0), fx=[("obj", "spark", (0.95, -0.3, 1.35), (1.3, 1, 1.3), 0)]),
+        F(16, hip=(0.17, -0.12), fn=plant(0.46), ff=plant(-0.28, -28), hn=(0.58, 1.36, 180), hf=(-0.05, 1.05, 30), show=SHD,
+          vel=(2.0, 0)),
+        F(10, hip=(0.10, -0.12), fn=plant(0.38), ff=plant(-0.28, -15), hn=(0.42, 1.36, 180), hf=(-0.08, 1.0, 20), show=SHD),
+        F(4, hip=(0.04, -0.1), fn=plant(0.28), ff=plant(-0.26), hn=(0.30, 1.36, 180), hf=(-0.1, 1.0, 20), show=SHD),
+    ]
+
+
+# ---------------------------------------------------------------------------
 # main
 
 
@@ -164,7 +470,7 @@ def measure(h, posed, specs):
         rig.pose(a, off, scl)
         L.update()
         m = {}
-        for j in ("sh_n", "sh_f", "ha_n", "ha_f", "an_n", "an_f", "head", "chest", "hips"):
+        for j in ("sh_n", "sh_f", "el_n", "el_f", "ha_n", "ha_f", "an_n", "an_f", "head", "chest", "hips"):
             m[j] = L.wpos(rig, j).copy()
         for pname, (tip, mid) in h.tip_local.items():
             ob = h.prop_root[pname]
@@ -204,6 +510,10 @@ def make_smear(h, name, meas, sm, frame):
     span -= d * math.radians(sm.get("trim", 6))
     r0 = math.hypot(t0.x - cx, t0.z - cz)
     r1 = math.hypot(t1.x - cx, t1.z - cz)
+    frac = sm.get("frac", 0.65)
+    a0 = a0 + span * (1.0 - frac)
+    r0 = lerp(r0, r1, 1.0 - frac)
+    span *= frac
     width = sm.get("width", 0.45)
     y = sm.get("y", -0.26)
     K = 14
@@ -256,6 +566,20 @@ def fx_builder(h, meas, specs, smears):
                 ob = h.fx[f[1]]
                 p0 = Vector(f[2])
                 out[ob] = (p0, Quaternion((1, 0, 0), math.pi), (1, 1, f[3]))
+            elif kind in ("line", "trail"):
+                # ("line", k, p0, p1[, w])  /  ("trail", k, prop, from_frame[, w]) : tapered light streak p0 -> p1
+                ob = h.fx["streak%d" % f[1]]
+                if kind == "line":
+                    p0, p1 = Vector(f[2]), Vector(f[3])
+                else:
+                    p0 = meas[f[3]][f[2]][0].copy()
+                    p1 = meas[i][f[2]][0].copy()
+                    p0 = p1.lerp(p0, 0.9)
+                    p0.y = p1.y = -0.3
+                w = f[4] if len(f) > 4 else 1.0
+                d = p1 - p0
+                q = (-d).normalized().to_track_quat("Z", "Y")
+                out[ob] = (p0, q, (w, w, max(d.length, 1e-3)))
         return out
     return fx
 
@@ -265,9 +589,22 @@ def render_anim(h, entry):
     specs = fn()
     if phases:
         assert sum(phases) == len(specs), (name, phases, len(specs))
+    h.chains = L.make_chains(h)
+    for ch in h.chains:
+        for k, v in opts.get("chain", {}).get(ch.joints[0][:2] if ch.joints[0] != "pt0" else "pony", {}).items():
+            setattr(ch, k, v)
     posed = L.solve_frames(h, specs, fps, loop, pre=opts.get("pre"), wind=opts.get("wind", (0.0, 0.0)),
                            seed_phase=opts.get("seed", 0.0))
     meas = measure(h, posed, specs)
+    if os.environ.get("HARM"):
+        for i in range(len(specs)):
+            m = meas[i]
+            print("ARM %s %d sh(%.2f,%.2f) el(%.2f,%.2f) ha(%.2f,%.2f)" % (name, i, m["sh_n"].x, m["sh_n"].z, m["el_n"].x, m["el_n"].z, m["ha_n"].x, m["ha_n"].z))
+    for i, sp in enumerate(specs):
+        for pn in sp.get("show", []):
+            if pn in meas[i] and isinstance(meas[i][pn], tuple):
+                t = meas[i][pn][0]
+                print("REACH %s %d %-7s tip x=%5.1f z=%5.1f px" % (name, i, pn, t.x * 32, t.z * 32))
     if os.environ.get("HDEBUG"):
         for i, (a, off, pts) in enumerate(posed):
             row = []

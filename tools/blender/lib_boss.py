@@ -540,6 +540,7 @@ def matron_materials(cast=False):
     M.eye_hot = toon("mt_eye_hot", "#000000", emission="#fff0a8")
     M.ember = toon("mt_ember", "#000000", emission="#ff9a3a")
     M.ember_d = toon("mt_ember_d", "#000000", emission="#c8401c")
+    M.star = toon("mt_star", "#000000", emission="#ffe27a")
     M.smear = toon("mt_smear", "#000000", emission="#ffe7bf")
     M.smear2 = toon("mt_smear2", "#000000", emission="#ffb066")
     M.dust = toon("mt_dust", "#8a7a74", "#4a3c48", "#c2b3a2")

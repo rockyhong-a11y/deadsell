@@ -33,36 +33,59 @@ export interface NavGrid {
   openBreakables?: boolean;
 }
 
-function tileAt(g: NavGrid, x: number, y: number): number {
-  if (x < 0 || y < 0 || x >= g.w || y >= g.h) return T.Solid;
-  const t = g.tiles[y * g.w + x];
-  return t === T.Breakable && g.openBreakables ? T.Empty : t;
+/** Per-cell classes: 0 free, 1 solid, 2 one-way platform, 3 spikes (cached per grid). */
+interface NavCtx {
+  w: number;
+  h: number;
+  cls: Uint8Array;
 }
 
+const ctxCache = new WeakMap<NavGrid, { ctx: NavCtx; open: boolean | undefined; len: number }>();
+
+function getCtx(g: NavGrid): NavCtx {
+  const hit = ctxCache.get(g);
+  if (hit && hit.open === g.openBreakables && hit.len === g.tiles.length) return hit.ctx;
+  const cls = new Uint8Array(g.w * g.h);
+  for (let i = 0; i < cls.length; i++) {
+    const t = g.tiles[i];
+    cls[i] = t === T.Solid ? 1 : t === T.Breakable ? (g.openBreakables ? 0 : 1) : t === T.Platform ? 2 : t === T.Spikes ? 3 : 0;
+  }
+  const ctx = { w: g.w, h: g.h, cls };
+  ctxCache.set(g, { ctx, open: g.openBreakables, len: g.tiles.length });
+  return ctx;
+}
+
+const clsAt = (c: NavCtx, x: number, y: number): number => (x < 0 || y < 0 || x >= c.w || y >= c.h ? 1 : c.cls[y * c.w + x]);
+
 /** 0 = free, 1 = blocked by a solid tile, 2 = overlaps spikes. Box: centre x, feet y (px). */
-function boxState(g: NavGrid, cx: number, fy: number): number {
+function boxState(c: NavCtx, cx: number, fy: number): number {
   const x0 = Math.floor((cx - BW / 2 + EPS) / TS), x1 = Math.floor((cx + BW / 2 - EPS) / TS);
   const y0 = Math.floor((fy - BH + EPS) / TS), y1 = Math.floor((fy - EPS) / TS);
   let r = 0;
   for (let y = y0; y <= y1; y++)
     for (let x = x0; x <= x1; x++) {
-      const t = tileAt(g, x, y);
-      if (t === T.Solid || t === T.Breakable) return 1;
-      if (t === T.Spikes && fy > (y + 1) * TS - 10 && fy - BH < (y + 1) * TS) r = 2;
+      const t = clsAt(c, x, y);
+      if (t === 1) return 1;
+      if (t === 3 && fy > (y + 1) * TS - 10 && fy - BH < (y + 1) * TS) r = 2;
     }
   return r;
 }
 
-const supportKind = (g: NavGrid, x: number, y: number): number => {
-  const t = tileAt(g, x, y);
-  return t === T.Solid || t === T.Breakable ? 1 : t === T.Platform ? 2 : 0;
+/** 1 = solid floor, 2 = one-way platform, 0 = nothing to stand on */
+const supportKind = (c: NavCtx, x: number, y: number): number => {
+  const t = clsAt(c, x, y);
+  return t === 1 ? 1 : t === 2 ? 2 : 0;
 };
+
+function standableC(c: NavCtx, x: number, y: number): boolean {
+  if (x < 0 || y < 0 || x >= c.w || y >= c.h) return false;
+  if (!supportKind(c, x, y + 1)) return false;
+  return boxState(c, x * TS + TS / 2, (y + 1) * TS) === 0;
+}
 
 /** Is (x, y) a cell the player can stand in? */
 export function standable(g: NavGrid, x: number, y: number): boolean {
-  if (x < 0 || y < 0 || x >= g.w || y >= g.h) return false;
-  if (!supportKind(g, x, y + 1)) return false;
-  return boxState(g, x * TS + TS / 2, (y + 1) * TS) === 0;
+  return standableC(getCtx(g), x, y);
 }
 
 interface Arc {
@@ -99,7 +122,7 @@ for (const c of [0, 24, 48, 72, 1e9]) ARCS.push({ kind: 'drop', cut: c, oy: FALL
  * were covered (walls stop it, like in the real physics) while the vertical motion follows the
  * jump / fall profile. Returns the landing node index or -1.
  */
-function runArc(g: NavGrid, arc: Arc, dir: number, sx: number, sy: number): number {
+function runArc(g: NavCtx, arc: Arc, dir: number, sx: number, sy: number): number {
   let px = sx, py = sy, moved = 0, vi = 0;
   const dropRow = arc.kind === 'drop' ? Math.round(sy / TS) : -1; // platform row we stand on
   const step = SPEED * DT;
@@ -133,7 +156,7 @@ function runArc(g: NavGrid, arc: Arc, dir: number, sx: number, sy: number): numb
         else if (ok(cl)) col = cl;
         else if (ok(cr)) col = cr;
         if (col < 0) continue;
-        if (!standable(g, col, ry - 1)) return -1;
+        if (!standableC(g, col, ry - 1)) return -1;
         return (ry - 1) * g.w + col;
       }
       if (boxState(g, px, ny) !== 0) return -1;
@@ -150,7 +173,8 @@ export interface ReachResult {
 }
 
 /** All standing nodes reachable from `starts`. */
-export function reach(g: NavGrid, starts: number[], recordEdges = false): ReachResult {
+export function reach(grid: NavGrid, starts: number[], recordEdges = false, stopAt = -1): ReachResult {
+  const g = getCtx(grid);
   const visited = new Uint8Array(g.w * g.h);
   const queue: number[] = [];
   const edges: number[] | undefined = recordEdges ? [] : undefined;
@@ -168,11 +192,12 @@ export function reach(g: NavGrid, starts: number[], recordEdges = false): ReachR
     }
   };
   for (let qi = 0; qi < queue.length; qi++) {
+    if (stopAt >= 0 && visited[stopAt]) break;
     const n = queue[qi];
     const x = n % g.w, y = (n - x) / g.w;
     const sx = x * TS + TS / 2, sy = (y + 1) * TS;
     const onPlat = supportKind(g, x, y + 1) === 2;
-    const wl = standable(g, x - 1, y), wr = standable(g, x + 1, y);
+    const wl = standableC(g, x - 1, y), wr = standableC(g, x + 1, y);
     if (wl) push(n, n - 1);
     if (wr) push(n, n + 1);
     for (let ai = 0; ai < ARCS.length; ai++) {
@@ -395,4 +420,36 @@ export function dumpReach(t: ParsedTemplate, fromKey: string, openBreakables = f
     lines.push(String(y - oy).padStart(3) + ' ' + row);
   }
   return lines.join('\n');
+}
+
+
+/** One planned move (used to cross-check the model against the real physics in tests). */
+export interface NavEdge {
+  from: number;
+  to: number;
+  kind: 'walk' | 'jump' | 'fall' | 'drop';
+  /** takeoff speed for jumps (px/s), 0 otherwise */
+  vy0: number;
+  /** px of horizontal travel the player holds the direction for */
+  cut: number;
+  dir: number;
+}
+
+/** Every move the model allows from one standing node. */
+export function edgesFrom(grid: NavGrid, node: number): NavEdge[] {
+  const g = getCtx(grid);
+  const x = node % g.w, y = (node - x) / g.w;
+  const sx = x * TS + TS / 2, sy = (y + 1) * TS;
+  const out: NavEdge[] = [];
+  const onPlat = supportKind(g, x, y + 1) === 2;
+  for (const d of [-1, 1]) if (standableC(g, x + d, y)) out.push({ from: node, to: node + d, kind: 'walk', vy0: 0, cut: TS, dir: d });
+  for (const arc of ARCS) {
+    if (arc.kind === 'drop' && !onPlat) continue;
+    for (const d of arc.cut === 0 ? [1] : [-1, 1]) {
+      if (arc.kind === 'fall' && standableC(g, x + d, y)) continue;
+      const to = runArc(g, arc, d, sx, sy);
+      if (to >= 0 && to !== node) out.push({ from: node, to, kind: arc.kind, vy0: arc.kind === 'jump' ? JUMP_PROFILES[arc.oy[0] > 0 ? 0 : 0] : 0, cut: arc.cut, dir: d });
+    }
+  }
+  return out;
 }

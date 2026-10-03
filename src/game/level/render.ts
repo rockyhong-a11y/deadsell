@@ -46,6 +46,8 @@ export interface TileAtlas {
     size: Record<string, [number, number]>;
     chance: Record<string, number>;
     pillar_chance: number;
+    /** masks (alpha > 0 = hole) erased from the back wall before the piece is drawn: see-through openings */
+    holes?: Record<string, Region>;
   };
   cfg: {
     moss_chance: number; deco_chance: number; drip_chance: number; crack_chance: number;
@@ -55,7 +57,7 @@ export interface TileAtlas {
   image: string;
 }
 
-export type Pass = 'back' | 'fill' | 'edge' | 'detail' | 'prop';
+export type Pass = 'back' | 'hole' | 'fill' | 'edge' | 'detail' | 'prop';
 export interface Op { pass: Pass; r: Region; px: number; py: number }
 export interface DecorItem { name: string; x: number; y: number; w: number; h: number }
 export interface Strip { x: number; y: number; w: number; h: number; side: 't' | 'l' | 'r' | 'b' }
@@ -201,10 +203,14 @@ export class Autotiler {
             ops.push({ pass: 'back', r: pick(atlas.backCrack, hash01(x, y, 15)), px: x * TILE, py: y * TILE });
         }
       }
-    for (const it of this.decor()) {
-      if (it.x + it.w <= x0 || it.x >= x1 || it.y + it.h <= y0 || it.y >= y1) continue;
-      ops.push({ pass: 'back', r: this.decorRegion(it.name), px: it.x * TILE, py: it.y * TILE });
-    }
+    const items = this.decor().filter((it) => !(it.x + it.w <= x0 || it.x >= x1 || it.y + it.h <= y0 || it.y >= y1));
+    const holes = atlas.backdeco.holes;
+    if (holes)
+      for (const it of items) {
+        const hr = holes[it.name];
+        if (hr) ops.push({ pass: 'hole', r: hr, px: it.x * TILE, py: it.y * TILE });
+      }
+    for (const it of items) ops.push({ pass: 'back', r: this.decorRegion(it.name), px: it.x * TILE, py: it.y * TILE });
     return ops;
   }
 
@@ -345,7 +351,7 @@ const FLAT: Record<string, { sky: string; solid: string; lip: string; back: stri
 
 interface Chunk { cv: HTMLCanvasElement; sig: number; version: number; used: number; flat: boolean }
 
-const MAX_CACHED = 16; // chunks per canvas kind
+const MAX_CACHED = 20; // chunks per canvas kind
 
 export class LevelRenderer {
   private world: World;
@@ -429,10 +435,15 @@ export class LevelRenderer {
         const ch = this.getTerrain(cx, cy);
         ctx.drawImage(ch.cv, cx * CHUNK_W * TILE - pad, cy * CHUNK_H * TILE - pad);
       }
+    this.prefetch(vx, vy, cam.w, cam.h);
     this.evict(this.terrain);
+    this.evict(this.back);
   }
 
-  /** World space, after entities. Nothing static is drawn in front of the action. */
+  /**
+   * World space, after entities. Intentionally empty: darkness, vignette and coloured light are the job of
+   * `world.lights` (src/game/fx/lighting.ts), which multiplies the scene after this call.
+   */
   drawFront(_ctx: CanvasRenderingContext2D, _cam: Camera): void {}
 
   // ---- chunks ----------------------------------------------------------------------------------
@@ -460,28 +471,42 @@ export class LevelRenderer {
     return h >>> 0;
   }
 
+  private isFresh(store: Map<number, Chunk>, cx: number, cy: number, withBg: boolean): boolean {
+    const ch = store.get(cy * 4096 + cx);
+    if (!ch || ch.flat !== !this.tiler) return false;
+    const m = this.world.map;
+    if (ch.version === m.version) return true;
+    if (this.signature(cx, cy, withBg) !== ch.sig) return false;
+    ch.version = m.version;
+    return true;
+  }
+
   private getChunk(store: Map<number, Chunk>, cx: number, cy: number, withBg: boolean,
     build: (cv: HTMLCanvasElement, cx: number, cy: number) => void, size: [number, number]): Chunk {
     const key = cy * 4096 + cx;
-    const m = this.world.map;
-    const flat = !this.tiler;
     let ch = store.get(key);
-    if (ch && ch.flat === flat && ch.version !== m.version) {
-      // tiles changed somewhere: rebuild only if this chunk's neighbourhood did
-      const sig = this.signature(cx, cy, withBg);
-      if (sig === ch.sig) ch.version = m.version;
-      else ch.sig = -1;
-    }
-    if (!ch || ch.flat !== flat || ch.sig === -1) {
+    if (!ch || !this.isFresh(store, cx, cy, withBg)) {
       const cv = ch?.cv ?? document.createElement('canvas');
       cv.width = size[0];
       cv.height = size[1];
       build(cv, cx, cy);
-      ch = { cv, sig: this.signature(cx, cy, withBg), version: m.version, used: this.frame, flat };
+      ch = { cv, sig: this.signature(cx, cy, withBg), version: this.world.map.version, used: this.frame, flat: !this.tiler };
       store.set(key, ch);
     }
     ch.used = this.frame;
     return ch;
+  }
+
+  /** Build at most one not-yet-visible chunk canvas just outside the view per frame (no hitches when scrolling). */
+  private prefetch(vx: number, vy: number, w: number, h: number): void {
+    const cw = CHUNK_W * TILE, chh = CHUNK_H * TILE, M = 260;
+    const x0 = Math.max(0, Math.floor((vx - M) / cw)), x1 = Math.min(this.cx - 1, Math.floor((vx + w + M) / cw));
+    const y0 = Math.max(0, Math.floor((vy - M) / chh)), y1 = Math.min(this.cy - 1, Math.floor((vy + h + M) / chh));
+    for (let cy = y0; cy <= y1; cy++)
+      for (let cx = x0; cx <= x1; cx++) {
+        if (!this.isFresh(this.back, cx, cy, true)) { this.getBack(cx, cy); return; }
+        if (!this.isFresh(this.terrain, cx, cy, false)) { this.getTerrain(cx, cy); return; }
+      }
   }
 
   private getBack(cx: number, cy: number): Chunk {
@@ -546,7 +571,13 @@ export class LevelRenderer {
     const x0 = cx * CHUNK_W, y0 = cy * CHUNK_H, x1 = x0 + CHUNK_W, y1 = y0 + CHUNK_H;
     const ox = x0 * TILE, oy = y0 * TILE;
     if (this.tiler && this.img) {
-      for (const op of this.tiler.backOps(x0, y0, x1, y1)) this.blit(c, op, ox, oy);
+      for (const op of this.tiler.backOps(x0, y0, x1, y1)) {
+        if (op.pass === 'hole') {
+          c.globalCompositeOperation = 'destination-out';
+          this.blit(c, op, ox, oy);
+          c.globalCompositeOperation = 'source-over';
+        } else this.blit(c, op, ox, oy);
+      }
       const sh = this.shadowImages();
       for (const s of this.tiler.shadowStrips(x0, y0, x1, y1)) c.drawImage(sh[s.side], s.x - ox, s.y - oy);
       return;

@@ -1,0 +1,101 @@
+{
+ "image": "icons.png",
+ "frameW": 32,
+ "frameH": 32,
+ "anchor": [
+  16,
+  16
+ ],
+ "animations": {
+  "rusty_sword": {
+   "row": 0,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "blood_sword": {
+   "row": 1,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "spear": {
+   "row": 2,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "twin_daggers": {
+   "row": 3,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "war_hammer": {
+   "row": 4,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "hunter_bow": {
+   "row": 5,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "old_shield": {
+   "row": 6,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "fire_grenade": {
+   "row": 7,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "ice_grenade": {
+   "row": 8,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "turret": {
+   "row": 9,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "wolf_trap": {
+   "row": 10,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "cells": {
+   "row": 11,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "gold": {
+   "row": 12,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "flask": {
+   "row": 13,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "scroll": {
+   "row": 14,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  }
+ }
+}

@@ -1,0 +1,101 @@
+{
+ "image": "props.png",
+ "frameW": 96,
+ "frameH": 96,
+ "anchor": [
+  48,
+  92
+ ],
+ "animations": {
+  "door_exit": {
+   "row": 0,
+   "frames": 8,
+   "fps": 12,
+   "loop": false
+  },
+  "chest": {
+   "row": 1,
+   "frames": 6,
+   "fps": 12,
+   "loop": false
+  },
+  "altar": {
+   "row": 2,
+   "frames": 6,
+   "fps": 8,
+   "loop": true
+  },
+  "pedestal": {
+   "row": 3,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "torch": {
+   "row": 4,
+   "frames": 6,
+   "fps": 10,
+   "loop": true
+  },
+  "fountain": {
+   "row": 5,
+   "frames": 6,
+   "fps": 8,
+   "loop": true
+  },
+  "shop_stall": {
+   "row": 6,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "cage": {
+   "row": 7,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "chains": {
+   "row": 8,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "barrel": {
+   "row": 9,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "crates": {
+   "row": 10,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "bones": {
+   "row": 11,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "banner": {
+   "row": 12,
+   "frames": 6,
+   "fps": 6,
+   "loop": true
+  },
+  "boss_gate": {
+   "row": 13,
+   "frames": 8,
+   "fps": 10,
+   "loop": false
+  },
+  "bell": {
+   "row": 14,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  }
+ }
+}

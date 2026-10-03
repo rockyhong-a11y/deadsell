@@ -1,0 +1,50 @@
+{
+ "image": "jailer.png",
+ "frameW": 128,
+ "frameH": 112,
+ "anchor": [
+  64,
+  100
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 8,
+   "fps": 8,
+   "loop": true
+  },
+  "walk": {
+   "row": 1,
+   "frames": 10,
+   "fps": 9,
+   "loop": true
+  },
+  "attack": {
+   "row": 2,
+   "frames": 12,
+   "fps": 12,
+   "loop": false,
+   "windup": 5,
+   "active": 3,
+   "recover": 4
+  },
+  "block": {
+   "row": 3,
+   "frames": 4,
+   "fps": 12,
+   "loop": false
+  },
+  "hurt": {
+   "row": 4,
+   "frames": 3,
+   "fps": 12,
+   "loop": false
+  },
+  "death": {
+   "row": 5,
+   "frames": 9,
+   "fps": 10,
+   "loop": false
+  }
+ }
+}

@@ -1,0 +1,44 @@
+{
+ "image": "archer.png",
+ "frameW": 128,
+ "frameH": 112,
+ "anchor": [
+  64,
+  100
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 8,
+   "fps": 8,
+   "loop": true
+  },
+  "walk": {
+   "row": 1,
+   "frames": 10,
+   "fps": 10,
+   "loop": true
+  },
+  "shoot": {
+   "row": 2,
+   "frames": 12,
+   "fps": 12,
+   "loop": false,
+   "windup": 6,
+   "active": 2,
+   "recover": 4
+  },
+  "hurt": {
+   "row": 3,
+   "frames": 3,
+   "fps": 12,
+   "loop": false
+  },
+  "death": {
+   "row": 4,
+   "frames": 9,
+   "fps": 10,
+   "loop": false
+  }
+ }
+}

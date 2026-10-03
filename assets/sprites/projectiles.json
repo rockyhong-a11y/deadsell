@@ -1,0 +1,84 @@
+{
+ "image": "projectiles.png",
+ "frameW": 48,
+ "frameH": 48,
+ "anchor": [
+  24,
+  24
+ ],
+ "animations": {
+  "arrow": {
+   "row": 0,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "bomb": {
+   "row": 1,
+   "frames": 4,
+   "fps": 12,
+   "loop": true
+  },
+  "fire_grenade": {
+   "row": 2,
+   "frames": 4,
+   "fps": 12,
+   "loop": true
+  },
+  "ice_grenade": {
+   "row": 3,
+   "frames": 4,
+   "fps": 12,
+   "loop": true
+  },
+  "boss_debris": {
+   "row": 4,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "turret_deploy": {
+   "row": 5,
+   "frames": 6,
+   "fps": 12,
+   "loop": false
+  },
+  "turret_idle": {
+   "row": 6,
+   "frames": 4,
+   "fps": 6,
+   "loop": true
+  },
+  "turret_shoot": {
+   "row": 7,
+   "frames": 4,
+   "fps": 14,
+   "loop": false
+  },
+  "trap_open": {
+   "row": 8,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "trap_snap": {
+   "row": 9,
+   "frames": 4,
+   "fps": 16,
+   "loop": false
+  },
+  "feather": {
+   "row": 10,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  }
+ },
+ "groundRow": {
+  "turret_deploy": 37,
+  "turret_idle": 37,
+  "turret_shoot": 37,
+  "trap_open": 31,
+  "trap_snap": 31
+ }
+}

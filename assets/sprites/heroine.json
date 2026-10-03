@@ -1,0 +1,248 @@
+{
+ "image": "heroine.png",
+ "frameW": 128,
+ "frameH": 112,
+ "anchor": [
+  64,
+  100
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 8,
+   "fps": 10,
+   "loop": true
+  },
+  "run": {
+   "row": 1,
+   "frames": 10,
+   "fps": 14,
+   "loop": true
+  },
+  "sword_1": {
+   "row": 2,
+   "frames": 7,
+   "fps": 16,
+   "loop": false,
+   "windup": 3,
+   "active": 2,
+   "recover": 2
+  },
+  "sword_2": {
+   "row": 3,
+   "frames": 7,
+   "fps": 16,
+   "loop": false,
+   "windup": 2,
+   "active": 2,
+   "recover": 3
+  },
+  "sword_3": {
+   "row": 4,
+   "frames": 8,
+   "fps": 14,
+   "loop": false,
+   "windup": 3,
+   "active": 2,
+   "recover": 3
+  },
+  "spear_1": {
+   "row": 5,
+   "frames": 6,
+   "fps": 16,
+   "loop": false,
+   "windup": 2,
+   "active": 2,
+   "recover": 2
+  },
+  "spear_2": {
+   "row": 6,
+   "frames": 6,
+   "fps": 16,
+   "loop": false,
+   "windup": 2,
+   "active": 2,
+   "recover": 2
+  },
+  "spear_3": {
+   "row": 7,
+   "frames": 7,
+   "fps": 14,
+   "loop": false,
+   "windup": 2,
+   "active": 2,
+   "recover": 3
+  },
+  "dagger_1": {
+   "row": 8,
+   "frames": 4,
+   "fps": 20,
+   "loop": false,
+   "windup": 1,
+   "active": 1,
+   "recover": 2
+  },
+  "dagger_2": {
+   "row": 9,
+   "frames": 4,
+   "fps": 20,
+   "loop": false,
+   "windup": 1,
+   "active": 1,
+   "recover": 2
+  },
+  "dagger_3": {
+   "row": 10,
+   "frames": 4,
+   "fps": 20,
+   "loop": false,
+   "windup": 1,
+   "active": 1,
+   "recover": 2
+  },
+  "dagger_4": {
+   "row": 11,
+   "frames": 5,
+   "fps": 18,
+   "loop": false,
+   "windup": 1,
+   "active": 2,
+   "recover": 2
+  },
+  "hammer_1": {
+   "row": 12,
+   "frames": 10,
+   "fps": 12,
+   "loop": false,
+   "windup": 4,
+   "active": 2,
+   "recover": 4
+  },
+  "hammer_2": {
+   "row": 13,
+   "frames": 9,
+   "fps": 12,
+   "loop": false,
+   "windup": 3,
+   "active": 2,
+   "recover": 4
+  },
+  "bow_draw": {
+   "row": 14,
+   "frames": 4,
+   "fps": 12,
+   "loop": false
+  },
+  "bow_shoot": {
+   "row": 15,
+   "frames": 4,
+   "fps": 14,
+   "loop": false,
+   "windup": 1,
+   "active": 1,
+   "recover": 2
+  },
+  "shield_block": {
+   "row": 16,
+   "frames": 3,
+   "fps": 12,
+   "loop": false
+  },
+  "shield_parry": {
+   "row": 17,
+   "frames": 5,
+   "fps": 16,
+   "loop": false,
+   "windup": 1,
+   "active": 2,
+   "recover": 2
+  },
+  "jump": {
+   "row": 18,
+   "frames": 4,
+   "fps": 12,
+   "loop": false
+  },
+  "fall": {
+   "row": 19,
+   "frames": 3,
+   "fps": 12,
+   "loop": true
+  },
+  "land": {
+   "row": 20,
+   "frames": 3,
+   "fps": 14,
+   "loop": false
+  },
+  "double_jump": {
+   "row": 21,
+   "frames": 6,
+   "fps": 14,
+   "loop": false
+  },
+  "roll": {
+   "row": 22,
+   "frames": 8,
+   "fps": 16,
+   "loop": false
+  },
+  "ledge_climb": {
+   "row": 23,
+   "frames": 6,
+   "fps": 14,
+   "loop": false
+  },
+  "hurt": {
+   "row": 24,
+   "frames": 3,
+   "fps": 12,
+   "loop": false
+  },
+  "death": {
+   "row": 25,
+   "frames": 10,
+   "fps": 10,
+   "loop": false
+  },
+  "slam_dive": {
+   "row": 26,
+   "frames": 2,
+   "fps": 14,
+   "loop": true
+  },
+  "slam_land": {
+   "row": 27,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "windup": 1,
+   "active": 2,
+   "recover": 2
+  },
+  "heal": {
+   "row": 28,
+   "frames": 8,
+   "fps": 11,
+   "loop": false
+  },
+  "throw": {
+   "row": 29,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "windup": 2,
+   "active": 1,
+   "recover": 3
+  },
+  "deploy": {
+   "row": 30,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "windup": 2,
+   "active": 2,
+   "recover": 2
+  }
+ }
+}

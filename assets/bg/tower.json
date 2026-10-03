@@ -1,0 +1,33 @@
+{
+ "sky": "#100607",
+ "layers": [
+  {
+   "image": "tower_0.png",
+   "parallax": 0.04,
+   "y": 0,
+   "vpar": 0.05,
+   "repeatX": true
+  },
+  {
+   "image": "tower_1.png",
+   "parallax": 0.16,
+   "y": 0,
+   "vpar": 0.1,
+   "repeatX": true
+  },
+  {
+   "image": "tower_2.png",
+   "parallax": 0.38,
+   "y": 0,
+   "vpar": 0.18,
+   "repeatX": true
+  },
+  {
+   "image": "tower_3.png",
+   "parallax": 0.66,
+   "y": 0,
+   "vpar": 0.28,
+   "repeatX": true
+  }
+ ]
+}

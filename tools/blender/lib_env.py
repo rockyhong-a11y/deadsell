@@ -246,18 +246,17 @@ def torus(R, r, loc, rot=(0, 0, 0), matid="iron", segs=12, rsegs=6, rid=None, sx
 
 
 def chain(x, ztop, zbot, link=0.16, thick=0.035, y=0.0, matid="iron", rid=None, sway=0.0):
-    """Vertical chain of alternating links from ztop down to zbot."""
+    """Vertical chain of interlocking links (alternately face-on / edge-on) from ztop
+    down to zbot.  `link` = outer length of one link."""
     obs = []
-    n = max(1, int((ztop - zbot) / (link * 1.25)))
+    R = link / 2 - thick
+    step = 2 * R - thick * 0.6
+    n = max(1, int((ztop - zbot - link) / step) + 1)
     for i in range(n):
-        z = ztop - link * 0.6 - i * link * 1.25
+        z = ztop - link / 2 - i * step
         xx = x + sway * math.sin(i * 0.5)
-        if i % 2 == 0:
-            obs.append(torus(link * 0.5, thick, (xx, y, z), rot=(90, 90, 0), matid=matid, rid=rid,
-                             sx=0.62))
-        else:
-            obs.append(torus(link * 0.5, thick, (xx, y, z), rot=(0, 90, 0), matid=matid, rid=rid,
-                             sx=0.62))
+        rot = (90, 0, 0) if i % 2 == 0 else (90, 0, 90)
+        obs.append(torus(R, thick, (xx, y, z), rot=rot, matid=matid, rid=rid, sx=0.6))
     return obs
 
 

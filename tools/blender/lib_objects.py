@@ -105,6 +105,7 @@ PAL = {
     "leather": ("#5a3328", "#2c1820", "#7d4a37", True),
     "leather_red": ("#6e2230", "#36101f", "#94303d", True),
     "gold": ("#d9a441", "#8a5527", "#ffe08a", True),
+    "coin_mark": ("#ffe08a", "#c08a3a", "#fff6d0", False),
     "brass": ("#b88a3c", "#6a4428", "#e6c06a", True),
     "bronze": ("#a8692f", "#552e28", "#dc9f55", True),
     "bronze_dark": ("#7a4a26", "#3b2022", "#a8692f", True),
@@ -856,7 +857,7 @@ SCROLL_COLORS = {
 }
 
 
-def m_scroll(color="red", length=0.4, r=0.075):
+def m_scroll(color="red", length=0.4, r=0.075, aura=0.0):
     rib, ring, core = SCROLL_COLORS[color]
     rm = toon("ribbon_" + color, rib[0], rib[1], rib[2], rim=RIM)
     parts = [cyl("sc_roll", r, length, mat("parchment"), loc=(-length / 2, 0, 0), rot=(0, 90, 0), segs=16)]
@@ -873,6 +874,10 @@ def m_scroll(color="red", length=0.4, r=0.075):
     parts.append(prism("sc_tail2", [(0.0, 0.0), (-0.03, 0.0), (-0.05, -0.12), (-0.03, -0.105), (-0.012, -0.125)], 0.02, rm,
                        loc=(0, -r - 0.012, -0.02)))
     parts.append(cyl("sc_seal", 0.04, 0.02, glow(core), loc=(0, -r - 0.01, 0.0), rot=(90, 0, 0), segs=12))
+    if aura:
+        # glowing rim: a fatter, depth-flattened copy of the roll + knobs just behind the scroll
+        parts.append(cyl("sc_aura", r + aura, length + 0.16 + 2 * aura, glow(ring),
+                         loc=(-(length + 0.16) / 2 - aura, 0.05, 0), rot=(0, 90, 0), segs=16, depth_scale=0.3))
     return group("scroll_" + color, parts), ring, core
 
 
@@ -883,88 +888,90 @@ def m_cell(r=0.11):
 
 
 def m_coin(r=0.15, th=0.04, name="coin"):
-    g = mat("gold")
-    parts = [cyl(name + "_body", r, th, g, loc=(0, th / 2, 0), rot=(90, 0, 0), segs=20)]
+    """Flat-shaded gold coin facing -Y: gold rim, darker inset face, bright square mark."""
+    parts = [cyl(name + "_body", r, th, mat("gold"), loc=(0, th / 2, 0), rot=(90, 0, 0), segs=16, smooth=False)]
     for sy in (-1, 1):
-        parts.append(torus(name + "_rim%d" % sy, r * 0.84, 0.014, mat("brass"), loc=(0, sy * th / 2, 0),
-                           rot=(90, 0, 0), segs=20, rsegs=4))
-        parts.append(box(name + "_mark%d" % sy, (r * 0.62, 0.014, r * 0.62), mat("brass"), loc=(0, sy * th / 2, 0),
-                         rot=(0, 45, 0), bevel=0.008))
+        parts.append(cyl(name + "_face%d" % sy, r * 0.72, 0.01, mat("brass"), loc=(0, sy * th / 2, 0),
+                         rot=(-90 * sy, 0, 0), segs=16, smooth=False))
+        parts.append(box(name + "_mark%d" % sy, (r * 0.42, 0.012, r * 0.42), mat("coin_mark"),
+                         loc=(0, sy * (th / 2 + 0.012), 0), rot=(0, 45, 0)))
     return group(name, parts)
 
 
-def m_turret():
-    """Small crossbow turret.  Returns (root, parts) with pivots for animation.
+def sparkle(name, size, m, loc=(0, 0, 0), w=0.034):
+    """Pixel-art twinkle: a thin plus sign (two flat bars) in the XZ plane, centred at loc."""
+    a = box(name + "_h", (size, 0.004, w), m, loc=(0, 0, 0))
+    b = box(name + "_v", (w, 0.004, size), m, loc=(0, 0, 0))
+    c = box(name + "_c", (w * 2, 0.004, w * 2), m, loc=(0, -0.002, 0), rot=(0, 45, 0))
+    return group(name, [a, b, c], loc=loc)
 
-    Pivots: 'hub' (z = deploy height), 'leg0..2' (splay), 'head' (pitch/recoil),
-    'limb_n'/'limb_f' (bow arms fold), plus objects 'string', 'bolt', 'eye', 'flash'.
+
+def m_turret():
+    """Small crossbow turret (faces +X).  Returns (root, P) with pivots for set_turret().
+
+    The bow is mounted vertically at the front of the stock so it reads in side view.
     """
     P = {}
     root = empty("turret")
     hub = empty("t_hub")
     hub.parent = root
     P["hub"] = hub
-    hub_objs = [cyl("t_hubm", 0.09, 0.1, mat("iron"), loc=(0, 0, -0.05), segs=12)]
-    hub_objs.append(torus("t_hubring", 0.09, 0.014, mat("brass"), loc=(0, 0, 0.05), segs=12, rsegs=4))
-    for o in hub_objs:
+    for o in (cyl("t_hubm", 0.1, 0.11, mat("iron"), loc=(0, 0, -0.06), segs=12),
+              torus("t_hubring", 0.1, 0.016, mat("brass"), loc=(0, 0, 0.045), segs=12, rsegs=4),
+              torus("t_hubring2", 0.1, 0.016, mat("brass"), loc=(0, 0, -0.055), segs=12, rsegs=4)):
         o.parent = hub
-    # legs (pivot at hub, hanging down & outward)
-    for i, a in enumerate((-90 + 60, -90 - 60, 90)):
+    for i in range(3):
         lp = empty("t_leg%d" % i)
         lp.parent = hub
-        lp.rotation_euler = (0, 0, math.radians(a))
         P["leg%d" % i] = lp
         sw = empty("t_legsw%d" % i)
         sw.parent = lp
         P["legsw%d" % i] = sw
-        leg = box("t_legm%d" % i, (0.05, 0.05, 0.36), mat("wood"), loc=(0, 0, -0.18), bevel=0.01)
-        foot = cone("t_foot%d" % i, 0.035, 0.0, 0.06, mat("iron"), loc=(0, 0, -0.36), rot=(180, 0, 0), segs=6)
-        band = box("t_legband%d" % i, (0.06, 0.06, 0.03), mat("iron"), loc=(0, 0, -0.1))
-        for o in (leg, foot, band):
+        for o in (box("t_legm%d" % i, (0.06, 0.06, 0.36), mat("wood"), loc=(0, 0, -0.18), bevel=0.012),
+                  cone("t_foot%d" % i, 0.04, 0.0, 0.07, mat("iron"), loc=(0, 0, -0.35), rot=(180, 0, 0), segs=6),
+                  box("t_legband%d" % i, (0.075, 0.075, 0.035), mat("brass"), loc=(0, 0, -0.27)),
+                  box("t_legtop%d" % i, (0.075, 0.075, 0.05), mat("iron"), loc=(0, 0, -0.03))):
             o.parent = sw
-    # post + head
-    post = cyl("t_post", 0.035, 0.16, mat("iron_dark"), loc=(0, 0, 0.0), segs=10)
+    post = cyl("t_post", 0.04, 0.17, mat("iron_dark"), loc=(0, 0, 0.0), segs=10)
     post.parent = hub
     head = empty("t_head")
     head.parent = hub
-    head.location = (0, 0, 0.17)
+    head.location = (0, 0, 0.18)
     P["head"] = head
-    ho = []
-    ho.append(box("t_stock", (0.46, 0.08, 0.07), mat("wood_light"), loc=(-0.04, 0, 0.0), bevel=0.012))
-    ho.append(box("t_rail", (0.32, 0.03, 0.02), mat("wood_dark"), loc=(0.02, 0, 0.045)))
-    ho.append(box("t_box", (0.16, 0.11, 0.1), mat("iron"), loc=(-0.2, 0, -0.01), bevel=0.015))
-    ho.append(box("t_plate", (0.03, 0.18, 0.14), mat("iron"), loc=(0.12, 0, 0.0), bevel=0.01))
-    for o in ho:
+    for o in (box("t_stock", (0.5, 0.09, 0.08), mat("wood_light"), loc=(-0.03, 0, 0.0), bevel=0.014),
+              box("t_rail", (0.34, 0.035, 0.025), mat("wood_dark"), loc=(0.04, 0, 0.05)),
+              box("t_box", (0.17, 0.13, 0.13), mat("iron"), loc=(-0.2, 0, 0.0), bevel=0.02),
+              box("t_boxband", (0.04, 0.14, 0.14), mat("brass"), loc=(-0.13, 0, 0.0)),
+              box("t_nose", (0.06, 0.11, 0.1), mat("iron"), loc=(0.22, 0, 0.0), bevel=0.012)):
         o.parent = head
-    eye = sphere("t_eye", 0.032, glow("#c97aff"), loc=(-0.2, -0.06, 0.0), segs=10, rings=6)
+    eye = sphere("t_eye", 0.042, glow("#b45cff"), loc=(-0.24, -0.07, 0.01), segs=10, rings=6)
     eye.parent = head
     P["eye"] = eye
-    eye2 = sphere("t_eyehot", 0.015, glow("#f4dcff"), loc=(-0.205, -0.085, 0.006), segs=8, rings=4)
+    eye2 = sphere("t_eyehot", 0.02, glow("#f4dcff"), loc=(-0.25, -0.1, 0.02), segs=8, rings=4)
     eye2.parent = head
     P["eye_hot"] = eye2
-    # bow limbs at the front, spreading toward +/-Y (near = -Y)
-    for side, sy in (("n", -1), ("f", 1)):
+    # vertical bow at the front: upper limb pivot 'limb_u', lower 'limb_d'
+    for side, sz in (("u", 1), ("d", -1)):
         lp = empty("t_limb_" + side)
         lp.parent = head
-        lp.location = (0.2, 0, 0.01)
+        lp.location = (0.22, 0, 0.0)
         P["limb_" + side] = lp
-        pts = [Vector((0, 0, 0)), Vector((-0.02, sy * 0.1, 0)), Vector((-0.07, sy * 0.2, 0)), Vector((-0.12, sy * 0.25, 0))]
-        lm = tube("t_limbm_" + side, catmull(pts, 3), [0.022, 0.02, 0.016, 0.012, 0.012, 0.011, 0.01, 0.01, 0.01, 0.01],
-                  mat("steel_dark"), segs=6, ref=(0, 0, 1))
+        pts = [Vector((0, 0, 0)), Vector((-0.02, 0, sz * 0.09)), Vector((-0.07, 0, sz * 0.18)),
+               Vector((-0.13, 0, sz * 0.23))]
+        lm = tube("t_limbm_" + side, catmull(pts, 3), [0.03, 0.028, 0.024, 0.02, 0.018, 0.016, 0.015, 0.014, 0.013,
+                                                         0.012], mat("steel_dark"), segs=6, ref=(0, 1, 0))
         lm.parent = lp
-        tip = sphere("t_limbtip_" + side, 0.018, mat("brass"), loc=(-0.12, sy * 0.25, 0), segs=8, rings=4)
+        tip = sphere("t_limbtip_" + side, 0.022, mat("brass"), loc=(-0.13, 0, sz * 0.23), segs=8, rings=4)
         tip.parent = lp
-    # string: rebuilt by set_turret()
-    bolt = []
-    bolt.append(cyl("t_bolt", 0.012, 0.3, mat("wood_dark"), loc=(-0.1, 0, 0.065), rot=(0, 90, 0), segs=6))
-    bolt.append(cone("t_bolthead", 0.028, 0.0, 0.07, mat("steel"), loc=(0.2, 0, 0.065), rot=(0, 90, 0), segs=6))
-    bolt.append(prism("t_boltfl", [(0, 0), (0.06, 0), (0.02, 0.04)], 0.01, mat("cloth_purple"), loc=(-0.1, 0, 0.075)))
+    bolt = [cyl("t_bolt", 0.014, 0.3, mat("wood_dark"), loc=(-0.12, 0, 0.07), rot=(0, 90, 0), segs=6),
+            cone("t_bolthead", 0.032, 0.0, 0.08, mat("steel"), loc=(0.18, 0, 0.07), rot=(0, 90, 0), segs=6),
+            prism("t_boltfl", [(0, 0), (0.07, 0), (0.02, 0.045)], 0.012, mat("cloth_purple"), loc=(-0.12, 0, 0.08))]
     bg = group("t_boltg", bolt)
     bg.parent = head
     P["bolt"] = bg
-    fl = star("t_flash", 0.1, 0.035, 5, glow("#f0d0ff"))
-    fl2 = star("t_flash2", 0.06, 0.025, 5, glow("#ffffff"), loc=(0, -0.01, 0))
-    fg = group("t_flashg", [fl, fl2], loc=(0.3, -0.05, 0.06))
+    fl = star("t_flash", 0.11, 0.035, 5, glow("#c97aff"))
+    fl2 = star("t_flash2", 0.065, 0.025, 5, glow("#ffffff"), loc=(0, -0.01, 0))
+    fg = group("t_flashg", [fl, fl2], loc=(0.33, -0.06, 0.06))
     fg.parent = head
     P["flash"] = fg
     P["root"] = root
@@ -973,84 +980,71 @@ def m_turret():
 
 
 def set_turret(P, deploy=1.0, draw=1.0, recoil=0.0, bolt=True, flash=False, eye=1.0, bob=0.0):
-    """deploy 0 = folded crate on the ground, 1 = standing.  draw 1 = string pulled back."""
+    """deploy 0 = folded bundle on the ground, 1 = standing.  draw 1 = string pulled back."""
     d = max(0.0, min(1.0, deploy))
-    hub = P["hub"]
-    hub.location = (0, 0, 0.1 + 0.27 * d + bob)
-    for i in range(3):
-        # 0 = legs folded up along the post (pointing up), 1 = splayed out
-        sw = P["legsw%d" % i]
-        sw.rotation_euler = (0, -math.radians(170 - 145 * d), 0)  # swing outward (local +X)
-        sw.location = (0, 0, 0)
-    for i in range(3):
-        lp = P["leg%d" % i]
-        lp.rotation_euler.z = math.radians((-30, -150, 90)[i])
+    P["hub"].location = (0, 0, 0.1 + 0.27 * d + bob)
+    for i, az in enumerate((-35, -145, 90)):
+        P["leg%d" % i].rotation_euler = (0, 0, math.radians(az))
+        P["legsw%d" % i].rotation_euler = (0, -math.radians(170 - 145 * d), 0)
     head = P["head"]
-    head.location = (-recoil * 0.06, 0, 0.17 + 0.0 * d)
-    head.rotation_euler = (0, math.radians(-4 * recoil), 0)
-    for side, sy in (("n", -1), ("f", 1)):
-        lp = P["limb_" + side]
-        fold = (1 - d)
-        lp.rotation_euler = (0, 0, math.radians(sy * 70 * fold))
-    # string between limb tips -> nock point
+    head.location = (-recoil * 0.07, 0, 0.18)
+    head.rotation_euler = (0, math.radians(-5 * recoil), 0)
+    fold = 1 - d
+    P["limb_u"].rotation_euler = (0, -math.radians(75 * fold), 0)
+    P["limb_d"].rotation_euler = (0, math.radians(75 * fold), 0)
     if P.get("string"):
         bpy.data.objects.remove(P["string"], do_unlink=True)
         P["string"] = None
     bpy.context.view_layer.update()
-    tips = []
-    for side in ("n", "f"):
-        ob = bpy.data.objects.get("t_limbtip_" + side)
-        tips.append(head.matrix_world.inverted() @ ob.matrix_world.translation)
-    mid = (tips[0] + tips[1]) / 2
-    nock = Vector((mid.x - 0.17 * draw * d, 0, mid.z + 0.05 * d))
-    s = tube("t_string", [tips[0], nock, tips[1]], 0.008, mat("cloth_cream"), segs=5, ref=(0, 0, 1))
+    inv = head.matrix_world.inverted()
+    tu = inv @ bpy.data.objects["t_limbtip_u"].matrix_world.translation
+    td = inv @ bpy.data.objects["t_limbtip_d"].matrix_world.translation
+    mid = (tu + td) / 2
+    nock = Vector((mid.x - 0.16 * draw * d, 0, 0.07 * d + mid.z * (1 - d)))
+    s = tube("t_string", [tu, nock, td], 0.011, mat("cloth_cream"), segs=5, ref=(0, 1, 0))
     s.parent = head
     P["string"] = s
-    hide(P["bolt"], not bolt)
-    hide(P["flash"], not flash)
-    em = 0.6 + 0.4 * eye
+    P["flash"].hide_render = not flash
+    for o in P["flash"].children_recursive:
+        o.hide_render = not flash
+    em = 0.7 + 0.3 * eye
     P["eye"].scale = (em, em, em)
     P["eye_hot"].hide_render = eye < 0.5
-    hide(P["bolt"], not bolt or d < 0.6)
+    hide(P["bolt"], (not bolt) or d < 0.6)
 
 
 def m_wolf_trap(R=0.3):
-    """Bear trap.  Returns (root, P) with jaw pivots 'jaw_n' (front) and 'jaw_f' (back) hinged on the X axis."""
+    """Bear trap.  Returns (root, P); jaw pivots 'jaw_n' (front) / 'jaw_f' (back) hinge on the X axis."""
     P = {}
     root = empty("wolf_trap")
-    parts = []
-    parts.append(cyl("wt_base", 0.13, 0.03, mat("iron_dark"), loc=(0, 0, 0.0), segs=16))
-    parts.append(cyl("wt_pan", 0.1, 0.02, mat("iron"), loc=(0, 0, 0.03), segs=16))
-    parts.append(box("wt_bar", (2 * R + 0.12, 0.06, 0.035), mat("iron_dark"), loc=(0, 0, 0.018), bevel=0.01))
-    # springs: flattened loops extending outward on both sides
+    parts = [cyl("wt_base", 0.14, 0.035, mat("iron_dark"), segs=16),
+             cyl("wt_pan", 0.11, 0.025, mat("brass"), loc=(0, 0, 0.035), segs=16),
+             box("wt_bar", (2 * R + 0.1, 0.07, 0.04), mat("iron_dark"), loc=(0, 0, 0.02), bevel=0.012)]
     for sx in (-1, 1):
-        parts.append(torus("wt_spring%d" % sx, 0.09, 0.022, mat("steel_dark"), loc=(sx * (R + 0.16), 0, 0.03),
-                           scale=(1.0, 0.55, 1), segs=16, rsegs=6))
-        parts.append(box("wt_hinge%d" % sx, (0.06, 0.08, 0.07), mat("iron"), loc=(sx * R, 0, 0.04), bevel=0.012))
+        # leaf spring: a U loop lying outward from each hinge
+        pts = [(sx * (R + 0.02), -0.035, 0.035), (sx * (R + 0.2), -0.05, 0.03), (sx * (R + 0.26), 0.0, 0.03),
+               (sx * (R + 0.2), 0.05, 0.03), (sx * (R + 0.02), 0.035, 0.035)]
+        parts.append(tube("wt_spring%d" % sx, catmull(pts, 3), 0.024, mat("steel_dark"), segs=6, ref=(0, 0, 1)))
+        parts.append(box("wt_hinge%d" % sx, (0.07, 0.1, 0.08), mat("iron"), loc=(sx * R, 0, 0.045), bevel=0.014))
     for o in parts:
         o.parent = root
-    # jaws: semicircle bars (radius R) with teeth; local frame: hinge axis = X, jaw extends toward -Y when open
     for side, sy in (("n", -1), ("f", 1)):
         pv = empty("wt_jaw_" + side)
         pv.parent = root
-        pv.location = (0, 0, 0.045)
+        pv.location = (0, 0, 0.05)
         P["jaw_" + side] = pv
-        pts = []
-        for k in range(17):
-            a = math.pi * k / 16
-            pts.append(Vector((R * math.cos(a), sy * R * math.sin(a), 0)))
-        bar = tube("wt_jawbar_" + side, pts, 0.026, mat("iron"), segs=6, ref=(0, 0, 1))
+        pts = [Vector((R * math.cos(math.pi * k / 16), sy * R * math.sin(math.pi * k / 16), 0)) for k in range(17)]
+        bar = tube("wt_jawbar_" + side, pts, 0.03, mat("iron"), segs=6, ref=(0, 0, 1))
         bar.parent = pv
-        # teeth: point "up" (+Z) when the jaw is open/flat; interleaved between jaws
-        nt = 7
+        nt = 6
         for k in range(nt):
-            a = math.pi * (k + (0.5 if sy > 0 else 0.0) + 0.25) / (nt + 0.5)
-            if a <= 0.12 or a >= math.pi - 0.12:
+            a = math.pi * (k + (0.75 if sy > 0 else 0.25)) / nt
+            if a <= 0.15 or a >= math.pi - 0.15:
                 continue
-            c = Vector((R * math.cos(a), sy * R * math.sin(a), 0.01))
-            tooth = cone("wt_tooth_%s%d" % (side, k), 0.034, 0.0, 0.1, mat("steel"), segs=4)
+            c = Vector((R * math.cos(a), sy * R * math.sin(a), 0.015))
+            tooth = cone("wt_tooth_%s%d" % (side, k), 0.042, 0.0, 0.13, mat("steel"), segs=4)
             tooth.location = c
-            tooth.rotation_euler = (0, 0, a)
+            tooth.rotation_euler = (0, 0, a + math.pi / 4)
             tooth.parent = pv
     return root, P
 

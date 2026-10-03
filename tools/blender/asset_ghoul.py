@@ -202,21 +202,20 @@ DEATH = [
     (0.00, L.merge(HUNCH, {"hips": 2, "spine": 6, "chest": 10, "neck": -10, "head": -24, "sh_n": 80, "el_n": 40,
                            "sh_f": 64, "el_f": 50, "hips.dx": -0.08})),
     # knees buckle
-    (0.30, L.merge(HUNCH, {"hips": -6, "spine": -10, "chest": -14, "neck": 10, "head": 30,
+    (0.30, L.merge(HUNCH, {"hips": -6, "spine": -10, "chest": -18, "neck": 10, "head": 30,
                            "th_n": 80, "kn_n": -150, "th_f": 70, "kn_f": -140,
-                           "sh_n": 30, "el_n": 20, "sh_f": 20, "el_f": 24})),
-    # pitch forward
-    (0.62, L.merge(HUNCH, {"root": -40, "hips": -14, "spine": -20, "chest": -18, "neck": 20, "head": 30,
-                           "th_n": 110, "kn_n": -140, "th_f": 100, "kn_f": -130,
-                           "sh_n": 150, "el_n": 30, "sh_f": 120, "el_f": 30})),
-    # face down on the floor, slumped
-    (0.85, L.merge(HUNCH, {"root": -82, "hips": -6, "spine": -4, "chest": -6, "neck": 10, "head": 14,
-                           "th_n": 92, "kn_n": -70, "th_f": 86, "kn_f": -60,
-                           "sh_n": 170, "el_n": 10, "sh_f": 150, "el_f": 20})),
-    (1.00, L.merge(HUNCH, {"root": -86, "hips": -2, "spine": -2, "chest": -2, "neck": 6, "head": 8,
-                           "th_n": 90, "kn_n": -40, "th_f": 84, "kn_f": -36,
-                           "sh_n": 176, "el_n": 4, "sh_f": 156, "el_f": 12,
-                           "root.sz": 0.9})),
+                           "sh_n": 40, "el_n": 20, "sh_f": 30, "el_f": 24})),
+    # pitches forward
+    (0.60, L.merge(HUNCH, {"hips": -50, "spine": -14, "chest": -16, "neck": 16, "head": 24,
+                           "th_n": 44, "kn_n": -80, "th_f": 36, "kn_f": -70,
+                           "sh_n": 110, "el_n": 30, "sh_f": 90, "el_f": 30})),
+    # face down on the floor, slumped, hair spread
+    (0.82, L.merge(HUNCH, {"hips": -88, "spine": -2, "chest": -4, "neck": 8, "head": 12,
+                           "th_n": 8, "kn_n": -24, "th_f": 4, "kn_f": -30,
+                           "sh_n": 168, "el_n": 16, "sh_f": 160, "el_f": 22})),
+    (1.00, L.merge(HUNCH, {"hips": -90, "spine": 0, "chest": 0, "neck": 4, "head": 8,
+                           "th_n": 4, "kn_n": -14, "th_f": 2, "kn_f": -20,
+                           "sh_n": 178, "el_n": 6, "sh_f": 172, "el_f": 10, "hips.sz": 0.92})),
 ]
 
 
@@ -224,8 +223,13 @@ def death(i, n):
     p = L.keys_at(DEATH, i / (n - 1))
     for sd in ("n", "f"):
         p["an_" + sd] = 40 * min(1, i / (n - 1) * 2)
-    p["root.dx"] = -0.55 * L.ease(min(1.0, i / (n - 1) * 1.3))
-    return finish(p, sway=0)
+    p["hips.dx"] = p.get("hips.dx", 0) - 0.62 * L.ease(min(1.0, i / (n - 1) * 1.25))
+    f = i / (n - 1)
+    p = finish(p, sway=0)
+    if f > 0.7:  # hair falls onto the floor in front of the head instead of hanging
+        for j in ("hb", "hf"):
+            p[j] = p[j] * (1 - (f - 0.7) / 0.3) + 0 * (f - 0.7) / 0.3
+    return p
 
 
 def main():
@@ -238,7 +242,7 @@ def main():
     sh.render("attack", sum(WA), attack, fps=12, wa=WA, ground_objs=feet,
               vis_fn=lambda i, n: {"smear": i == WA[0]})
     sh.render("hurt", 3, hurt, fps=12, ground_objs=feet)
-    sh.render("death", 9, death, fps=10, ground_objs=allm)
+    sh.render("death", 9, death, fps=10, grounds=[("hips", allm)])
     sh.write_spec()
 
 

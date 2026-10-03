@@ -92,7 +92,7 @@ def a_idle():
                "sh_n": 12 + 4 * s2, "el_n": 28 + 4 * s2, "ha_n": -15,
                "sh_f": -14 + 4 * s2, "el_f": 32 + 3 * s2, "ha_f": -10},
             fn=plant(0.09), ff=plant(-0.22, 0),
-            wind=(-1.6 - 0.6 * S(TAU * t * 2), 0.5),
+            wind=(-1.0 - 0.5 * S(TAU * t * 2), 0.25),
         ))
     return out
 
@@ -124,8 +124,8 @@ def a_run():
         bob = C(2 * TAU * (t - 0.42))
         out.append({
             "a": {"hips": -14, "spine": -8, "chest": -5 + 3 * S(TAU * t), "neck": 9, "head": 9 + 2 * bob,
-                  "th_n": ln["th"], "kn_n": ln["kn"], "an_n": ln["an"],
-                  "th_f": lf["th"], "kn_f": lf["kn"], "an_f": lf["an"],
+                  "th_n": ln["th"] + 12, "kn_n": ln["kn"], "an_n": ln["an"],
+                  "th_f": lf["th"] + 12, "kn_f": lf["kn"], "an_f": lf["an"],
                   "sh_n": -48 * sw + 6, "el_n": 88 - 18 * sw, "ha_n": -15,
                   "sh_f": 48 * sw + 6, "el_f": 88 + 18 * sw, "ha_f": -15},
             "hip": (0.04, 0.0),
@@ -157,7 +157,7 @@ def measure(h, posed, specs):
     """World positions per frame used by fx (blade tips, hands, feet)."""
     rig = h.rig
     out = []
-    for (a, off), sp in zip(posed, specs):
+    for (a, off, _pts), sp in zip(posed, specs):
         scl = {}
         if "sc" in sp:
             scl["root"] = (sp["sc"][0], 1.0, sp["sc"][1])
@@ -268,12 +268,26 @@ def render_anim(h, entry):
     posed = L.solve_frames(h, specs, fps, loop, pre=opts.get("pre"), wind=opts.get("wind", (0.0, 0.0)),
                            seed_phase=opts.get("seed", 0.0))
     meas = measure(h, posed, specs)
+    if os.environ.get("HDEBUG"):
+        for i, (a, off, pts) in enumerate(posed):
+            row = []
+            for p in pts:
+                angs = []
+                for k in range(len(p) - 1):
+                    d = p[k + 1] - p[k]
+                    angs.append("%4d" % round(math.degrees(math.atan2(d.x, -d.y))))
+                row.append(" ".join(angs))
+            print("DBG %s %d | %s" % (name, i, " | ".join(row)))
     smears = []
     for i, sp in enumerate(specs):
         for k, sm in enumerate(sp.get("smear", [])):
             smears.append((i, make_smear(h, "smear_%s_%d_%d" % (name, i, k), meas, sm, i)))
-    # ponytail ember dims in the last frames of death
+    # ponytail + scarf meshes per frame (ponytail ember dims at the end of death)
     dim = opts.get("dim_from")
+    for i, (a, off, pts) in enumerate(posed):
+        for ob in L.chain_objects(h, "%s%d" % (name, i), pts, specs[i], phase=i * 0.9,
+                                  dim=dim is not None and i >= dim):
+            smears.append((i, ob))
     fx = fx_builder(h, meas, specs, smears)
     L.render_frames(h, name, posed, specs, OUT, fx_fn=fx, extra_objs=[o for _, o in smears])
     import bpy

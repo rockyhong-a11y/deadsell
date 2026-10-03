@@ -557,9 +557,9 @@ MATRON_LIMBS = {
 }
 
 
-def build_matron(q=1):
+def build_matron(q=1, cast=False):
     """Build the rigged Iron Matron.  q = mesh quality multiplier (portrait uses 3)."""
-    M = matron_materials()
+    M = matron_materials(cast)
     S = lambda n: max(6, int(n * q))  # noqa: E731
 
     def E(name, size, mat, loc, rot=(0, 0, 0), segs=16, rings=10):
@@ -580,68 +580,73 @@ def build_matron(q=1):
     J("hips", "root", (0, 0, 1.95))
     J("spine", "hips", (0, 0, 2.35))
     J("chest", "spine", (0, 0, 2.80))
-    J("neck", "chest", (0.04, 0, 3.36))
-    J("head", "neck", (0.06, 0, 3.50))
-    J("jaw", "head", (0.10, 0, 3.64))
-    J("braid", "head", (-0.25, 0, 3.70))
-    J("braid1", "braid", (-0.29, 0, 3.38))
-    J("braid2", "braid1", (-0.31, 0, 3.02))
-    J("braid3", "braid2", (-0.32, 0, 2.66))
-    J("braid4", "braid3", (-0.33, 0, 2.30))
-    for s, y in (("n", -0.58), ("f", 0.58)):
-        J("pa_" + s, "chest", (0, y, 3.18))
-        J("sh_" + s, "chest", (0, y, 3.14))
-        J("el_" + s, "sh_" + s, (0, y, 2.40))
-        J("ha_" + s, "el_" + s, (0, y, 1.74))
-    J("fl0", "ha_n", (0, -0.58, 1.62))
-    J("fl1", "fl0", (0, -0.58, 1.20))
-    J("bell", "fl1", (0, -0.58, 0.78))
+    J("neck", "chest", (0.05, 0, 3.36))
+    J("head", "neck", (0.07, 0, 3.52))
+    J("jaw", "head", (0.10, 0, 3.66))
+    BY = -0.1
+    J("braid", "head", (-0.28, BY, 3.74))
+    J("braid1", "braid", (-0.54, BY, 3.52))
+    J("braid2", "braid1", (-0.66, BY, 3.16))
+    J("braid3", "braid2", (-0.71, BY, 2.79))
+    J("braid4", "braid3", (-0.73, BY, 2.42))
+    for s_, y in (("n", -0.6), ("f", 0.6)):
+        J("pa_" + s_, "chest", (0, y, 3.2))
+        J("sh_" + s_, "chest", (0, y, 3.14))
+        J("el_" + s_, "sh_" + s_, (0, y, 2.40))
+        J("ha_" + s_, "el_" + s_, (0, y, 1.74))
+    J("fl0", "ha_n", (0, -0.6, 1.62))
+    J("fl1", "fl0", (0, -0.6, 1.20))
+    J("bell", "fl1", (0, -0.6, 0.78))
     J("collar", "chest", (-0.12, 0, 3.30))
-    J("cape", "chest", (-0.32, 0, 3.12))
-    J("cape1", "cape", (-0.40, 0, 2.40))
-    J("cape2", "cape1", (-0.46, 0, 1.64))
-    J("cape3", "cape2", (-0.50, 0, 0.88))
-    for s, y in (("n", -0.27), ("f", 0.27)):
-        J("th_" + s, "hips", (0, y, 1.86))
-        J("kn_" + s, "th_" + s, (0, y, 1.00))
-        J("an_" + s, "kn_" + s, (0, y, 0.17))
-    J("tab", "hips", (0.33, 0, 1.86))
-    J("tab1", "tab", (0.34, 0, 1.22))
-    J("skb", "hips", (-0.30, 0, 1.84))
+    J("cape", "chest", (-0.30, 0, 3.14))
+    J("cape1", "cape", (-0.40, 0, 2.42))
+    J("cape2", "cape1", (-0.50, 0, 1.68))
+    J("cape3", "cape2", (-0.58, 0, 0.94))
+    for s_, y in (("n", -0.28), ("f", 0.28)):
+        J("th_" + s_, "hips", (0, y, 1.86))
+        J("kn_" + s_, "th_" + s_, (0, y, 1.00))
+        J("an_" + s_, "kn_" + s_, (0, y, 0.17))
+    J("tab", "hips", (0.33, 0, 1.9))
+    J("tab1", "tab", (0.35, 0, 1.24))
     A = lambda ob, j: attach_world(r, ob, j)  # noqa: E731
 
     # ---------------- legs
-    for s, y in (("n", -0.27), ("f", 0.27)):
-        A(L("thigh_" + s, 0.86, 0.25, 0.19, M.mail, (0, y, 1.86)), "th_" + s)
-        A(E("tasset_" + s, (0.36, 0.2, 0.56), M.iron, (0.13, y * 1.45, 1.52), rot=(14 if y < 0 else -14, -8, 0)), "th_" + s)
-        A(E("tasset_r_" + s, (0.37, 0.21, 0.07), M.bronze, (0.13, y * 1.45, 1.27), rot=(14 if y < 0 else -14, -8, 0)), "th_" + s)
-        A(E("kneecop_" + s, (0.32, 0.3, 0.3), M.iron, (0.1, y, 1.0)), "kn_" + s)
-        A(C("kneespk_" + s, 0.07, 0.0, 0.17, M.iron_d, (0.22, y, 1.02), rot=(0, 90, 0), segs=8), "kn_" + s)
-        A(L("greave_" + s, 0.83, 0.2, 0.145, M.iron, (0, y, 1.0)), "kn_" + s)
-        A(E("cuff_" + s, (0.3, 0.3, 0.14), M.iron_d, (0.0, y, 0.24)), "an_" + s)
-        A(E("sabaton_" + s, (0.58, 0.3, 0.22), M.iron, (0.12, y, 0.09)), "an_" + s)
-        A(E("toe_" + s, (0.24, 0.26, 0.17), M.iron_d, (0.36, y, 0.065)), "an_" + s)
+    for s_, y in (("n", -0.28), ("f", 0.28)):
+        sg = -1 if y < 0 else 1
+        A(L("thigh_" + s_, 0.86, 0.26, 0.2, M.mail, (0, y, 1.86)), "th_" + s_)
+        A(E("tasset_" + s_, (0.34, 0.24, 0.5), M.iron, (0.15, y * 1.25, 1.42), rot=(sg * -10, -10, 0)), "th_" + s_)
+        A(E("tasset_r_" + s_, (0.35, 0.25, 0.06), M.bronze, (0.17, y * 1.25, 1.2), rot=(sg * -10, -10, 0)), "th_" + s_)
+        A(E("kneecop_" + s_, (0.34, 0.32, 0.32), M.iron, (0.1, y, 1.0)), "kn_" + s_)
+        A(C("kneespk_" + s_, 0.075, 0.0, 0.18, M.iron_d, (0.24, y, 1.03), rot=(0, 80, 0), segs=8), "kn_" + s_)
+        A(L("greave_" + s_, 0.82, 0.21, 0.15, M.iron, (0, y, 0.99)), "kn_" + s_)
+        A(E("cuff_" + s_, (0.32, 0.32, 0.14), M.iron_d, (0.0, y, 0.25)), "an_" + s_)
+        A(E("sabaton_" + s_, (0.6, 0.31, 0.22), M.iron, (0.12, y, 0.09)), "an_" + s_)
+        A(E("toe_" + s_, (0.25, 0.27, 0.17), M.iron_d, (0.37, y, 0.065)), "an_" + s_)
 
-    # ---------------- hips / skirt
-    A(E("pelvis", (0.72, 0.82, 0.52), M.leather, (-0.03, 0, 1.98)), "hips")
-    A(E("belt", (0.8, 0.9, 0.13), M.leather, (0.0, 0, 2.12)), "hips")
-    A(box("buckle", (0.07, 0.16, 0.14), M.bronze, loc=(0.4, 0, 2.12), bevel=0.02), "hips")
-    A(C("fauld", 0.5, 0.41, 0.48, M.iron, (-0.02, 0, 1.62), depth=1.12, segs=16), "hips")
-    A(C("fauld2", 0.53, 0.5, 0.06, M.bronze, (-0.02, 0, 1.6), depth=1.12, segs=16), "hips")
-    # back skirt: tattered dark red cloth behind the legs
+    # ---------------- hips / armoured skirt (open at the front so legs can stride)
+    A(E("pelvis", (0.74, 0.86, 0.5), M.leather, (-0.03, 0, 1.98)), "hips")
+    A(E("belt", (0.74, 0.86, 0.13), M.leather, (0.0, 0, 2.12)), "hips")
+    A(box("buckle", (0.07, 0.17, 0.15), M.bronze, loc=(0.38, 0, 2.12), bevel=0.02), "hips")
+    sk1 = lathe("skirt1", [(0.4, 2.08), (0.48, 1.84), (0.53, 1.62)], M.iron, segs=S(18), a0=40, a1=320, sy=1.08)
+    solidify(sk1, 0.04)
+    A(sk1, "hips")
+    sk4 = lathe("skirt4", [(0.525, 1.66), (0.545, 1.62), (0.525, 1.58)], M.bronze, segs=S(18), a0=40, a1=320, sy=1.08)
+    solidify(sk4, 0.04)
+    A(sk4, "hips")
+    # cloth skirt: dark red, tattered, open at the front
+    NCs = 22
+    hem_s = tattered(NCs, 0.3, pattern=[0.0, 0.7, 0.2, 1.0, 0.1, 0.5, 0.9, 0.15, 0.6, 0.05, 0.8, 0.3])
     rows = []
-    hem = tattered(10, 0.22, seed=3)
-    for k in range(6):
-        v = k / 5
+    for k in range(7):
+        v = k / 6
         row = []
-        for c in range(11):
-            u = c / 10 * 2 - 1
-            half = 0.46 + 0.1 * v
-            x = -0.22 - 0.2 * v - 0.12 * (1 - u * u)
-            z = 1.9 - 0.95 * v - (hem[c] if k == 5 else 0)
-            row.append((x, u * half, z))
+        for c in range(NCs + 1):
+            a = math.radians(48 + (312 - 48) * c / NCs)
+            rad = 0.46 + 0.2 * v + 0.025 * math.cos(c * math.pi * 0.5) * v
+            z = 1.78 - 0.96 * v - (hem_s[c] if k == 6 else 0)
+            row.append((rad * math.cos(a) - 0.04, rad * math.sin(a) * 1.1, z))
         rows.append(row)
-    A(grid_sheet("backskirt", rows, M.red, 0.04), "skb")
+    A(grid_sheet("skirtc", rows, M.red, 0.035), "hips")
     # front tabard (2 rigid panels)
     def panel(name, x0, z0, z1, w0, w1, jag=None, mat=M.red):
         rows = []
@@ -653,68 +658,68 @@ def build_matron(q=1):
                 u = c / n * 2 - 1
                 half = w0 + (w1 - w0) * v
                 z = z0 + (z1 - z0) * v - ((jag[c] if jag else 0) if k == 3 else 0)
-                row.append((x0 + 0.02 * v - 0.05 * u * u, u * half, z))
+                row.append((x0 + 0.03 * v - 0.06 * u * u, u * half, z))
             rows.append(row)
         return grid_sheet(name, rows, mat, 0.035)
-    A(panel("tabard0", 0.38, 2.0, 1.15, 0.2, 0.22), "tab")
-    A(panel("tabard1", 0.39, 1.26, 0.62, 0.22, 0.24, jag=[0.0, 0.16, 0.05, 0.2, 0.02, 0.14, 0.0]), "tab1")
-    A(E("tab_emb", (0.04, 0.14, 0.17), M.bronze, (0.41, 0, 1.62)), "tab")
-    # belt chain loop + hanging chain at the near hip
-    A(chain_links("chain_belt", ellipse_pts((0.0, 0, 2.02), 0.44, 0.5, tilt_x=-8, n=48), M.iron_d,
+    A(panel("tabard0", 0.4, 2.04, 1.18, 0.22, 0.25), "tab")
+    A(panel("tabard1", 0.42, 1.28, 0.6, 0.25, 0.27, jag=[0.0, 0.18, 0.05, 0.22, 0.02, 0.16, 0.0]), "tab1")
+    A(E("tab_emb", (0.05, 0.16, 0.2), M.bronze, (0.43, 0, 1.66)), "tab")
+    A(C("tab_emb2", 0.1, 0.0, 0.12, M.bronze, (0.44, 0, 1.52), rot=(0, 0, 0), segs=8, depth=0.4), "tab")
+    # belt chain + hanging loop at the near hip
+    A(chain_links("chain_belt", ellipse_pts((0.0, 0, 2.02), 0.42, 0.5, tilt_x=-8, n=48), M.iron_d,
                   R=0.045, r=0.019, step=0.11, closed=True), "hips")
-    A(chain_links("chain_hang", catenary((0.32, -0.44, 2.02), (-0.34, -0.42, 2.0), 0.48), M.iron_d,
+    A(chain_links("chain_hang", catenary((0.3, -0.5, 2.02), (-0.34, -0.48, 2.0), 0.46), M.iron_d,
                   R=0.045, r=0.019, step=0.11), "hips")
 
-    # ---------------- torso
-    A(E("waist", (0.56, 0.68, 0.6), M.leather, (0.0, 0, 2.36)), "spine")
-    A(E("waistband0", (0.6, 0.72, 0.07), M.iron_d, (0.0, 0, 2.24)), "spine")
-    A(E("waistband1", (0.6, 0.72, 0.07), M.iron_d, (0.0, 0, 2.44)), "spine")
-    A(E("breast", (0.8, 0.96, 0.8), M.iron, (-0.01, 0, 2.93)), "chest")
-    A(E("bust", (0.4, 0.8, 0.36), M.iron, (0.22, 0, 2.86)), "chest")
-    A(E("bust_rim", (0.42, 0.82, 0.06), M.bronze, (0.2, 0, 2.7), rot=(0, -6, 0)), "chest")
-    A(E("neckline", (0.56, 0.74, 0.1), M.bronze, (0.06, 0, 3.22), rot=(0, 14, 0)), "chest")
-    A(E("gorget", (0.48, 0.54, 0.28), M.iron, (0.03, 0, 3.32)), "chest")
-    A(chain_links("chain_sash", ellipse_pts((0.0, 0, 2.62), 0.47, 0.62, tilt_x=38, n=56), M.iron_d,
+    # ---------------- torso (hourglass: bust / cinched waist / hips)
+    A(E("waist", (0.5, 0.62, 0.6), M.leather, (0.0, 0, 2.36)), "spine")
+    A(E("waistband0", (0.54, 0.66, 0.07), M.iron_d, (0.0, 0, 2.24)), "spine")
+    A(E("waistband1", (0.56, 0.68, 0.07), M.iron_d, (0.0, 0, 2.44)), "spine")
+    A(E("breast", (0.76, 0.92, 0.74), M.iron, (-0.03, 0, 2.96)), "chest")
+    A(E("bust", (0.46, 0.86, 0.42), M.iron, (0.24, 0, 2.86)), "chest")
+    A(E("bust_rim", (0.44, 0.84, 0.06), M.bronze, (0.22, 0, 2.68), rot=(0, -8, 0)), "chest")
+    A(E("neckline", (0.5, 0.72, 0.1), M.bronze, (0.08, 0, 3.2), rot=(0, 16, 0)), "chest")
+    A(E("gorget", (0.46, 0.52, 0.28), M.iron, (0.04, 0, 3.33)), "chest")
+    A(chain_links("chain_sash", ellipse_pts((0.0, 0, 2.66), 0.47, 0.64, tilt_x=36, n=56), M.iron_d,
                   R=0.045, r=0.019, step=0.11, closed=True), "chest")
-    # high collar (queenly) behind the head
-    col = lathe("collar_m", [(0.34, 3.18), (0.40, 3.45), (0.50, 3.78)], M.cape_in, segs=S(14),
-                a0=100, a1=260)
+    col = lathe("collar_m", [(0.34, 3.2), (0.4, 3.42), (0.48, 3.66)], M.cape_in, segs=S(14), a0=125, a1=235)
     solidify(col, 0.05)
-    col.location = (-0.04, 0, 0)
+    col.location = (-0.02, 0, 0)
     A(col, "collar")
 
     # ---------------- head
-    A(L("neckm", 0.32, 0.14, 0.14, M.skin, (0.04, 0, 3.52)), "neck")
-    A(E("headm", (0.40, 0.36, 0.46), M.skin, (0.10, 0, 3.74)), "head")
-    A(E("nose", (0.08, 0.07, 0.11), M.skin, (0.3, 0, 3.71), rot=(0, 15, 0)), "head")
-    A(E("mouthin", (0.1, 0.17, 0.08), M.mouth, (0.25, 0, 3.6)), "head")
-    A(E("lip_u", (0.06, 0.15, 0.04), M.lips, (0.285, 0, 3.625)), "head")
-    A(E("chin", (0.26, 0.27, 0.18), M.skin, (0.19, 0, 3.575)), "jaw")
-    A(E("lip_l", (0.06, 0.14, 0.04), M.lips, (0.28, 0, 3.6)), "jaw")
-    eyes = []
-    for y in (-0.085, 0.085):
-        eyes.append(A(E("eye%d" % len(eyes), (0.05, 0.08, 0.045), M.eye, (0.285, y, 3.775)), "head"))
-    hot = []
-    for y in (-0.085, 0.085):
-        hot.append(A(E("eyeh%d" % len(hot), (0.06, 0.1, 0.06), M.eye_hot, (0.29, y, 3.775)), "head"))
-    # helm
-    A(E("helm", (0.47, 0.45, 0.36), M.iron, (0.05, 0, 3.93)), "head")
-    A(E("helm_back", (0.36, 0.44, 0.46), M.iron, (-0.07, 0, 3.76)), "head")
-    A(E("brow", (0.16, 0.36, 0.08), M.iron_d, (0.25, 0, 3.835), rot=(0, 12, 0)), "head")
-    for s, y in (("n", -0.19), ("f", 0.19)):
-        A(E("cheek_" + s, (0.24, 0.08, 0.28), M.iron, (0.12, y, 3.7), rot=(0, -10, 0)), "head")
-    ring = lathe("crownband", [(0.245, 3.84), (0.255, 3.9), (0.245, 3.96)], M.bronze, segs=S(20), sy=0.97)
+    A(L("neckm", 0.32, 0.14, 0.14, M.skin, (0.05, 0, 3.54)), "neck")
+    A(E("headm", (0.42, 0.38, 0.5), M.skin, (0.11, 0, 3.77)), "head")
+    A(E("cheekbone", (0.2, 0.3, 0.12), M.skin, (0.22, 0, 3.73)), "head")
+    A(E("nose", (0.09, 0.07, 0.12), M.skin, (0.32, 0, 3.73), rot=(0, 15, 0)), "head")
+    A(E("mouthin", (0.1, 0.18, 0.08), M.mouth, (0.27, 0, 3.62)), "head")
+    A(E("lip_u", (0.06, 0.16, 0.045), M.lips, (0.305, 0, 3.64)), "head")
+    A(E("chin", (0.27, 0.28, 0.19), M.skin, (0.2, 0, 3.59)), "jaw")
+    A(E("lip_l", (0.06, 0.15, 0.045), M.lips, (0.3, 0, 3.615)), "jaw")
+    eyes, hot = [], []
+    for y in (-0.09, 0.09):
+        eyes.append(A(E("eye%d" % len(eyes), (0.06, 0.1, 0.05), M.eye, (0.305, y, 3.795), rot=(0, 0, 0)), "head"))
+    for y in (-0.09, 0.09):
+        hot.append(A(E("eyeh%d" % len(hot), (0.08, 0.13, 0.08), M.eye_hot, (0.31, y, 3.795)), "head"))
+    # helm + crown
+    A(E("helm", (0.48, 0.46, 0.36), M.iron, (0.06, 0, 3.96)), "head")
+    A(E("helm_back", (0.4, 0.46, 0.48), M.iron, (-0.06, 0, 3.8)), "head")
+    A(E("brow", (0.15, 0.4, 0.085), M.iron_d, (0.28, 0, 3.875), rot=(0, 12, 0)), "head")
+    for s_, y in (("n", -0.2), ("f", 0.2)):
+        A(E("cheek_" + s_, (0.2, 0.07, 0.24), M.iron, (0.0, y, 3.74), rot=(0, -12, 0)), "head")
+    ring = lathe("crownband", [(0.25, 3.87), (0.265, 3.93), (0.25, 3.99)], M.bronze, segs=S(20), sy=0.97)
     solidify(ring, 0.03)
-    ring.location = (0.06, 0, 0)
+    ring.location = (0.07, 0, 0)
     A(ring, "head")
     for k in range(10):
         a = 360 * k / 10
         ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a))
         front = (1 + ca) / 2  # 1 at front, 0 at back
-        h = 0.16 + 0.2 * front ** 2
-        A(C("spike%d" % k, 0.055, 0.0, h, M.iron_d, (0.06 + 0.24 * ca, 0.23 * sa, 3.93),
+        h = 0.16 + 0.21 * front ** 2
+        A(C("spike%d" % k, 0.058, 0.0, h, M.iron_d, (0.07 + 0.245 * ca, 0.235 * sa, 3.96),
             rot=(-16 * sa, 16 * ca, 0), segs=8), "head")
-    A(E("braidroot", (0.2, 0.2, 0.22), M.hair, (-0.25, 0, 3.7)), "braid")
+    # braid (hangs outside the cape)
+    A(E("braidroot", (0.24, 0.22, 0.24), M.hair, (-0.27, BY, 3.74)), "braid")
     bj = ["braid", "braid1", "braid2", "braid3", "braid4"]
     for k, j in enumerate(bj):
         x0, z0 = r.world_rest[j].x, r.world_rest[j].z
@@ -722,95 +727,97 @@ def build_matron(q=1):
             x1, z1 = r.world_rest[bj[k + 1]].x, r.world_rest[bj[k + 1]].z
         else:
             x1, z1 = x0 - 0.01, z0 - 0.3
-        w = 0.17 - 0.018 * k
-        for t, dy in ((0.28, -0.03), (0.72, 0.03)):
-            A(E("plait_%d_%d" % (k, t * 100), (w, w, 0.24), M.hair,
-                (x0 + (x1 - x0) * t, dy, z0 + (z1 - z0) * t), rot=(0, 0, 0)), j)
+        w = 0.18 - 0.016 * k
+        ang = math.degrees(math.atan2(x1 - x0, -(z1 - z0)))
+        for t, dx in ((0.27, -0.025), (0.73, 0.025)):
+            A(E("plait_%d_%d" % (k, t * 100), (w, w, 0.25), M.hair,
+                (x0 + (x1 - x0) * t + dx, BY, z0 + (z1 - z0) * t), rot=(0, -ang + (14 if dx > 0 else -14), 0)), j)
         if k > 0:
-            A(E("bring%d" % k, (w + 0.04, w + 0.04, 0.06), M.bronze, (x0, 0, z0)), j)
-    A(C("braidtip", 0.1, 0.0, 0.2, M.hair, (-0.34, 0, 2.02), rot=(180, 0, 0), segs=8), "braid4")
-    A(E("braidweight", (0.12, 0.12, 0.12), M.iron_d, (-0.34, 0, 2.08)), "braid4")
+            A(E("bring%d" % k, (w + 0.05, w + 0.05, 0.065), M.bronze, (x0, BY, z0), rot=(0, -ang, 0)), j)
+    A(C("braidtip", 0.1, 0.0, 0.22, M.hair, (-0.74, BY, 2.1), rot=(180, 0, 0), segs=8), "braid4")
+    A(E("braidweight", (0.13, 0.13, 0.13), M.iron_d, (-0.74, BY, 2.14)), "braid4")
 
     # ---------------- arms
-    for s, y in (("n", -0.58), ("f", 0.58)):
+    for s_, y in (("n", -0.6), ("f", 0.6)):
         sg = -1 if y < 0 else 1
-        A(E("paul_" + s, (0.76, 0.62, 0.54), M.iron, (0.0, y * 1.06, 3.24)), "pa_" + s)
-        A(E("paul2_" + s, (0.7, 0.58, 0.38), M.iron_d, (0.0, y * 1.1, 3.02)), "pa_" + s)
-        A(E("paulr_" + s, (0.78, 0.64, 0.07), M.bronze, (0.0, y * 1.07, 3.08)), "pa_" + s)
-        for k, (dx, h) in enumerate(((-0.2, 0.26), (0.02, 0.36), (0.22, 0.26))):
-            A(C("pspk_%s%d" % (s, k), 0.075, 0.0, h, M.iron_d, (dx, y * 1.12, 3.4),
-                rot=(sg * -22, 10 * (dx / 0.2), 0), segs=8), "pa_" + s)
-        A(L("uarm_" + s, 0.74, 0.17, 0.15, M.mail, (0, y, 3.14)), "sh_" + s)
-        A(E("elb_" + s, (0.26, 0.26, 0.24), M.iron, (-0.04, y, 2.4)), "el_" + s)
-        A(L("farm_" + s, 0.62, 0.17, 0.14, M.iron, (0, y, 2.36)), "el_" + s)
-        A(E("vcuff_" + s, (0.36, 0.36, 0.14), M.iron_d, (0.0, y, 2.2)), "el_" + s)
-        A(E("fist_" + s, (0.3, 0.28, 0.3), M.iron_d, (0.03, y, 1.64)), "ha_" + s)
-        A(E("knuck_" + s, (0.1, 0.26, 0.2), M.bronze, (0.16, y, 1.64)), "ha_" + s)
-    # chain coiled around the near forearm (she holds the slack)
-    A(chain_links("chain_coil", helix((0, -0.58, 0), 0.2, 2.18, 1.86, 2.2, n=60), M.iron_d,
+        A(E("paul_" + s_, (0.74, 0.6, 0.52), M.iron, (-0.03, y * 1.1, 3.27)), "pa_" + s_)
+        A(E("paul2_" + s_, (0.68, 0.56, 0.36), M.iron_d, (-0.03, y * 1.14, 3.05)), "pa_" + s_)
+        A(E("paulr_" + s_, (0.76, 0.62, 0.07), M.bronze, (-0.03, y * 1.11, 3.1)), "pa_" + s_)
+        for k, (dx, h) in enumerate(((-0.22, 0.26), (0.0, 0.38), (0.2, 0.28))):
+            A(C("pspk_%s%d" % (s_, k), 0.08, 0.0, h, M.iron_d, (dx - 0.03, y * 1.16, 3.44),
+                rot=(sg * -24, 12 * (dx / 0.2), 0), segs=8), "pa_" + s_)
+        A(L("uarm_" + s_, 0.74, 0.18, 0.16, M.mail, (0, y, 3.14)), "sh_" + s_)
+        A(E("elb_" + s_, (0.28, 0.28, 0.26), M.iron, (-0.04, y, 2.4)), "el_" + s_)
+        A(L("farm_" + s_, 0.62, 0.18, 0.145, M.iron, (0, y, 2.36)), "el_" + s_)
+        A(E("vcuff_" + s_, (0.38, 0.38, 0.15), M.iron_d, (0.0, y, 2.2)), "el_" + s_)
+        A(E("fist_" + s_, (0.32, 0.3, 0.32), M.iron_d, (0.03, y, 1.64)), "ha_" + s_)
+        A(E("knuck_" + s_, (0.1, 0.28, 0.2), M.bronze, (0.17, y, 1.64)), "ha_" + s_)
+    A(chain_links("chain_coil", helix((0, -0.6, 0), 0.21, 2.16, 1.86, 2.2, n=60), M.iron_d,
                   R=0.04, r=0.017, step=0.1), "el_n")
-    # broken shackle on the far wrist
-    A(lathe("shackle", [(0.18, 1.83), (0.21, 1.87), (0.18, 1.91), (0.16, 1.87), (0.18, 1.83)], M.iron_d, segs=S(12)), "ha_f")
-    A(chain_links("chain_shackle", [(0.0, 0.58 + 0.2, 1.85), (-0.05, 0.6 + 0.24, 1.6), (-0.1, 0.62 + 0.24, 1.42)],
+    A(lathe("shackle", [(0.18, 1.83), (0.21, 1.87), (0.18, 1.91), (0.16, 1.87), (0.18, 1.83)], M.iron_d,
+            segs=S(12)), "ha_f")
+    A(chain_links("chain_shackle", [(0.0, 0.6 + 0.2, 1.85), (-0.05, 0.62 + 0.24, 1.6), (-0.1, 0.64 + 0.24, 1.42)],
                   M.iron_d, R=0.04, r=0.017, step=0.1), "ha_f")
 
-    # ---------------- flail: chain + bell
-    y = -0.58
-    A(chain_links("chain_fl0", [(0, y, 1.66), (0, y, 1.20)], M.iron_d, R=0.055, r=0.024, step=0.135,
+    # ---------------- flail: chain + bell (the iconic shape)
+    y = -0.6
+    A(chain_links("chain_fl0", [(0, y, 1.66), (0, y, 1.20)], M.iron_d, R=0.058, r=0.025, step=0.135,
                   ref=(1, 0, 0)), "fl0")
-    A(chain_links("chain_fl1", [(0, y, 1.20), (0, y, 0.80)], M.iron_d, R=0.055, r=0.024, step=0.135,
+    A(chain_links("chain_fl1", [(0, y, 1.20), (0, y, 0.80)], M.iron_d, R=0.058, r=0.025, step=0.135,
                   ref=(1, 0, 0)), "fl1")
-    H = 0.86
+    H = 0.98
     top = 0.78 - 0.12
-    prof = [(0, top - 0.44), (0.22, top - 0.5), (0.38, top - 0.68), (0.47, top - H + 0.03),
-            (0.54, top - H), (0.575, top - H + 0.05), (0.535, top - H + 0.14), (0.46, top - 0.6),
-            (0.41, top - 0.42), (0.38, top - 0.26), (0.33, top - 0.12), (0.24, top - 0.04),
-            (0.12, top - 0.005), (0, top)]
-    bellm = lathe("bellm", prof, [M.bell, M.ember_d], segs=S(20), band_mats=[1, 1, 1] + [0] * 10)
+    prof = [(0, top - 0.5), (0.24, top - 0.56), (0.42, top - 0.76), (0.53, top - H + 0.03),
+            (0.6, top - H), (0.64, top - H + 0.05), (0.6, top - H + 0.15), (0.49, top - 0.66),
+            (0.4, top - 0.46), (0.35, top - 0.28), (0.32, top - 0.14), (0.25, top - 0.05),
+            (0.13, top - 0.005), (0, top)]
+    bellm = lathe("bellm", prof, [M.bell, M.ember_d], segs=S(22), band_mats=[1, 1, 1] + [0] * 10)
     bellm.location = (0, y, 0)
     parts = [bake(bellm)]
-    for nm, rr, zz, mn in (("bell_bow", 0.52, top - H + 0.12, 0.035), ("bell_band", 0.4, top - 0.3, 0.03)):
-        tor = lathe(nm, [(rr, zz - mn), (rr + mn, zz), (rr, zz + mn), (rr - mn * 0.5, zz), (rr, zz - mn)], M.bronze, segs=S(20))
+    for nm, rr, zz, mn in (("bell_bow", 0.585, top - H + 0.13, 0.04), ("bell_band", 0.37, top - 0.36, 0.032)):
+        tor = lathe(nm, [(rr, zz - mn), (rr + mn, zz), (rr, zz + mn), (rr - mn * 0.5, zz), (rr, zz - mn)],
+                    M.bronze, segs=S(22))
         tor.location = (0, y, 0)
         parts.append(bake(tor))
     for k in range(8):
         a = 360 * k / 8 + 22.5
         ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a))
-        sp = C("bspk%d" % k, 0.065, 0.0, 0.17, M.iron_d, (0.4 * ca, y + 0.4 * sa, top - 0.5),
-               rot=(0, 90, a), segs=8)
-        parts.append(sp)
-    clap = E("clapper", (0.2, 0.2, 0.2), M.ember, (0, y, top - H + 0.04))
-    parts.append(clap)
-    loop = lathe("bell_loop", [(0.06, 0.0), (0.09, 0.03), (0.06, 0.06), (0.03, 0.03), (0.06, 0.0)], M.iron_d, segs=S(10))
-    place(loop, (0, y, top + 0.06), rot=(90, 0, 0))
+        parts.append(C("bspk%d" % k, 0.075, 0.0, 0.2, M.iron_d, (0.43 * ca, y + 0.43 * sa, top - 0.58),
+                       rot=(0, 95, a), segs=8))
+    parts.append(E("clapper", (0.22, 0.22, 0.22), M.ember, (0, y, top - H + 0.05)))
+    loop = lathe("bell_loop", [(0.06, 0.0), (0.095, 0.035), (0.06, 0.07), (0.03, 0.035), (0.06, 0.0)],
+                 M.iron_d, segs=S(10))
+    place(loop, (0, y, top + 0.05), rot=(90, 0, 0))
     parts.append(loop)
     bell = join(parts, "bell_obj")
     A(bell, "bell")
 
-    # ---------------- cape (skinned cloth)
+    # ---------------- cape (skinned cloth, pleated, tattered hem)
     sk = Skin(r, "matron_skin")
     sk.bone("cape", r.world_rest["cape1"])
     sk.bone("cape1", r.world_rest["cape2"])
     sk.bone("cape2", r.world_rest["cape3"])
     sk.bone("cape3", r.world_rest["cape3"] + Vector((-0.05, 0, -0.6)))
     sk.build()
-    hem = tattered(16, 0.42, pattern=[0.1, 0.85, 0.35, 1.0, 0.15, 0.6, 0.05, 0.9, 0.4, 0.7, 0.0, 0.95, 0.3, 0.55, 0.12, 0.8, 0.25])
+    NC = 20
+    hem = tattered(NC, 0.46, pattern=[0.1, 0.85, 0.35, 1.0, 0.15, 0.6, 0.05, 0.9, 0.4, 0.7, 0.0, 0.95,
+                                      0.3, 0.55, 0.12, 0.8, 0.25, 0.65, 0.05, 0.9, 0.2])
     rows = []
-    NR = 12
+    NR = 14
     for k in range(NR + 1):
         v = k / NR
         row = []
-        for c in range(17):
-            u = c / 16 * 2 - 1
-            half = 0.62 + 0.3 * v
-            xs = -0.12 - 0.22 * v
-            xc = -0.46 - 0.34 * v
-            x = xs + (xc - xs) * (1 - u * u)
-            z = 3.3 - 2.72 * v - hem[c] * (v ** 6)
+        for c in range(NC + 1):
+            u = c / NC * 2 - 1
+            half = 0.66 + 0.4 * v
+            xs = -0.12 - 0.3 * v
+            xc = -0.4 - 0.62 * v
+            x = xs + (xc - xs) * (1 - u * u) - 0.07 * v * (0.5 + 0.5 * math.cos(u * 3.5 * math.pi))
+            z = 3.32 - 2.78 * v - hem[c] * (v ** 8)
             row.append((x, u * half, z))
         rows.append(row)
     capeo = grid_sheet("capem", rows, [M.cape], 0.045)
-    sk.bind(capeo, chain_weights([("cape", 3.12), ("cape1", 2.40), ("cape2", 1.64), ("cape3", 0.88)]))
+    sk.bind(capeo, chain_weights([("cape", 3.14), ("cape1", 2.42), ("cape2", 1.68), ("cape3", 0.94)]))
 
     m = Model()
     m.rig, m.M, m.skin = r, M, sk

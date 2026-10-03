@@ -42,9 +42,53 @@ R2D = 180.0 / math.pi
 # ---------------------------------------------------------------------------
 # Materials
 
+_HMAT = {}
+
+
+def toon_h(name, base, shadow=None, light=None, rim=None, rim_dir=(-1.0, 0.15, 0.45),
+           shadow_at=0.32, light_at=0.80, emission=None, emission_strength=1.0,
+           rim_face=0.62, rim_dot=0.42):
+    """Like common.toon, but the rim is (facing > rim_face) AND (N.rim_dir > rim_dot):
+    a continuous back-edge line instead of speckles."""
+    if emission or not rim:
+        return toon(name, base, shadow, light, None, emission=emission,
+                    emission_strength=emission_strength, shadow_at=shadow_at, light_at=light_at)
+    if name in _HMAT:
+        return _HMAT[name]
+    m = toon(name, base, shadow, light, None, shadow_at=shadow_at, light_at=light_at)
+    nt = m.node_tree
+    em = [n for n in nt.nodes if n.type == "EMISSION"][0]
+    ramp = [n for n in nt.nodes if n.type == "VALTORGB"][0]
+    lw = nt.nodes.new("ShaderNodeLayerWeight")
+    lw.inputs[0].default_value = 0.5
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    dot = nt.nodes.new("ShaderNodeVectorMath")
+    dot.operation = "DOT_PRODUCT"
+    dot.inputs[1].default_value = Vector(rim_dir).normalized()
+    nt.links.new(geo.outputs["Normal"], dot.inputs[0])
+    t1 = nt.nodes.new("ShaderNodeMath")
+    t1.operation = "GREATER_THAN"
+    t1.inputs[1].default_value = rim_face
+    nt.links.new(lw.outputs["Facing"], t1.inputs[0])
+    t2 = nt.nodes.new("ShaderNodeMath")
+    t2.operation = "GREATER_THAN"
+    t2.inputs[1].default_value = rim_dot
+    nt.links.new(dot.outputs["Value"], t2.inputs[0])
+    mul = nt.nodes.new("ShaderNodeMath")
+    mul.operation = "MULTIPLY"
+    nt.links.new(t1.outputs[0], mul.inputs[0])
+    nt.links.new(t2.outputs[0], mul.inputs[1])
+    mix = nt.nodes.new("ShaderNodeMixRGB")
+    mix.inputs[2].default_value = common._hex(rim)
+    nt.links.new(mul.outputs[0], mix.inputs[0])
+    nt.links.new(ramp.outputs[0], mix.inputs[1])
+    nt.links.new(mix.outputs[0], em.inputs[0])
+    _HMAT[name] = m
+    return m
+
 
 def make_materials():
-    T = toon
+    T = toon_h
     M = {}
     M["skin"] = T("h_skin", "#f4d2be", "#b07583", "#fff4ec", rim=RIM)
     M["skin_f"] = T("h_skin_f", "#cc9c9a", "#7a4b68", "#e6bdb2", rim=RIM)
@@ -57,8 +101,8 @@ def make_materials():
     M["corset_d"] = T("h_corset_d", "#173d4f", "#0c1c2c", "#2a6278", rim=RIM)
     M["skirt"] = T("h_skirt", "#951d33", "#4a0d29", "#cf3646", rim=RIM)
     M["skirt_d"] = T("h_skirt_d", "#6a1429", "#360a22", "#9a2338", rim=RIM)
-    M["legs"] = T("h_legs", "#33304e", "#1a182f", "#514a78", rim=RIM)
-    M["legs_f"] = T("h_legs_f", "#211e36", "#110f22", "#36315a", rim=RIM)
+    M["legs"] = T("h_legs", "#46405f", "#221e38", "#675e8a", rim=RIM)
+    M["legs_f"] = T("h_legs_f", "#2c2843", "#151229", "#433c62", rim=RIM)
     M["boots"] = T("h_boots", "#6a3d2c", "#2f1b22", "#93573c", rim=RIM)
     M["boots_f"] = T("h_boots_f", "#4a2a21", "#22121a", "#6a3d2d", rim=RIM)
     M["sole"] = T("h_sole", "#2a1a1e", "#160c14", "#3c262a")
@@ -269,8 +313,8 @@ class Heroine:
         J("sk_f", "hips", (0, 0, 0.99))
         J("sk_b", "hips", (0, 0, 0.99))
         # ponytail: rigid tie + simulated chain
-        J("pony", "head", (-0.10, 0.0, 1.745))
-        x0, z0 = -0.20, 1.735
+        J("pony", "head", (-0.125, 0.0, 1.715))
+        x0, z0 = -0.185, 1.70
         prev = "pony"
         self.pony_joints = []
         for i, L in enumerate(PONY_LEN):
@@ -312,15 +356,14 @@ class Heroine:
         A(box("pouch_b", (0.07, 0.07, 0.08), M["leather_f"], bevel=0.015), "hips", (-0.14, -0.08, 0.02))
         A(box("flap_n", (0.09, 0.055, 0.03), M["gold"]), "hips", (0.04, -0.168, 0.05))
         # skirt panels (front shorter, back longer & flared)
-        A(skirt_panel("skirt_f", -100, 100, 0.165, 0.245, 0.25, 0.025, M["skirt"], sy=1.15), "sk_f", (0.0, 0, 0))
-        A(skirt_panel("skirt_b", 80, 280, 0.17, 0.27, 0.27, 0.025, M["skirt"], sy=1.12, flare_back=0.07), "sk_b", (0.0, 0, 0))
-        A(skirt_panel("skirt_u", 60, 300, 0.15, 0.22, 0.29, 0.02, M["skirt_d"], sy=1.1, flare_back=0.06), "sk_b", (0.0, 0, -0.005))
+        A(skirt_panel("skirt_f", -100, 100, 0.158, 0.21, 0.21, 0.022, M["skirt"], sy=1.12), "sk_f", (0.0, 0, 0))
+        A(skirt_panel("skirt_b", 80, 280, 0.165, 0.235, 0.22, 0.022, M["skirt"], sy=1.1, flare_back=0.05), "sk_b", (0.0, 0, 0))
+        A(skirt_panel("skirt_u", 60, 300, 0.148, 0.2, 0.24, 0.02, M["skirt_d"], sy=1.08, flare_back=0.04), "sk_b", (0.0, 0, -0.005))
         # collar / gorget
         A(ellipsoid("collar", (0.18, 0.23, 0.075), M["steel"]), "chest", (0.0, 0, 0.21))
         # scarf wrap around the neck + knot
-        A(ellipsoid("scarf_wrap", (0.205, 0.255, 0.085), M["scarf"]), "chest", (-0.005, 0, 0.265))
-        A(ellipsoid("scarf_wrap2", (0.17, 0.22, 0.06), M["scarf_d"]), "chest", (0.01, 0, 0.215))
-        A(ellipsoid("knot_m", (0.085, 0.09, 0.08), M["scarf"]), "knot", (0.0, 0, 0.0))
+        A(ellipsoid("scarf_wrap", (0.175, 0.235, 0.075), M["scarf"]), "chest", (-0.01, 0, 0.255))
+        A(ellipsoid("knot_m", (0.075, 0.08, 0.075), M["scarf"]), "knot", (0.0, 0, 0.0))
         # ---------------- head
         A(limb("neck_m", 0.1, 0.045, 0.048, M["skin"]), "neck", (0, 0, 0.08))
         A(ellipsoid("head_m", (0.235, 0.215, 0.265), M["skin"]), "head", (0.02, 0, 0.115))
@@ -328,36 +371,16 @@ class Heroine:
         A(ellipsoid("nose", (0.04, 0.03, 0.045), M["skin"]), "head", (0.14, 0, 0.095))
         A(ellipsoid("eye_n", (0.045, 0.04, 0.05), M["eye"]), "head", (0.11, -0.072, 0.115))
         A(ellipsoid("eye_f", (0.045, 0.04, 0.05), M["eye"]), "head", (0.11, 0.072, 0.115))
-        A(ellipsoid("hair_cap", (0.285, 0.265, 0.235), M["hair"]), "head", (-0.025, 0, 0.18))
-        A(ellipsoid("hair_back", (0.2, 0.25, 0.25), M["hair_d"]), "head", (-0.085, 0, 0.08))
-        A(ellipsoid("bangs", (0.15, 0.25, 0.11), M["hair"]), "head", (0.085, 0, 0.205), (0, 22, 0))
-        A(ellipsoid("fringe", (0.07, 0.05, 0.13), M["hair"]), "head", (0.115, -0.07, 0.165), (0, 18, 0))
-        A(ellipsoid("lock_n", (0.065, 0.05, 0.21), M["hair"]), "head", (0.045, -0.105, 0.05), (0, -8, 0))
-        A(ellipsoid("lock_f", (0.065, 0.05, 0.2), M["hair_d"]), "head", (0.045, 0.105, 0.05), (0, -8, 0))
+        A(ellipsoid("hair_cap", (0.27, 0.255, 0.215), M["hair"]), "head", (-0.04, 0, 0.18))
+        A(ellipsoid("hair_back", (0.19, 0.24, 0.25), M["hair_d"]), "head", (-0.095, 0, 0.075))
+        A(ellipsoid("bangs", (0.14, 0.235, 0.085), M["hair"]), "head", (0.06, 0, 0.222), (0, 28, 0))
+        A(ellipsoid("fringe", (0.05, 0.05, 0.1), M["hair"]), "head", (0.115, -0.06, 0.2), (0, 35, 0))
+        A(ellipsoid("lock_n", (0.055, 0.045, 0.19), M["hair"]), "head", (0.015, -0.1, 0.045), (0, -6, 0))
+        A(ellipsoid("lock_f", (0.055, 0.045, 0.18), M["hair_d"]), "head", (0.015, 0.1, 0.045), (0, -6, 0))
         # ponytail tie + tuft (rigid, on the pony joint)
-        A(torus("tie", 0.045, 0.022, M["scarf"], rot=(0, 70, 0)), "pony", (-0.01, 0, 0))
-        A(ellipsoid("tuft", (0.15, 0.13, 0.12), M["hair"]), "pony", (-0.06, 0, 0.005), (0, -15, 0))
-        # ponytail chain (thick -> thin, last two segments glow)
-        radii = [0.072, 0.07, 0.064, 0.056, 0.046, 0.036]
-        for i, nm in enumerate(self.pony_joints):
-            L = PONY_LEN[i]
-            mat = M["hair"] if i < 4 else (M["glow1"] if i == 4 else M["glow2"])
-            r0 = radii[i]
-            r1 = radii[i + 1] if i + 1 < len(radii) else 0.024
-            ob = A(limb("ptm%d" % i, L, r0, r1, mat, depth_scale=0.8), nm)
-            if i >= 4:
-                self.glow_objs.append(ob)
-        tip = A(ellipsoid("pt_tip", (0.06, 0.05, 0.075), M["glow2"]), self.pony_joints[-1], (0, 0, -PONY_LEN[-1] - 0.01))
-        self.glow_objs.append(tip)
-        # scarf tails: flat ribbons, wide in the screen plane
-        for lst, lens, w0, mat in ((self.scarf_a, SCARF_A_LEN, 0.062, M["scarf"]), (self.scarf_b, SCARF_B_LEN, 0.052, M["scarf_d"])):
-            n = len(lst)
-            for i, nm in enumerate(lst):
-                w = w0 * (1.0 - 0.15 * i / n)
-                w1 = w0 * (1.0 - 0.15 * (i + 1) / n)
-                if i == n - 1:
-                    w1 = w * 0.75
-                A(limb("%sm" % nm, lens[i], w, w1, mat, depth_scale=0.32), nm)
+        A(torus("tie", 0.042, 0.02, M["scarf"], rot=(0, 60, 0)), "pony", (-0.005, 0, 0))
+        A(ellipsoid("tuft", (0.11, 0.12, 0.1), M["hair"]), "pony", (-0.045, 0, 0.0), (0, -25, 0))
+        # ponytail + scarf tails are generated per frame from the chain simulation
         # ---------------- arms
         for s in ("n", "f"):
             far = s == "f"
@@ -378,7 +401,7 @@ class Heroine:
             bt = M["boots_f"] if far else M["boots"]
             st = M["steel_f"] if far else M["steel"]
             le = M["leather_f"] if far else M["leather"]
-            A(limb("thigh_" + s, 0.40, 0.092, 0.062, lg), "th_" + s)
+            A(limb("thigh_" + s, 0.40, 0.088, 0.06, lg), "th_" + s)
             A(ellipsoid("kneeg_" + s, (0.085, 0.1, 0.1), st), "kn_" + s, (0.045, 0, 0.0))
             A(limb("shin_" + s, 0.41, 0.058, 0.046, lg), "kn_" + s)
             A(limb("boot_" + s, 0.29, 0.064, 0.053, bt), "kn_" + s, (0, 0, -0.12))
@@ -488,7 +511,7 @@ class Heroine:
         boss = ellipsoid("sh_boss", (0.13, 0.13, 0.08), M["steel"], loc=(0, 0, 0.03))
         sh = join([disc, rim, boss] + planks, "shield_m")
         # disc normal (+Z) -> forward and toward camera, centred on the forearm
-        self._add_prop("shield", [sh], "el_n", (0.03, -0.09, -0.13), (0, 90, -42))
+        self._add_prop("shield", [sh], "el_n", (-0.05, -0.08, -0.13), (0, -90, 42))
         # ---- flask (heal)
         fb = ellipsoid("fl_body", (0.1, 0.1, 0.115), M["flask"])
         fn = limb("fl_neck", 0.08, 0.025, 0.03, M["glass"])
@@ -612,7 +635,7 @@ def lowest_sole(rig):
 
 class Chain:
     def __init__(self, joints, lengths, parent, g=16.0, drag=4.0, damp=0.985, stiff=None, curl=None,
-                 base=0.0, base_stiff=0.0, flutter=0.0, flutter_k=1.0, wind_gain=1.0):
+                 base=0.0, base_stiff=0.0, flutter=0.0, flutter_k=1.0, wind_gain=1.0, friction=0.25):
         self.joints = joints
         self.L = lengths
         self.parent = parent
@@ -627,6 +650,7 @@ class Chain:
         self.flutter = flutter
         self.flutter_k = flutter_k
         self.wind_gain = wind_gain
+        self.friction = friction
 
     def init_points(self, anchor, ref):
         pts = [Vector(anchor)]
@@ -639,13 +663,19 @@ class Chain:
 
     def step(self, anchor, ref, air, dt, colliders, floor=0.03):
         p, pp = self.p, self.pp
-        p[0] = Vector(anchor)
-        pp[0] = Vector(anchor)
+        a_new = Vector(anchor)
+        vprev = a_new - p[0]
+        p[0] = a_new
+        pp[0] = a_new
         g = Vector((0, -self.g))
+        c = 1.0 - (1.0 - self.friction) ** (dt * 60.0)
         for k in range(1, len(p)):
-            v = (p[k] - pp[k]) / dt
+            vk = p[k] - pp[k]
+            vk = vk * (1.0 - c) + vprev * c        # internal friction: follow the parent
+            vprev = vk
+            v = vk / dt
             acc = g + (Vector(air) * self.wind_gain - v) * self.drag
-            nxt = p[k] + (p[k] - pp[k]) * self.damp + acc * dt * dt
+            nxt = p[k] + vk * self.damp + acc * dt * dt
             pp[k] = p[k]
             p[k] = nxt
         # shape (bending) springs
@@ -660,24 +690,35 @@ class Chain:
                 want = prev_a + self.curl[k]
                 s = self.stiff[k]
             if s > 0:
+                s = 1.0 - (1.0 - s) ** (dt * 60.0)
                 diff = angnorm(want - cur)
                 cur = cur + diff * s
                 tgt = p[k] + Vector((math.sin(cur * D2R), -math.cos(cur * D2R))) * d.length
                 p[k + 1] = tgt
             prev_a = cur
-        # length constraints
-        for _ in range(3):
+        # length constraints (symmetric PBD; the anchor is pinned)
+        for _ in range(6):
             for k in range(len(self.L)):
                 d = p[k + 1] - p[k]
                 ln = d.length or 1e-6
-                p[k + 1] = p[k] + d * (self.L[k] / ln)
-            for k in range(1, len(p)):
-                for (c, r) in colliders:
-                    d = p[k] - c
-                    if d.length < r:
-                        p[k] = c + (d.normalized() if d.length > 1e-6 else Vector((-1, 0))) * r
-                if p[k].y < floor:
-                    p[k].y = floor
+                corr = d * ((ln - self.L[k]) / ln)
+                if k == 0:
+                    p[1] = p[1] - corr
+                else:
+                    p[k] = p[k] + corr * 0.5
+                    p[k + 1] = p[k + 1] - corr * 0.5
+        for k in range(1, len(p)):
+            for (c, r) in colliders:
+                d = p[k] - c
+                if d.length < r:
+                    p[k] = c + (d.normalized() if d.length > 1e-6 else Vector((-1, 0))) * r
+            if p[k].y < floor:
+                p[k].y = floor
+        # final exact lengths (root -> tip) so the meshes never stretch
+        for k in range(len(self.L)):
+            d = p[k + 1] - p[k]
+            ln = d.length or 1e-6
+            p[k + 1] = p[k] + d * (self.L[k] / ln)
 
     def angles(self, ref):
         out = []
@@ -691,15 +732,15 @@ class Chain:
 
 
 def make_chains(h):
-    pony = Chain(h.pony_joints, PONY_LEN, "pony", g=15.0, drag=3.6, damp=0.985,
-                 stiff=[0.0, 0.10, 0.07, 0.05, 0.04, 0.03], curl=[0, 10, 9, 8, 7, 6],
-                 base=-62.0, base_stiff=0.22, flutter=5.0, flutter_k=1.0)
-    sa = Chain(h.scarf_a, SCARF_A_LEN, "knot", g=13.0, drag=6.0, damp=0.98,
-               stiff=[0, 0.05, 0.04, 0.03, 0.03, 0.02, 0.02], curl=[0, -6, -5, -4, -4, -3, -3],
-               base=-30.0, base_stiff=0.10, flutter=9.0, flutter_k=1.15, wind_gain=1.0)
-    sb = Chain(h.scarf_b, SCARF_B_LEN, "knot", g=14.0, drag=5.0, damp=0.98,
-               stiff=[0, 0.05, 0.04, 0.03, 0.03], curl=[0, -4, -4, -3, -3],
-               base=-12.0, base_stiff=0.12, flutter=7.0, flutter_k=1.3, wind_gain=0.9)
+    pony = Chain(h.pony_joints, PONY_LEN, "pony", g=12.0, drag=6.0, damp=0.99,
+                 stiff=[0.0, 0.05, 0.04, 0.03, 0.03, 0.02], curl=[0, 6, 5, 4, 3, 2],
+                 base=-40.0, base_stiff=0.3, flutter=5.0, flutter_k=1.0, friction=0.3)
+    sa = Chain(h.scarf_a, SCARF_A_LEN, "knot", g=9.0, drag=8.0, damp=0.99,
+               stiff=[0, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02], curl=[0, 2, 2, 1, 1, 0, 0],
+               base=-25.0, base_stiff=0.2, flutter=10.0, flutter_k=1.1, wind_gain=1.0, friction=0.3)
+    sb = Chain(h.scarf_b, SCARF_B_LEN, "knot", g=10.0, drag=7.0, damp=0.99,
+               stiff=[0, 0.02, 0.02, 0.02, 0.02], curl=[0, 2, 2, 1, 1],
+               base=-12.0, base_stiff=0.2, flutter=8.0, flutter_k=1.3, wind_gain=0.9, friction=0.3)
     return [pony, sa, sb]
 
 
@@ -824,7 +865,9 @@ def solve_frames(h, specs, fps, loop, pre=None, wind=(0.0, 0.0), seed_phase=0.0)
         for (j, lo, r) in COLLIDERS:
             p = wpos(rig, j, lo)
             cols.append((Vector((p.x, p.z)), r))
-        meas["cols"] = cols
+        meas["cols"] = cols if not os.environ.get("HNOCOL") else []
+        if os.environ.get("HDEBUG"):
+            print("ANC", ["%s %.3f %.3f %.1f" % (k, v[0].x, v[0].y, v[1]) for k, v in meas.items() if k != "cols"])
         base.append((a, off, meas))
     n = len(specs)
     dt_frame = 1.0 / fps
@@ -889,7 +932,16 @@ def solve_frames(h, specs, fps, loop, pre=None, wind=(0.0, 0.0), seed_phase=0.0)
         f, b = skirt_angles(a, tuple(vels[i]))
         a["sk_f"] = a.get("sk_f", 0.0) + f
         a["sk_b"] = a.get("sk_b", 0.0) + b
-        out.append((a, off))
+        # flutter-adjusted chain points (forward kinematics of the final angles)
+        pts = []
+        for ci, ch in enumerate(chains):
+            p = [samples[i][ci][0].copy()]
+            ang = meas[ch.joints[0]][1]
+            for k, nm in enumerate(ch.joints):
+                ang += a[nm]
+                p.append(p[-1] + Vector((math.sin(ang * D2R), -math.cos(ang * D2R))) * ch.L[k])
+            pts.append(p)
+        out.append((a, off, pts))
     return out
 
 
@@ -944,7 +996,8 @@ def render_frames(h, name, posed, specs, out_dir, fx_fn=None, extra_objs=()):
         _clear_anim(ob)
     fx_set = set(id(o) for o in h.fx.values())
     n = len(posed)
-    for i, (a, off) in enumerate(posed):
+    for i, pz in enumerate(posed):
+        a, off = pz[0], pz[1]
         sp = specs[i]
         f = i + 1
         scl = {}
@@ -1001,3 +1054,110 @@ def smear_mesh(name, outer, inner, mat):
     for k in range(len(outer) - 1):
         bm.faces.new((vo[k], vo[k + 1], vi[k + 1], vi[k]))
     return _obj_from_bm(name, bm, mat)
+
+
+# ---------------------------------------------------------------------------
+# Per-frame ponytail / scarf geometry (smooth tubes through the simulated chain)
+
+
+def catmull(pts, sub=4):
+    P = [Vector(p) for p in pts]
+    if len(P) < 3:
+        return P
+    ext = [P[0] * 2 - P[1]] + P + [P[-1] * 2 - P[-2]]
+    out = []
+    for i in range(1, len(ext) - 2):
+        p0, p1, p2, p3 = ext[i - 1], ext[i], ext[i + 1], ext[i + 2]
+        for k in range(sub):
+            t = k / sub
+            t2, t3 = t * t, t * t * t
+            out.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+                              (-p0 + 3 * p1 - 3 * p2 + p3) * t3))
+    out.append(P[-1])
+    return out
+
+
+def strand(name, pts3, radius_fn, mats, mat_fn, flat=1.0, sides=8, tipcap=True):
+    """Tube along pts3 (list of Vector3). radius_fn(u)->r, mat_fn(u)->material index."""
+    bm = bmesh.new()
+    n = len(pts3)
+    # arc length param
+    acc = [0.0]
+    for i in range(1, n):
+        acc.append(acc[-1] + (pts3[i] - pts3[i - 1]).length)
+    tot = acc[-1] or 1.0
+    rings = []
+    for i, p in enumerate(pts3):
+        if i == 0:
+            d = pts3[1] - pts3[0]
+        elif i == n - 1:
+            d = pts3[-1] - pts3[-2]
+        else:
+            d = pts3[i + 1] - pts3[i - 1]
+        d = d.normalized() if d.length > 1e-6 else Vector((0, 0, -1))
+        side = d.cross(Vector((0, 1, 0)))
+        if side.length < 1e-5:
+            side = Vector((1, 0, 0))
+        side.normalize()
+        up2 = side.cross(d).normalized()
+        r = radius_fn(acc[i] / tot)
+        ring = [bm.verts.new(p + side * math.cos(2 * math.pi * k / sides) * r +
+                             up2 * math.sin(2 * math.pi * k / sides) * r * flat) for k in range(sides)]
+        rings.append(ring)
+    for i in range(n - 1):
+        mi = mat_fn((acc[i] + acc[i + 1]) * 0.5 / tot)
+        for k in range(sides):
+            k2 = (k + 1) % sides
+            f = bm.faces.new((rings[i][k], rings[i][k2], rings[i + 1][k2], rings[i + 1][k]))
+            f.material_index = mi
+            f.smooth = True
+    f0 = bm.faces.new(list(reversed(rings[0])))
+    f0.material_index = mat_fn(0.0)
+    f1 = bm.faces.new(rings[-1])
+    f1.material_index = mat_fn(1.0)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(ob)
+    for m in mats:
+        ob.data.materials.append(m)
+    return ob
+
+
+def pony_radius(u):
+    # brush-like: full near the root, bulge, taper to an ember point
+    if u < 0.35:
+        return 0.05 + 0.014 * (u / 0.35)
+    if u < 0.75:
+        return 0.064 - 0.022 * ((u - 0.35) / 0.4)
+    return max(0.012, 0.042 * (1 - (u - 0.75) / 0.25) ** 0.8)
+
+
+def chain_objects(h, tag, pts, spec, phase=0.0, dim=False):
+    """Build the ponytail + scarf meshes for one frame. pts: per-chain list of Vector2."""
+    M = h.M
+    sx, sz = spec.get("sc", (1.0, 1.0))
+    objs = []
+    ys = [0.0, 0.07, 0.11]
+    for ci, p2 in enumerate(pts):
+        y = ys[ci]
+        sm = catmull(p2, 4)
+        p3 = [Vector((q.x * sx, y, q.y * sz)) for q in sm]
+        if ci == 0:
+            g1, g2 = (M["glow_dim"], M["glow_dim"]) if dim else (M["glow1"], M["glow2"])
+            ob = strand("pony_%s" % tag, p3, pony_radius, [M["hair"], g1, g2],
+                        lambda u: 0 if u < 0.68 else (1 if u < 0.84 else 2), flat=0.8, sides=8)
+        else:
+            w0 = 0.05 if ci == 1 else 0.044
+            ph = phase + ci * 1.7
+
+            def rfn(u, w0=w0, ph=ph):
+                tw = 0.5 + 0.5 * abs(math.cos(math.pi * (2.2 * u) + ph))
+                end = 1.0 if u < 0.9 else max(0.35, 1 - (u - 0.9) * 6)
+                return w0 * (0.95 - 0.2 * u) * (0.45 + 0.55 * tw) * end
+            mat = M["scarf"] if ci == 1 else M["scarf_d"]
+            ob = strand("scarf%d_%s" % (ci, tag), p3, rfn, [mat], lambda u: 0, flat=0.32, sides=8)
+        objs.append(ob)
+    return objs

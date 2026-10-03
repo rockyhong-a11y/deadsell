@@ -146,11 +146,12 @@ export class Game {
     this.time += dt;
     if (this.fade !== this.fadeTarget) {
       this.fade = this.fadeTarget > this.fade ? Math.min(1, this.fade + dt * this.fadeSpeed) : Math.max(0, this.fade - dt * this.fadeSpeed);
-      if (this.fade >= 1 && this.pendingScene) {
-        const make = this.pendingScene;
-        this.pendingScene = null;
-        this.swapScene(make());
-      }
+    }
+    // also when the screen is already black (a goto right after a scene swap): never leave a scene pending
+    if (this.fade >= 1 && this.pendingScene) {
+      const make = this.pendingScene;
+      this.pendingScene = null;
+      this.swapScene(make());
     }
     this.scene?.update(dt);
     this.input.endStep(dt);

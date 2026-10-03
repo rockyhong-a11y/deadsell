@@ -386,6 +386,18 @@ export class LevelRenderer {
     }
   }
 
+  /** true once the biome's tile atlas is in use (false = flat-colour placeholder terrain); for tests */
+  get tileArt(): boolean {
+    this.bind();
+    return this.atlas !== null;
+  }
+
+  /** number of parallax layers with a loaded image; for tests */
+  get parallaxLayers(): number {
+    const def = this.world.assets.json.get(`bg/${this.biome}.json`) as BgDef | undefined;
+    return def ? def.layers.filter((l) => l.img && l.img.width).length : 0;
+  }
+
   private flat() {
     return FLAT[this.biome] ?? FLAT.prison;
   }

@@ -784,8 +784,13 @@ def build_biome(biome, quiet=False):
         return [A.add(arr[j * TILE:(j + 1) * TILE, i * TILE:(i + 1) * TILE].copy())
                 for j in range(h) for i in range(w)]
     atlas["fill"] = cells(fill, fw, fh)
-    atlas["fillMid"] = cells(lerp_rgb(fill, tint, 0.40), fw, fh)
-    atlas["fillDeep"] = cells(lerp_rgb(fill, tint, 0.74), fw, fh)
+    # depth tiers: ordered-dither blend towards the deep tint so the steps read as pixel-art gradient
+    bayer = np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]], np.float32) / 16.0
+    bm = np.tile(bayer, (fill.shape[0] // 4 + 1, fill.shape[1] // 4 + 1))[:fill.shape[0], :fill.shape[1]]
+    mid = np.where((bm < 0.5)[..., None], lerp_rgb(fill, tint, 0.55), lerp_rgb(fill, tint, 0.25))
+    mid[..., 3] = fill[..., 3]
+    atlas["fillMid"] = cells(mid, fw, fh)
+    atlas["fillDeep"] = cells(lerp_rgb(fill, tint, 0.72), fw, fh)
 
     # ---------------- back wall macro
     gb = load_gbuf(os.path.join(ENV, "tiles", biome, "back"))

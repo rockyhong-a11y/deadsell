@@ -1,0 +1,56 @@
+{
+ "image": "lancer.png",
+ "frameW": 128,
+ "frameH": 112,
+ "anchor": [
+  64,
+  100
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 8,
+   "fps": 8,
+   "loop": true
+  },
+  "walk": {
+   "row": 1,
+   "frames": 10,
+   "fps": 10,
+   "loop": true
+  },
+  "charge_windup": {
+   "row": 2,
+   "frames": 6,
+   "fps": 10,
+   "loop": false
+  },
+  "charge": {
+   "row": 3,
+   "frames": 6,
+   "fps": 14,
+   "loop": true
+  },
+  "thrust": {
+   "row": 4,
+   "frames": 9,
+   "fps": 14,
+   "loop": false,
+   "windup": 4,
+   "active": 2,
+   "recover": 3
+  },
+  "hurt": {
+   "row": 5,
+   "frames": 3,
+   "fps": 12,
+   "loop": false
+  },
+  "death": {
+   "row": 6,
+   "frames": 9,
+   "fps": 10,
+   "loop": false
+  }
+ }
+}

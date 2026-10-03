@@ -524,12 +524,13 @@ class Sheet:
         return ob
 
     def render(self, name, frames, pose_fn, fps=12, loop=False, wa=None, vis_fn=None, ground_objs=None,
-               ground_fn=None, extra_fn=None, grounds=None):
+               ground_fn=None, extra_fn=None, grounds=None, lift_fn=None):
         """pose_fn(i, n) -> flat pose dict.  vis_fn(i, n) -> {object name: visible}.
         ground_objs: meshes whose lowest vertex is kept on z=0 each frame.
         ground_fn(i, n) -> list of meshes (overrides ground_objs per frame) or None (no grounding).
         grounds: [(joint, meshes), ...] -- each group is grounded by shifting that joint (in its
         parent's space; parent must be unrotated), applied after ground_objs.
+        lift_fn(i, n) -> z offset added to the root AFTER grounding (flyers bobbing around the anchor).
         wa: (windup, active, recover) for attack animations."""
         for ob, _ in self.props.values():
             ob.animation_data_clear()
@@ -541,6 +542,12 @@ class Sheet:
                 pose = ground(self.rig, pose, objs)
             for j, gobjs in (grounds or []):
                 pose = ground(self.rig, pose, gobjs, joint=j)
+            if lift_fn:
+                ang, off, sc = pose
+                off = dict(off)
+                rx, ry, rz = off.get("root", (0.0, 0.0, 0.0))
+                off["root"] = (rx, ry, rz + lift_fn(i, n))
+                pose = (ang, off, sc)
             return pose
 
         def ef(i, n, frame):

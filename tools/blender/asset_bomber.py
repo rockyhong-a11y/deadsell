@@ -49,7 +49,7 @@ def build():
     J("hairb", "head", (-0.12 * S, 0, 1.62 * S))
     J("skirt", "hips", (0, 0, 0.93 * S))
     J("apron", "chest", (0.12 * S, 0, 1.2 * S))
-    J("bomb", "ha_n", (0.0, -0.12 * S, 0.84 * S))
+    J("bomb", "ha_n", (0.0, -0.12 * S, 0.9 * S))
 
     o = L.body(r, {"skin": M["skin"], "chest": M["dress"], "waist": M["dress"], "pelvis": M["dark"],
                    "ua": M["dress"], "fa": M["skin"], "hand": M["leather"], "thigh": M["dark"],
@@ -71,49 +71,56 @@ def build():
                    0.025 * S, M["leather"], segs=6)
     A(strap, "chest")
     for k, (x, z) in enumerate(((0.03, 0.06), (0.11, -0.02), (0.14, -0.13))):
-        A(ellipsoid("band_bomb%d" % k, (0.1 * S, 0.1 * S, 0.1 * S), M["bomb"]), "chest", (x * S, -0.17 * S, z * S))
-        A(ellipsoid("band_cap%d" % k, (0.04 * S, 0.04 * S, 0.035 * S), M["cap"]), "chest",
-          (x * S, -0.17 * S, (z + 0.055) * S))
+        A(ellipsoid("band_bomb%d" % k, (0.125 * S, 0.125 * S, 0.125 * S), M["bomb"]), "chest", (x * S, -0.17 * S, z * S))
+        A(ellipsoid("band_cap%d" % k, (0.05 * S, 0.05 * S, 0.04 * S), M["cap"]), "chest",
+          (x * S, -0.17 * S, (z + 0.07) * S))
     # satchel on the back hip
     A(box("satchel", (0.16 * S, 0.1 * S, 0.17 * S), M["leather"], bevel=0.02), "hips", (-0.17 * S, 0.1 * S, -0.06 * S))
     A(box("satchel_flap", (0.17 * S, 0.11 * S, 0.06 * S), M["stain"], bevel=0.01), "hips",
       (-0.17 * S, 0.1 * S, 0.02 * S))
     # wild spiky hair
     A(ellipsoid("hair_cap", (0.27 * S, 0.26 * S, 0.22 * S), M["hair"]), "head", (-0.03 * S, 0, 0.165 * S))
-    A(ellipsoid("bangs", (0.1 * S, 0.22 * S, 0.08 * S), M["hair"]), "head", (0.08 * S, 0, 0.215 * S))
+    A(ellipsoid("bangs", (0.1 * S, 0.22 * S, 0.07 * S), M["hair"]), "head", (0.075 * S, 0, 0.19 * S))
     rnd = random.Random(11)
-    spikes = [(-160, 0.24), (-130, 0.27), (-100, 0.22), (-70, 0.2), (-40, 0.17), (150, 0.2), (170, 0.22),
-              (-145, 0.2), (-115, 0.25), (-85, 0.19)]
+    # spikes radiate from the crown: angle measured from +X in the XZ plane (90 = up, 180 = back)
+    spikes = [(95, 0.27), (118, 0.32), (140, 0.34), (162, 0.32), (184, 0.28), (206, 0.24), (74, 0.2),
+              (130, 0.3), (152, 0.3), (172, 0.27)]
     for k, (ang, ln) in enumerate(spikes):
-        a = math.radians(ang)
-        y = (rnd.random() - 0.5) * 0.2
-        base = (-0.03 + 0.08 * math.cos(a), y, 0.16 + 0.07 * math.sin(a))
-        # angle measured in the XZ plane; ang=-90 points back, 180 points down-back
-        d = (math.cos(math.radians(ang + 180)), 0, math.sin(math.radians(ang + 180)))
-        tipp = (base[0] + d[0] * ln, y * 1.3, base[2] + d[2] * ln)
-        A(L.tube("spike%d" % k, [(base[0] * S, base[1] * S, base[2] * S), (tipp[0] * S, tipp[1] * S, tipp[2] * S)],
-                 [0.06 * S, 0.004], M["hair"], segs=6), "head")
-    for k, (ang, ln) in enumerate(((-150, 0.26), (-120, 0.22), (-170, 0.2))):
-        d = (math.cos(math.radians(ang + 180)), 0, math.sin(math.radians(ang + 180)))
-        A(L.tube("hb%d" % k, [(0, (k - 1) * 0.06 * S, 0), (d[0] * ln * S, (k - 1) * 0.08 * S, d[2] * ln * S)],
-                 [0.055 * S, 0.004], M["hair"], segs=6), "hairb")
+        a_ = math.radians(ang)
+        y = (rnd.random() - 0.5) * 0.24
+        d = (math.cos(a_), math.sin(a_))
+        base = (-0.03 + 0.07 * d[0], y, 0.165 + 0.08 * d[1])
+        mid = (base[0] + d[0] * ln * 0.5 + 0.0, y * 1.2, base[2] + d[1] * ln * 0.5 + 0.02)
+        tipp = (base[0] + d[0] * ln, y * 1.4, base[2] + d[1] * ln - 0.02)
+        A(L.tube("spike%d" % k, [tuple(c * S for c in base), tuple(c * S for c in mid), tuple(c * S for c in tipp)],
+                 [0.075 * S, 0.05 * S, 0.004], M["hair"], segs=6), "head")
+    # loose tufts hanging down the back of the head (swing with the body)
+    for k, (dx, dz, ln) in enumerate(((-0.1, -0.26, 0.3), (-0.2, -0.2, 0.28), (-0.04, -0.32, 0.26))):
+        yy = (k - 1) * 0.09
+        A(L.tube("hb%d" % k, [(0, yy * S, 0), (dx * 0.5 * S, yy * S, dz * 0.5 * S), (dx * S, (yy * 1.3) * S, dz * S)],
+                 [0.07 * S, 0.055 * S, 0.004], M["hair"], segs=6), "hairb")
     # goggles pushed up on the forehead
-    A(ellipsoid("gog_band", (0.275 * S, 0.27 * S, 0.05 * S), M["leather"]), "head", (-0.02 * S, 0, 0.2 * S))
+    A(ellipsoid("gog_band", (0.275 * S, 0.27 * S, 0.05 * S), M["leather"]), "head", (-0.02 * S, 0, 0.235 * S))
     for y in (-0.06, 0.06):
-        A(L.disc("gog_rim", 0.05 * S, 0.06 * S, M["brass"], rot=(0, 70, 0)), "head", (0.095 * S, y * S, 0.225 * S))
-        A(L.disc("gog_lens", 0.036 * S, 0.065 * S, M["lens"], rot=(0, 70, 0)), "head", (0.1 * S, y * S, 0.227 * S))
+        A(L.disc("gog_rim", 0.075 * S, 0.06 * S, M["brass"], rot=(0, 70, 0)), "head", (0.115 * S, y * S, 0.255 * S))
+        A(L.disc("gog_lens", 0.056 * S, 0.065 * S, M["lens"], rot=(0, 70, 0)), "head", (0.126 * S, y * S, 0.257 * S))
     L.eyes(r, M["eye"], s=S, x=0.108, z=0.115, h=0.05, wdt=0.03, span=0.12)
-    # bomb in hand with a lit fuse
-    bomb = [ellipsoid("bomb_m", (0.17 * S, 0.17 * S, 0.17 * S), M["bomb"]),
-            ellipsoid("bomb_hl", (0.05 * S, 0.05 * S, 0.04 * S), M["lens"], loc=(0.03 * S, -0.06 * S, 0.05 * S)),
-            L.limb("bomb_cap", 0.03 * S, 0.035 * S, 0.035 * S, M["cap"]),
-            L.tube("fuse", [(0, 0, 0.1 * S), (0.02 * S, 0, 0.14 * S), (0.0, 0, 0.17 * S)], 0.01 * S, M["leather"]),
-            ellipsoid("spark", (0.07 * S, 0.07 * S, 0.07 * S), M["spark"], loc=(0, 0, 0.18 * S)),
-            ellipsoid("spark2", (0.11 * S, 0.04 * S, 0.035 * S), M["spark2"], loc=(0, 0, 0.18 * S), rot=(0, 45, 0)),
-            ellipsoid("spark3", (0.11 * S, 0.04 * S, 0.035 * S), M["spark2"], loc=(0, 0, 0.18 * S), rot=(0, -45, 0))]
-    bomb[2].location = (0, 0, 0.1 * S)
+    # bomb in hand with a lit fuse (ball sits in the palm; fuse points up)
+    BS = 1.35
+    bomb = [ellipsoid("bomb_m", (0.17 * S * BS, 0.17 * S * BS, 0.17 * S * BS), M["bomb"]),
+            ellipsoid("bomb_hl", (0.05 * S * BS, 0.05 * S * BS, 0.04 * S * BS), M["lens"],
+                      loc=(0.035 * S * BS, -0.06 * S * BS, 0.05 * S * BS)),
+            L.limb("bomb_cap", 0.03 * S * BS, 0.035 * S * BS, 0.035 * S * BS, M["cap"]),
+            L.tube("fuse", [(0, 0, 0.1 * S * BS), (0.025 * S * BS, 0, 0.145 * S * BS), (0.0, 0, 0.18 * S * BS)],
+                   0.012 * S * BS, M["leather"]),
+            ellipsoid("spark", (0.08 * S * BS, 0.08 * S * BS, 0.08 * S * BS), M["spark"], loc=(0, 0, 0.19 * S * BS)),
+            ellipsoid("spark2", (0.12 * S * BS, 0.04 * S * BS, 0.035 * S * BS), M["spark2"],
+                      loc=(0, 0, 0.19 * S * BS), rot=(0, 45, 0)),
+            ellipsoid("spark3", (0.12 * S * BS, 0.04 * S * BS, 0.035 * S * BS), M["spark2"],
+                      loc=(0, 0, 0.19 * S * BS), rot=(0, -45, 0))]
+    bomb[2].location = (0, 0, 0.1 * S * BS)
     bombm = L.joined("bombm", bomb)
-    A(bombm, "bomb", (0.0, -0.02 * S, -0.1 * S))
+    A(bombm, "bomb", (0.03 * S, -0.01 * S, -0.04 * S))
     # throw smear (arc over the head)
     sm = L.tube("smear", L.arc_pts((0, 0, 0), 0.6 * S, 160, 20, 9),
                 [0.003, 0.025, 0.04, 0.05, 0.055, 0.05, 0.04, 0.025, 0.003], M["smear"], depth=0.3)
@@ -133,7 +140,7 @@ def finish(p, sway=0.0):
     p["apron"] = -(p.get("hips", 0) + p.get("spine", 0) + p.get("chest", 0)) * 0.6 + \
         0.35 * max(0, max(p.get("th_n", 0), p.get("th_f", 0)) - 10)
     # bomb keeps upright in the hand
-    L.hang(p, [("bomb", 180)], ("root", "hips", "spine", "chest", "sh_n", "el_n", "ha_n"), 0)
+    L.hang(p, [("bomb", 0)], ("root", "hips", "spine", "chest", "sh_n", "el_n", "ha_n"), 0)
     return p
 
 
@@ -171,25 +178,25 @@ THROW = [
     # grab a bomb from the bandolier (it lights)
     (0.10, L.merge(BASE, {"chest": 4, "head": 8, "sh_n": 30, "el_n": 110, "th_n": 18, "kn_n": -30,
                           "hips.dz": -0.05})),
-    # wind back: arm swings down and behind, weight on the back leg, lean back
+    # wind back: arm swings back, weight on the back leg, lean back
     (0.28, L.merge(BASE, {"hips": 2, "spine": 6, "chest": 8, "neck": -4, "head": -2, "th_n": 30, "kn_n": -20,
-                          "th_f": -24, "kn_f": -30, "sh_n": -70, "el_n": 30, "sh_f": 50, "el_f": 30,
+                          "th_f": -24, "kn_f": -30, "sh_n": -90, "el_n": -20, "sh_f": 50, "el_f": 30,
                           "hips.dz": -0.06, "hips.dx": -0.04})),
-    # cocked overhead-back: big readable silhouette, free arm pointing at the target
+    # cocked overhead-back: bomb up behind the head, free arm pointing at the target
     (0.45, L.merge(BASE, {"hips": 6, "spine": 10, "chest": 14, "neck": -8, "head": -6, "th_n": 34, "kn_n": -16,
-                          "th_f": -26, "kn_f": -34, "sh_n": -140, "el_n": 60, "ha_n": 30, "sh_f": 88, "el_f": 6,
+                          "th_f": -26, "kn_f": -34, "sh_n": -128, "el_n": -78, "ha_n": 0, "sh_f": 88, "el_f": 6,
                           "hips.dz": -0.05, "hips.dx": -0.08})),
-    # release: arm whips over the top
+    # release: arm whips over the top (angles keep decreasing: -180 = straight up, -270 = forward)
     (0.50, L.merge(BASE, {"hips": -6, "spine": -8, "chest": -10, "neck": 4, "head": 6, "th_n": 44, "kn_n": -40,
-                          "th_f": -20, "kn_f": -12, "sh_n": 160, "el_n": 10, "ha_n": -10, "sh_f": 10, "el_f": 40,
+                          "th_f": -20, "kn_f": -12, "sh_n": -215, "el_n": -8, "ha_n": -10, "sh_f": 10, "el_f": 40,
                           "hips.dz": -0.07, "hips.dx": 0.06})),
     (0.65, L.merge(BASE, {"hips": -12, "spine": -12, "chest": -14, "neck": 8, "head": 10, "th_n": 48, "kn_n": -48,
-                          "th_f": -22, "kn_f": -10, "sh_n": 100, "el_n": 6, "ha_n": -20, "sh_f": -20, "el_f": 50,
+                          "th_f": -22, "kn_f": -10, "sh_n": -275, "el_n": -4, "ha_n": -20, "sh_f": -20, "el_f": 50,
                           "hips.dz": -0.08, "hips.dx": 0.09})),
     (0.82, L.merge(BASE, {"hips": -8, "spine": -6, "chest": -8, "neck": 6, "head": 8, "th_n": 34, "kn_n": -36,
-                          "th_f": -16, "kn_f": -14, "sh_n": 50, "el_n": 30, "sh_f": -16, "el_f": 60,
+                          "th_f": -16, "kn_f": -14, "sh_n": -318, "el_n": 30, "sh_f": -16, "el_f": 60,
                           "hips.dz": -0.06, "hips.dx": 0.05})),
-    (1.00, dict(BASE)),
+    (1.00, L.merge(BASE, {"sh_n": BASE["sh_n"] - 360})),
 ]
 
 

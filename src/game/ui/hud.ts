@@ -298,8 +298,13 @@ export class Hud {
   }
 
   private drawHp(c: CanvasRenderingContext2D, L: HudLayout): void {
-    const p = this.ui.world.player;
-    const max = Math.max(1, p.maxHp);
+    const world = this.ui.world;
+    const p = world.player;
+    // before the first world update the Player has not initialised from the run yet (stub defaults)
+    const fresh = world.time <= 0;
+    const hpNow = fresh ? world.run.hp : p.hp;
+    const maxNow = fresh ? world.run.maxHp : p.maxHp;
+    const max = Math.max(1, maxNow);
     const { x, y, w, h } = L.hp;
     const shake = this.hurt > 0 ? Math.round(Math.sin(this.time * 80) * 1.5) : 0;
     const ox = x + shake;
@@ -307,14 +312,14 @@ export class Hud {
     c.fillRect(ox - 2, y - 2, w + 4, h + 4);
     c.fillStyle = '#2a1424';
     c.fillRect(ox, y, w, h);
-    const hpW = Math.round(w * clamp(p.hp / max, 0, 1));
+    const hpW = Math.round(w * clamp(hpNow / max, 0, 1));
     const trailW = Math.round(w * clamp(this.hpTrail / max, 0, 1));
     if (trailW > hpW) {
       c.fillStyle = '#f3e7d3';
       c.fillRect(ox + hpW, y, trailW - hpW, h);
     }
     // rally: the part of the lost HP that can be won back by attacking
-    const rally = Math.max(0, Math.min(p.recoverable ?? 0, p.maxHp - p.hp));
+    const rally = Math.max(0, Math.min(p.recoverable ?? 0, maxNow - hpNow));
     const rallyW = Math.round(w * clamp(rally / max, 0, 1));
     if (rallyW > 0) {
       c.fillStyle = '#ff9fb0';
@@ -334,7 +339,7 @@ export class Hud {
       c.fillStyle = `rgba(255,255,255,${Math.min(0.7, (this.hurt - 0.1) * 3)})`;
       c.fillRect(ox, y, w, h);
     }
-    text(c, `${Math.ceil(p.hp)}/${p.maxHp}`, ox + w / 2, y + h / 2 + 0.5, { align: 'center', bold: true, size: SZ.s });
+    text(c, `${Math.ceil(hpNow)}/${maxNow}`, ox + w / 2, y + h / 2 + 0.5, { align: 'center', bold: true, size: SZ.s });
   }
 
   private drawFlaskAndCounters(c: CanvasRenderingContext2D, L: HudLayout, interactive: boolean): void {

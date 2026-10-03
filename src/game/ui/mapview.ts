@@ -191,6 +191,10 @@ export class MapView {
       text(c, st.label, cx + 13, y, { size: SZ.s, color: COL.dim });
       cx += 13 + [...st.label].length * 11 + 14;
     }
-    text(c, '● 현재 위치', cx, y, { size: SZ.s, color: COL.cyan });
+    c.fillStyle = COL.ink;
+    c.fillRect(cx - 1, y - 4, 10, 10);
+    c.fillStyle = '#9fe8ff';
+    c.fillRect(cx, y - 3, 8, 8);
+    text(c, '현재 위치', cx + 13, y, { size: SZ.s, color: COL.cyan });
   }
 }

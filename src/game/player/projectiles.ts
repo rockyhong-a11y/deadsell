@@ -361,6 +361,6 @@ export class WolfTrap extends Entity {
 
   draw(ctx: CanvasRenderingContext2D): void {
     const fade = this.victim ? Math.min(1, (WolfTrap.ROOT + 0.4 - this.snapT) * 3) : 1;
-    this.anim?.draw(ctx, this.x, this.y - 18, false, { alpha: this.armed || this.victim ? fade : 0.6 });
+    this.anim?.draw(ctx, this.x, this.y - 6, false, { alpha: this.armed || this.victim ? fade : 0.6 });
   }
 }

@@ -177,8 +177,8 @@ def tower(cx, w, y_top, y_bot, roof_h=0, mat="far", roof="roof", y=0.0, windows=
                                             wz(y_top - 3)), matid=mat, bevel=0.5 * U)
         for i in range(windows):
             wy = y_top + 24 + i * ((y_bot - y_top - 40) / max(1, windows))
-            E.block(5 * U, 9 * U, 0.1, (wx(cx) + dx + (3 if i % 2 else -3) * U, y - 0.25, wz(wy)),
-                    matid=win_mat, bevel=0, rid=90)
+            E.block(6 * U, 11 * U, 0.1, (wx(cx) + dx + (4 if i % 2 else -4) * U, y - w / 2 * U * 0.93 - 0.03,
+                                         wz(wy)), matid=win_mat, bevel=0, rid=90)
     rep(mk, cx, w + 30)
 
 
@@ -251,35 +251,35 @@ def prison_1():
     for k in range(4):
         cx = 128 + 256 * k
         column(cx, 60, 0, 512, mat="stone")
-        arch(cx + 128, 168, 196, 22, mat="stone", y0=-0.3, y1=0.5, n=13, seed=k)
+        arch(cx + 128, 300, 196, 22, mat="stone", y0=-0.3, y1=0.5, n=13, seed=k)
         # spandrel infill between arches (dark masonry) so the arch reads as a solid structure
     for k in range(4):
         bx = 256 + 256 * k
-        hang_chain(bx, 20, 250 if k % 2 == 0 else 190, link=0.22, thick=0.045)
-        beam(bx, 330 if k % 2 == 0 else 290, 196, 14, mat="wood", seed=k)
+        hang_chain(bx, 170, 330 if k % 2 == 0 else 270, link=0.22, thick=0.045)
+        beam(bx, 400 if k % 2 == 0 else 360, 196, 14, mat="wood", seed=k)
         if k % 2 == 0:
             for i in range(3):
-                hang_chain(bx - 70 + i * 70, 337, 400 - i * 12, link=0.16, thick=0.032)
+                hang_chain(bx - 70 + i * 70, 407, 470 - i * 12, link=0.16, thick=0.032)
 
 
 def prison_2():
     # cell block wall
-    stone_wall(0, W, 292, 512, mat="back", y=0.1, seed=5)
+    stone_wall(0, W, 340, 512, mat="back", y=0.1, seed=5)
     cells = 8
     S = W / cells
     for k in range(cells):
         cx = k * S + S / 2
-        opening(cx, 70, 352, 470, y=0.5)
-        bars(cx, 62, 340, 470, rails=(0.22, 0.62, 0.9))
-        arch(cx, 352, 70, 14, mat="trim", y0=-0.25, y1=0.3, n=9, seed=k)
+        opening(cx, 70, 398, 500, y=0.5)
+        bars(cx, 62, 388, 500, rails=(0.22, 0.62, 0.9))
+        arch(cx, 398, 70, 14, mat="trim", y0=-0.25, y1=0.3, n=9, seed=k)
     for k in range(cells):
-        E.block(S * U, 12 * U, 0.9, (wx(k * S + S / 2), -0.1, wz(290)), matid="trim", bevel=2 * U, rid=9)
+        E.block(S * U, 12 * U, 0.9, (wx(k * S + S / 2), -0.1, wz(338)), matid="trim", bevel=2 * U, rid=9)
     for x in (140, 520, 880):
-        hang_chain(x, 0, 110 + (x % 50), link=0.2, thick=0.04)
+        hang_chain(x, 0, 190 + (x % 50), link=0.2, thick=0.04)
     # a broken balcony railing
     for i in range(12):
-        E.block(4 * U, 30 * U, 0.2, (wx(300 + i * 16), -0.1, wz(270)), matid="wood", bevel=0.5 * U, rid=12)
-    beam(396, 255, 200, 8, mat="wood", seed=9)
+        E.block(4 * U, 30 * U, 0.2, (wx(300 + i * 16), -0.1, wz(322)), matid="wood", bevel=0.5 * U, rid=12)
+    beam(396, 305, 200, 8, mat="wood", seed=9)
 
 
 def prison_3():

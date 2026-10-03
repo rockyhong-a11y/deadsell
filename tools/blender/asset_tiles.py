@@ -158,7 +158,7 @@ BIOMES = {
                   chip_px=1.0, matids=["back", "back", "back", "back2"], rot_jit=1.5,
                   mortar="backmortar"),
         # lip profile (y px, z px): front faces toward -y; top at z = 0
-        lip=[(8, 0), (-1, 0), (-3.5, -2.5), (-3.5, -6.5), (-2.5, -7.5), (8, -7.5)],
+        lip=[(8, 0), (-1.5, 0), (-4.5, -3.5), (-4.5, -8.5), (-3.5, -10), (8, -10)],
         lip_chip=1.2, plat="wood", quoin=(8, 12), stone_chip=1.6,
     ),
     "ramparts": dict(
@@ -166,7 +166,7 @@ BIOMES = {
                   chip_px=0.9, matids=["stone", "stone", "stone", "stone2"], rot_jit=1.2),
         back=dict(seed=22, heights=(11, 13), lengths=(24, 40), gap_px=1.3, depth=0.4, bevel_px=1.6,
                   chip_px=0.6, matids=["back", "back", "back2"], rot_jit=0.8, mortar="backmortar"),
-        lip=[(8, 0), (-1.5, 0), (-3.5, -2), (-3.5, -7.5), (-2.5, -8.5), (8, -8.5)],
+        lip=[(8, 0), (-1.5, 0), (-4, -3), (-4, -9.5), (-3, -11), (8, -11)],
         lip_chip=0.6, plat="wood", quoin=(9, 13), stone_chip=0.8,
     ),
     "tower": dict(
@@ -174,7 +174,7 @@ BIOMES = {
                   chip_px=1.0, matids=["brick", "brick", "brick", "stone2"], rot_jit=1.5),
         back=dict(seed=23, heights=(6, 7), lengths=(12, 18), gap_px=1.3, depth=0.3, bevel_px=1.3,
                   chip_px=0.7, matids=["back", "back", "back2"], rot_jit=1.0, mortar="backmortar"),
-        lip=[(8, 0), (-1, 0), (-3, -2), (-3, -6.5), (-2, -7.5), (8, -7.5)],
+        lip=[(8, 0), (-1, 0), (-3.5, -3), (-3.5, -8), (-2.5, -9.5), (8, -9.5)],
         lip_chip=0.8, plat="iron", quoin=(8, 11), stone_chip=1.0,
     ),
 }

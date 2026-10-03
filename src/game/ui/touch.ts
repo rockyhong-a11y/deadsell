@@ -412,6 +412,8 @@ const nowSecs = () => performance.now() / 1000;
 /** Wire Pointer Events (touch, pen and mouse) on the game canvas to the recogniser. */
 export function attachTouch(game: Game): void {
   const canvas = game.display.canvas;
+  // phones/tablets: show touch hints from the first frame (keyboard presses switch it back)
+  if (typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches) game.input.device = 'touch';
   const rec = new GestureRecognizer({
     viewW: () => game.display.W,
     hitTest: (x, y) => game.taps.hit(x, y),

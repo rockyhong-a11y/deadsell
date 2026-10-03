@@ -23,6 +23,7 @@ export class Harpy extends Enemy {
   private aimX = 0;
   private aimY = 0;
   private altitude: number;
+  private homeY = 0;
 
   constructor(x: number, y: number, opts: Partial<EnemyOpts> = {}) {
     super('harpy', x, y, opts, SPEC);
@@ -35,6 +36,7 @@ export class Harpy extends Enemy {
 
   init(): void {
     super.init();
+    this.homeY = this.y;
     this.bob = this.world.rng.range(0, 6.28);
     this.side = this.world.rng.chance(0.5) ? 1 : -1;
     this.play('fly');
@@ -61,8 +63,9 @@ export class Harpy extends Enemy {
       this.notice(p);
       return;
     }
+    if (this.stateT < 0.03) this.homeY = this.y; // (re)entering patrol: hover where we are
     const tx = this.homeX + Math.sin(this.time * 0.7 + this.bob) * 70;
-    const ty = this.y + Math.sin(this.time * 2.1 + this.bob) * 3;
+    const ty = this.homeY + Math.sin(this.time * 2.1 + this.bob) * 6;
     this.steer(tx, ty, SPEC.patrol, dt, 200);
     if (Math.abs(this.vx) > 4) this.facing = this.vx > 0 ? 1 : -1;
     this.play('fly');

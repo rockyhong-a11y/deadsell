@@ -1096,26 +1096,36 @@ def load_bg_layers(biome):
     return json.load(open(p))
 
 
-def compose_parallax(biome, w, h, camx=0, camy=0, t=0.0):
-    """Reference of the parallax contract (docs/TILES.md)."""
+def layer_placement(parallax, vpar, y_off, iw, ih, view_x, view_y, view_h, bounds_h):
+    """docs/TILES.md "Parallax": (x0, y, step).  Layers are anchored to the BOTTOM of the screen when
+    the camera is at the lowest point of the level and slide down as the camera climbs."""
+    max_y = max(0, bounds_h - view_h)
+    slide = min(max(0, ih - view_h), max(0.0, (max_y - view_y) * vpar))
+    y = int(np.floor(view_h - ih + slide + y_off + 0.5))
+    sx = int(np.floor(view_x * parallax))
+    return -(sx % iw), y, iw
+
+
+def compose_parallax(biome, w, h, view_x=0, view_y=None, bounds_h=None):
+    """Reference of the parallax contract (docs/TILES.md): sky colour + layers far -> near."""
     d = load_bg_layers(biome)
     base = Image.new("RGBA", (w, h), hexc(d["sky"]) + (255,) if d else (20, 20, 30, 255))
     if not d:
         return base
+    bounds_h = bounds_h if bounds_h is not None else h
+    view_y = view_y if view_y is not None else max(0, bounds_h - h)
     for l in d["layers"]:
         p = os.path.join(OUT, "bg", l["image"])
         if not os.path.exists(p):
             continue
         im = Image.open(p).convert("RGBA")
         iw, ih = im.size
-        x0 = -int(round(camx * l["parallax"])) % iw if l.get("repeatX", True) else -int(round(camx * l["parallax"]))
-        y = int(round(l["y"] - t * l.get("vscroll", 0)))
-        x = x0 - iw
+        x0, y, step = layer_placement(l["parallax"], l.get("vpar", l["parallax"] * 0.5), l.get("y", 0), iw, ih,
+                                      view_x, view_y, h, bounds_h)
+        x = x0
         while x < w:
-            base.alpha_composite(im, (x, y)) if (x >= 0 and y >= 0) else _paste_clip(base, im, x, y)
-            x += iw
-            if not l.get("repeatX", True):
-                break
+            _paste_clip(base, im, x, y)
+            x += step
     return base
 
 
@@ -1142,7 +1152,7 @@ def write_preview(biome, atlas, sheet_img):
     m = ascii_to_map(mock_rows(biome))
     W, H = m.w * TILE, m.h * TILE
     # parallax scene (camera at x=0 of a larger hall) as backdrop
-    sky = compose_parallax(biome, W, H, camx=40, camy=0, t=0.3)
+    sky = compose_parallax(biome, W, H, view_x=40)
     rooms = compose(m, atlas, sheet_img, bg_base=sky)
     hf = heroine_frame()
     if hf:
@@ -1151,6 +1161,95 @@ def write_preview(biome, atlas, sheet_img):
         fx, fy = 4 * TILE + 12, 11 * TILE
         rooms.alpha_composite(im, (fx - ax, fy - ay))
     return rooms
+
+
+# ======================================================================================
+# golden file for tests/render.test.ts (synthetic atlas -> exact draw lists)
+
+
+def synthetic_atlas():
+    n = [0]
+
+    def r():
+        n[0] += 1
+        return [n[0], 0, 1, 1, 0, 0]
+
+    def rs(k):
+        return [r() for _ in range(k)]
+    a = {"biome": "golden", "tile": TILE, "pad": PAD,
+         "fill": rs(32), "fillMid": rs(32), "fillDeep": rs(32), "top": rs(8), "topMoss": rs(8),
+         "topDeco": rs(6), "drip": rs(4), "bottom": rs(8), "left": rs(4), "right": rs(4),
+         "outer": {k: r() for k in ("tl", "tr", "bl", "br")}, "inner": {k: r() for k in ("tl", "tr", "bl", "br")},
+         "platform": {"l": r(), "m": rs(3), "r": r(), "single": r()},
+         "spikes": {"up": rs(3), "down": r(), "left": r(), "right": r()},
+         "breakable": rs(2), "backwall": rs(32), "backCrack": rs(6)}
+    a["backdeco"] = {"arch": r(), "window": r(), "chain": r(), "special": r(), "niche": r(), "special2": r(),
+                     "slit": r(), "pillar": {"bot": r(), "mid": r(), "top": r()},
+                     "size": {"arch": [3, 4], "window": [2, 2], "chain": [1, 3], "special": [2, 3], "niche": [1, 1],
+                              "special2": [2, 2], "slit": [1, 2]},
+                     "chance": {"arch": 0.06, "special": 0.05, "window": 0.05, "slit": 0.05, "niche": 0.04,
+                                "special2": 0.04, "chain": 0.06},
+                     "pillar_chance": 0.5}
+    a["cfg"] = {"moss_chance": 0.4, "deco_chance": 0.25, "drip_chance": 0.3, "crack_chance": 0.12,
+                "shadow_a": 0.5, "shadow_w": [10, 6, 3]}
+    a["colors"] = {"sky": "#000000", "solid": "#222222", "lip": "#888888", "back": "#111111",
+                   "deep": "#000000", "shadow": "#000000", "glow": "#ffffff"}
+    a["image"] = "golden.png"
+    return a
+
+
+GOLDEN_MAP = [
+    "################################################",
+    "##....................######,,,,,,,,,,,,,,,,,,,##",
+    "##....................######,,,,,,,,,,,,,,,,,,,##",
+    "##...===...............#####,,,,,,,,,,,,,,,,,,,##",
+    "##.....................#####.........====.......#",
+    "##..........####.......####.....................#",
+    "##..........####..............##...............##",
+    "##...x......####..................==...........##",
+    "##...x......####.........^........##.......#######",
+    "##....................#########....##............##"[:48],
+    "##.......=====........#########..........#####..##",
+    "##.....................######...........######..##",
+    "#####.........................................####",
+    "##..............................^^^^.............#",
+    "##.......................#####.#####....###.......#",
+    "##.......####............#####.#####....###....###",
+    "##.......####........................^...........#",
+    "##...........^....###............................#",
+    "#####....................................#######",
+    "##...............................................#",
+    "##.....................###########..........######",
+    "##.....................###########..........######",
+    "##^^^^..................###########..............#",
+    "################################################",
+]
+
+
+def golden_map():
+    rows = [r.ljust(48, "#")[:48] for r in GOLDEN_MAP]
+    return rows
+
+
+def write_golden(path):
+    rows = golden_map()
+    m = ascii_to_map(rows)
+    atlas = synthetic_atlas()
+    ops = [[p] + list(reg) + [px, py] for (p, reg, px, py) in autotile(m, atlas)]
+    plan = [list(it) for it in plan_decor(m, atlas)]
+    shadows = [list(s) for s in back_shadows(m, atlas)]
+    hashes = [[x, y, sd, hash01(x, y, sd)] for (x, y, sd) in
+              ((0, 0, 0), (1, 2, 3), (5, 5, 5), (-1, 7, 2), (123, 456, 31), (-30, -2, 11), (2047, 1023, 17))]
+    place = []
+    for (par, vpar, yoff, iw, ih, vx, vy, vh, bh) in (
+            (0.3, 0.15, 0, 1024, 512, 100, 200, 360, 864), (0.05, 0.05, 0, 1024, 512, -3, 0, 360, 432),
+            (0.7, 0.3, 4, 1024, 512, 5000, 500, 360, 1296), (0.0, 0.0, 0, 1024, 512, 777, 100, 360, 432),
+            (0.45, 0.2, 0, 1024, 300, 1023, 500, 360, 1296)):
+        place.append([par, vpar, yoff, iw, ih, vx, vy, vh, bh] + list(layer_placement(par, vpar, yoff, iw, ih, vx, vy, vh, bh)))
+    with open(path, "w") as f:
+        json.dump({"atlas": atlas, "rows": rows, "ops": ops, "decor": plan, "shadows": shadows,
+                   "hashes": hashes, "placements": place}, f, separators=(",", ":"))
+    print("golden: %d ops, %d decor, %d shadows -> %s" % (len(ops), len(plan), len(shadows), path))
 
 
 def main(biomes):
@@ -1167,4 +1266,7 @@ def main(biomes):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or ["prison", "ramparts", "tower"])
+    if "--golden" in sys.argv:
+        write_golden(os.path.join(ROOT, "tests", "render_golden.json"))
+    else:
+        main([a for a in sys.argv[1:] if not a.startswith("-")] or ["prison", "ramparts", "tower"])

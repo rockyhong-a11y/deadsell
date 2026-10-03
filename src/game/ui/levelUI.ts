@@ -33,6 +33,7 @@ export class LevelUI {
   private stack: Modal[] = [];
   private started = false;
   private gaveUp = false;
+  private bannerPending = false;
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
   private visHandler: (() => void) | null = null;
 
@@ -79,8 +80,10 @@ export class LevelUI {
 
   onLevelStart(): void {
     this.started = true;
-    this.hud.showBanner(this.world.run.level.name);
-    if (this.game.save.settings.hints && this.world.run.levelIndex === 0) this.openTutorial(true);
+    if (this.game.save.settings.hints && this.world.run.levelIndex === 0) {
+      this.bannerPending = true; // shown once the tutorial is dismissed
+      this.openTutorial(true);
+    } else this.hud.showBanner(this.world.run.level.name);
   }
 
   toast(text: string, color = '#ffffff'): void {
@@ -98,6 +101,10 @@ export class LevelUI {
     if (m) this.stack = this.stack.filter((x) => x !== m);
     else this.stack.pop();
     this.game.input.reset();
+    if (this.bannerPending && !this.stack.length) {
+      this.bannerPending = false;
+      this.hud.showBanner(this.world.run.level.name);
+    }
   }
 
   /** Modal choice (scrolls, item swap). Calls onPick with the chosen index, or -1 if cancelled. */

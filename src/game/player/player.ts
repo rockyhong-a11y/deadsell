@@ -2,7 +2,7 @@ import { Actor, type Entity } from '../entity';
 import { hitArea, isBehind, type DamageInfo, type DamageResult, type HitReport } from '../combat';
 import type { Interactable } from '../world';
 import { GRAVITY, MAX_FALL, TILE, DEBUG } from '../../engine/config';
-import { approach, clamp, lerp, sign } from '../../engine/math';
+import { approach, clamp, lerp, overlaps, sign } from '../../engine/math';
 import type { Btn } from '../../engine/input';
 import { moveBody } from '../physics';
 import { T } from '../tilemap';
@@ -152,6 +152,31 @@ export class Player extends Actor {
     this.lastRunHp = run.hp;
   }
 
+  /** External changes (scrolls, fountain, alchemist) flow in through RunState. */
+  private pullRun(): void {
+    const run = this.world.run;
+    if (this.maxHp !== run.maxHp) this.maxHp = run.maxHp;
+    if (run.hp !== this.lastRunHp) this.hp = clamp(run.hp, 0, this.maxHp);
+  }
+
+  private pushRun(): void {
+    this.world.run.hp = this.hp;
+    this.lastRunHp = this.hp;
+  }
+
+  takeDamage(info: DamageInfo): DamageResult {
+    this.pullRun();
+    const r = super.takeDamage(info);
+    this.pushRun();
+    return r;
+  }
+
+  heal(n: number): void {
+    this.pullRun();
+    super.heal(n);
+    this.pushRun();
+  }
+
   /** Drink a flask (HUD button / 'heal'). Returns true if the drink started. */
   useFlask(): boolean {
     const run = this.world.run;
@@ -216,10 +241,7 @@ export class Player extends Actor {
 
   update(dt: number): void {
     const w = this.world;
-    const run = w.run;
-    // external changes (scrolls, fountain, alchemist) flow in through RunState
-    if (this.maxHp !== run.maxHp) this.maxHp = run.maxHp;
-    if (run.hp !== this.lastRunHp) this.hp = clamp(run.hp, 0, this.maxHp);
+    this.pullRun();
     this.updateStatus(dt);
     this.tickTimers(dt);
     this.gravityScale = 1;
@@ -245,8 +267,7 @@ export class Player extends Actor {
     if (!wasGround && this.onGround && this.mode !== 'dead') this.onLanded(Math.max(preVy, this.vy));
 
     this.nearInteract = this.mode === 'dead' ? null : w.nearestInteractable(this.x, this.y - 20);
-    run.hp = this.hp;
-    this.lastRunHp = this.hp;
+    this.pushRun();
   }
 
   stepPhysics(dt: number): void {
@@ -681,7 +702,8 @@ export class Player extends Actor {
     const [W, A, R] = a.dur;
     const act = a.t < W + A;
     if (this.onGround) {
-      if (act) this.vx = this.facing * a.hit.lunge;
+      if (act && !this.targetInReach(a.hit)) this.vx = this.facing * a.hit.lunge;
+      else if (act) this.vx = approach(this.vx, 0, 2600 * dt);
       else this.steer(dt, 0.3, false);
     } else {
       this.steer(dt, 0.7, false);
@@ -726,10 +748,21 @@ export class Player extends Actor {
     this.gravityScale = 1;
   }
 
+  private hitBox(h: MeleeHit): { x: number; y: number; w: number; h: number } {
+    const b = h.box;
+    return { x: this.facing > 0 ? this.x + b.x : this.x - b.x - b.w, y: this.y + b.y, w: b.w, h: b.h };
+  }
+
+  /** Lunge magnetism: stop sliding once an enemy is already inside the swing (no overshooting through targets). */
+  private targetInReach(h: MeleeHit): boolean {
+    const box = this.hitBox(h);
+    for (const t of this.world.actors) if (t.team === 'enemy' && t.targetable && overlaps(box, t.hurtbox())) return true;
+    return false;
+  }
+
   private swingHit(a: Swing): void {
     const h = a.hit;
-    const b = h.box;
-    const box = { x: this.facing > 0 ? this.x + b.x : this.x - b.x - b.w, y: this.y + b.y, w: b.w, h: b.h };
+    const box = this.hitBox(h);
     const infos = new Map<Actor, DamageInfo>();
     const reports = hitArea(this.world, box, 'player', (t) => {
       const crit = h.crit === 'always' || (h.crit === 'behind' && isBehind(this, t));

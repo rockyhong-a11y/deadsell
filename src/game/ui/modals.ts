@@ -310,7 +310,7 @@ export class MapModal extends Modal {
   draw(c: CanvasRenderingContext2D, W: number, H: number): void {
     const map = this.ui.hud.map;
     const world = this.ui.world;
-    this.backdrop(c, W, H, 0.88);
+    this.backdrop(c, W, H, 0.94);
     c.globalAlpha = this.ease;
     const view = { x: 12, y: 34, w: W - 24, h: H - 34 - 34 };
     const scale = map.fullScale(view.w, view.h);
@@ -433,12 +433,12 @@ export class PauseModal extends Modal {
 type Glyph = 'drag' | 'tap' | 'up' | 'side' | 'down' | 'hold';
 
 const TUTORIAL: { glyph: Glyph; title: string; how: string }[] = [
-  { glyph: 'drag', title: '이동', how: '왼쪽 화면을 누르고 드래그' },
-  { glyph: 'tap', title: '공격', how: '오른쪽 화면을 톡 탭' },
+  { glyph: 'drag', title: '이동', how: '왼쪽을 누른 채\n드래그' },
+  { glyph: 'tap', title: '공격', how: '오른쪽을 톡 탭' },
   { glyph: 'up', title: '점프', how: '오른쪽에서 위로 쓸기\n(공중에서 한 번 더)' },
-  { glyph: 'side', title: '구르기', how: '오른쪽에서 좌우로 쓸기' },
-  { glyph: 'down', title: '내려찍기', how: '오른쪽에서 아래로 쓸기' },
-  { glyph: 'hold', title: '보조 무기', how: '오른쪽을 길게 누르기' },
+  { glyph: 'side', title: '구르기', how: '오른쪽에서\n좌우로 쓸기' },
+  { glyph: 'down', title: '내려찍기', how: '오른쪽에서\n아래로 쓸기' },
+  { glyph: 'hold', title: '보조 무기', how: '오른쪽을\n길게 누르기' },
 ];
 
 export class TutorialModal extends Modal {
@@ -468,8 +468,8 @@ export class TutorialModal extends Modal {
     c.globalAlpha = this.ease;
     const cols = W >= 740 ? 6 : 3;
     const rows = Math.ceil(TUTORIAL.length / cols);
-    const cw = Math.min(124, Math.floor((W - 32) / cols));
-    const ch = 112;
+    const cw = Math.min(150, Math.floor((W - 32) / cols));
+    const ch = 120;
     const x0 = Math.round((W - cols * cw) / 2);
     const total = 30 + rows * ch + 18 + 44;
     const y0 = Math.round((H - total) / 2);
@@ -479,7 +479,7 @@ export class TutorialModal extends Modal {
       const cy = y0 + 30 + Math.floor(i / cols) * ch;
       this.drawGlyph(c, t.glyph, cx, cy + 28);
       text(c, t.title, cx, cy + 62, { bold: true, align: 'center', size: SZ.m, color: COL.cyan });
-      t.how.split('\n').forEach((l, li) => text(c, l, cx, cy + 79 + li * 13, { align: 'center', color: COL.dim }));
+      wrap(c, t.how, cw - 8, SZ.s).forEach((l, li) => text(c, l, cx, cy + 79 + li * 13, { align: 'center', color: COL.dim }));
     });
     const ky = y0 + 30 + rows * ch + 4;
     text(c, '플라스크·스킬·상호작용 말풍선·미니맵은 화면의 아이콘을 터치', W / 2, ky, { align: 'center', color: COL.text });

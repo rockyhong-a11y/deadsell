@@ -46,6 +46,8 @@ export class Archer extends Enemy {
 
   protected shouldAttack(p: Player): boolean {
     const d = Math.abs(p.x - this.x);
+    // too close and there is room to back off: retreat first, shoot later
+    if (d < MIN_DIST && this.pathAhead(-Math.sign(p.x - this.x), 4) === 'ok') return false;
     return d > 40 && d < 280 && Math.abs(p.y - this.y) < 150 && this.sees(p);
   }
 

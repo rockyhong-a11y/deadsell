@@ -1,5 +1,5 @@
 import type { Game, Scene } from '../game';
-import { COL, SZ, formatTime, pulse, text } from '../ui/draw';
+import { COL, SZ, formatTime, panel, pulse, text } from '../ui/draw';
 import { Embers, drawBiomeBg, gradientBg, vignette } from '../ui/backdrop';
 import { unlockedCount } from '../meta/progression';
 
@@ -87,7 +87,10 @@ export class TitleScene implements Scene {
     c.fillRect(Math.round(lx - 110), ly + 30, 220, 1);
     text(c, '재의 감옥에서 깨어난 죄수, 신더', lx, ly + 48, { size: SZ.m, align: 'center', color: '#b9cbe6' });
     const kb = g.input.device === 'keyboard';
-    text(c, kb ? 'Enter · Space · J 또는 화면을 터치하여 시작' : '화면을 터치하여 시작', lx, Math.round(H * 0.74), {
+    const promptY = Math.round(H * 0.74);
+    const promptW = kb ? 330 : 190;
+    panel(c, Math.round(lx - promptW / 2), promptY - 15, promptW, 30, { fill: '#05080f', alpha: 0.62, stroke: null, r: 15 });
+    text(c, kb ? 'Enter · Space · J 또는 화면을 터치하여 시작' : '화면을 터치하여 시작', lx, promptY, {
       size: SZ.m, bold: true, align: 'center', color: COL.cyan, alpha: 0.45 + 0.55 * pulse(t, 0.8),
     });
     // meta stats

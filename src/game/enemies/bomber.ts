@@ -36,6 +36,8 @@ export class Bomber extends Enemy {
 
   protected shouldAttack(p: Player): boolean {
     const d = Math.abs(p.x - this.x);
+    // too close and there is room to back off: retreat first, shoot later
+    if (d < MIN_DIST && this.pathAhead(-Math.sign(p.x - this.x), 4) === 'ok') return false;
     return d > 50 && d < 290 && Math.abs(p.y - this.y) < 170 && this.sees(p);
   }
 

@@ -67,54 +67,55 @@ export function standable(g: NavGrid, x: number, y: number): boolean {
 
 interface Arc {
   kind: 'jump' | 'fall' | 'drop';
-  vy0: number;
+  /** horizontal distance (px) the player keeps pressing the direction for */
   cut: number;
-  ox: Float32Array;
+  /** vertical offsets by vertical step (px, positive = down) */
   oy: Float32Array;
-  /** step the arc ends on (inclusive) */
-  n: number;
 }
 
-function makeArc(kind: Arc['kind'], vy0: number, cut: number): Arc {
-  const ox = new Float32Array(NSAMPLES), oy = new Float32Array(NSAMPLES);
-  let x = 0, y = 0, vy = kind === 'jump' ? -vy0 : 0;
-  let running = kind === 'fall';
+function makeOy(vy0: number): Float32Array {
+  const oy = new Float32Array(NSAMPLES);
+  let y = 0, vy = -vy0;
   for (let i = 0; i < NSAMPLES; i++) {
-    if (running) {
-      x = Math.min(cut, x + SPEED * DT);
-      if (x >= RUN) running = false;
-    } else {
-      vy = Math.min(MAXFALL, vy + GRAV * DT);
-      y += vy * DT;
-      x = Math.min(cut, x + SPEED * DT);
-    }
-    ox[i] = x;
+    vy = Math.min(MAXFALL, vy + GRAV * DT);
+    y += vy * DT;
     oy[i] = y;
   }
-  return { kind, vy0, cut, ox, oy, n: NSAMPLES };
+  return oy;
 }
 
+const FALL_OY = makeOy(0);
 const ARCS: Arc[] = [];
 for (const v of [456, 380, 290]) {
-  ARCS.push(makeArc('jump', v, 0));
-  for (const c of [24, 48, 72, 96, 120, 1e9]) ARCS.push(makeArc('jump', v, c));
+  const oy = makeOy(v);
+  ARCS.push({ kind: 'jump', cut: 0, oy });
+  for (const c of [24, 48, 72, 96, 120, 1e9]) ARCS.push({ kind: 'jump', cut: c, oy });
 }
-for (const c of [24, 36, 48, 72, 96, 1e9]) ARCS.push(makeArc('fall', 0, c));
-for (const c of [0, 24, 48, 72, 1e9]) ARCS.push(makeArc('drop', 0, c));
+for (const c of [24, 36, 48, 72, 96, 1e9]) ARCS.push({ kind: 'fall', cut: c, oy: FALL_OY });
+for (const c of [0, 24, 48, 72, 1e9]) ARCS.push({ kind: 'drop', cut: c, oy: FALL_OY });
 
 /**
- * Run an arc from a standing cell. `dir` = +1/-1. Returns the landing node index or -1.
+ * Run an arc from a standing cell. `dir` = +1/-1. The player holds the direction until `cut` px
+ * were covered (walls stop it, like in the real physics) while the vertical motion follows the
+ * jump / fall profile. Returns the landing node index or -1.
  */
 function runArc(g: NavGrid, arc: Arc, dir: number, sx: number, sy: number): number {
-  let px = sx, py = sy;
+  let px = sx, py = sy, moved = 0, vi = 0;
   const dropRow = arc.kind === 'drop' ? Math.round(sy / TS) : -1; // platform row we stand on
-  for (let i = 0; i < arc.n; i++) {
-    const nx = sx + dir * arc.ox[i];
-    const ny = sy + arc.oy[i];
-    if (nx !== px) {
-      if (boxState(g, nx, py) !== 0) return -1;
-      px = nx;
+  const step = SPEED * DT;
+  for (let i = 0; i < NSAMPLES; i++) {
+    if (moved < arc.cut) {
+      const mv = Math.min(step, arc.cut - moved);
+      const nx = px + dir * mv;
+      const st = boxState(g, nx, py);
+      if (st === 2) return -1;
+      if (st === 0) {
+        px = nx;
+        moved += mv;
+      }
     }
+    if (arc.kind === 'fall' && moved < RUN) continue; // still walking off the ledge
+    const ny = sy + arc.oy[vi++];
     if (ny === py) continue;
     if (ny > py) {
       const r1 = Math.floor((ny - EPS) / TS);

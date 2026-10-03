@@ -444,6 +444,7 @@ export function attachTouch(game: Game): void {
   });
 
   const end = (e: PointerEvent) => {
+    game.audio.unlock(); // iOS only honours resume() inside the gesture's end event
     const p = game.display.toVirtual(e.clientX, e.clientY);
     apply(rec.up(e.pointerId, p.x, p.y, nowSecs()));
   };

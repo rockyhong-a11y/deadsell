@@ -1,0 +1,113 @@
+import type { Game, Scene } from '../game';
+import type { RunState } from '../run';
+import { World } from '../world';
+import { buildLevel, populateLevel } from '../level/build';
+import { LevelRenderer } from '../level/render';
+import { Player } from '../player/player';
+import { LevelUI } from '../ui/levelUI';
+import { DEBUG } from '../../engine/config';
+import type { Actor } from '../entity';
+
+/** Plays one level of the run (biome, passage or boss arena). */
+export class LevelScene implements Scene {
+  readonly game: Game;
+  readonly run: RunState;
+  readonly world: World;
+  readonly renderer: LevelRenderer;
+  readonly ui: LevelUI;
+  private endTimer = -1;
+  private endAction: (() => void) | null = null;
+
+  constructor(game: Game, run: RunState) {
+    this.game = game;
+    this.run = run;
+    const spec = run.level;
+    const level = buildLevel(spec, (run.seed + run.levelIndex * 7919) >>> 0, game.save);
+    this.world = new World(game, run, level);
+    const w = this.world;
+    const p = new Player(level.playerStart.x, level.playerStart.y);
+    w.player = p;
+    w.spawn(p);
+    populateLevel(w, level);
+    w.camera.snap(p.x, p.y - 20);
+    this.renderer = new LevelRenderer(w);
+    this.ui = new LevelUI(game, w);
+    w.ui = this.ui;
+    w.lights.setBiome(spec.biome, spec.kind);
+    w.on((e) => {
+      if (e.type === 'playerDied') this.endAfter(1.6, () => game.playerDied());
+      else if (e.type === 'levelExit') this.endAfter(0, () => game.nextLevel());
+      else if (e.type === 'bossDefeated') {
+        w.timeScale = 0.3;
+        this.endAfter(3.2, () => game.victory());
+      } else if (e.type === 'enemyKilled') run.kills++;
+    });
+  }
+
+  enter(): void {
+    const spec = this.run.level;
+    this.game.audio.music(spec.kind === 'boss' ? 'boss' : spec.kind === 'passage' ? 'passage' : spec.biome === 'prison' ? 'prison' : 'ramparts');
+    this.ui.onLevelStart();
+  }
+
+  private endAfter(secs: number, fn: () => void): void {
+    if (this.endAction) return;
+    this.endAction = fn;
+    this.endTimer = secs;
+  }
+
+  update(dt: number): void {
+    if (this.endAction) {
+      this.endTimer -= dt;
+      if (this.endTimer <= 0) {
+        const fn = this.endAction;
+        this.endTimer = Infinity;
+        fn();
+      }
+    }
+    this.ui.update(dt);
+    if (this.ui.modal) return;
+    this.run.time += dt;
+    this.world.update(dt);
+  }
+
+  render(): void {
+    const d = this.game.display;
+    const ctx = d.wctx;
+    const w = this.world;
+    const cam = w.camera;
+    cam.w = d.W;
+    cam.h = d.H;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    this.renderer.drawBack(ctx, cam);
+    ctx.save();
+    ctx.translate(-cam.viewX, -cam.viewY);
+    this.renderer.drawTiles(ctx, cam);
+    const vx0 = cam.x - 160, vx1 = cam.x + cam.w + 160, vy0 = cam.y - 160, vy1 = cam.y + cam.h + 200;
+    const list = w.entities.filter((e) => !e.dead && e.x > vx0 && e.x < vx1 && e.y > vy0 && e.y < vy1).sort((a, b) => a.z - b.z);
+    for (const e of list) e.draw(ctx);
+    w.particles.draw(ctx);
+    this.renderer.drawFront(ctx, cam);
+    if (DEBUG.hitboxes) drawHitboxes(ctx, w.actors);
+    ctx.restore();
+    w.lights.render(ctx, cam, d.W, d.H, w.time);
+    ctx.save();
+    ctx.translate(-cam.viewX, -cam.viewY);
+    w.fx.draw(ctx);
+    ctx.restore();
+    w.fx.drawScreen(ctx, d.W, d.H);
+    d.present();
+    this.ui.draw(d.ui);
+  }
+}
+
+function drawHitboxes(ctx: CanvasRenderingContext2D, actors: Actor[]): void {
+  ctx.lineWidth = 1;
+  for (const a of actors) {
+    const b = a.hurtbox();
+    ctx.strokeStyle = a.team === 'player' ? '#3f3' : '#f33';
+    ctx.strokeRect(Math.round(b.x) + 0.5, Math.round(b.y) + 0.5, b.w, b.h);
+  }
+}

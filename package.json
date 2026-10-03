@@ -1,0 +1,22 @@
+{
+  "name": "deadsell",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "assets": "tools/build_assets.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56",
+    "galmuri": "^2.40.3",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.3",
+    "vitest": "^3.2.7"
+  }
+}

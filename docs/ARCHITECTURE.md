@@ -76,3 +76,12 @@ note the dependency in your report; do not edit the other module.
   `window.__ds` offers `start(seed)`, `gotoLevel('boss')`, `god()`, `teleport(x,y)`,
   `killAll()`, `give(itemId, slot)`, `step(n)`, `info()`. URL flags: `?seed=1&debug=2&god=1&level=boss&mute=1`.
   Screenshot and look at the result (Read tool) — do not assume it looks right.
+* End-to-end (Playwright, `npx playwright test`, 844x390 mobile-landscape Chromium against the Vite dev server):
+  * `e2e/smoke.spec.ts` - real touch gestures (CDP touch events) on the title / HUD / death screens.
+  * `e2e/fullrun.spec.ts` - a complete run Title -> Prison -> Passage -> Ramparts -> Passage -> Boss -> Victory -> Title,
+    death -> retry, pause/map/flask HUD, corrupted saves, fps, and a real-physics traversal of 8 seeds per biome.
+    It fails on any console error/warning or page error (sound stays ON so audio errors surface). Screenshots for a human
+    to look at are written to `e2e-shots/` (git-ignored).
+  * `e2e/bot.ts` - `botWalk`, an in-page navigation bot: plans with `level/nav.ts` (the generator's own movement graph) and
+    drives the real player through `Input` + real physics, stepping with `__ds.step`. Use it to prove an exit is reachable.
+  * `e2e/helpers.ts` - boot, touch fingers, `tapRegion(id)` (taps a registered `game.taps` rectangle), event capture.

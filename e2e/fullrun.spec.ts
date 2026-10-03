@@ -9,11 +9,11 @@ import {
  * plus death -> retry. Real input where practical (keyboard, CDP touch taps on the real UI regions, the nav-graph
  * bot of bot.ts driving the real player through the real input layer + physics); debug hooks (__ds) only for
  * teleports, state setup (gold/cells) and reading state. Sound is ON (no mute flag) so audio errors surface.
- * Screenshots (for humans) go to test-results/shots/.
+ * Screenshots (for humans) go to e2e-shots/.
  */
 test.use({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 });
 
-const SHOTS = 'test-results/shots/';
+const SHOTS = 'e2e-shots/';
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png` });
 
 const player = (page: Page) =>
@@ -447,6 +447,139 @@ test.describe('full run', () => {
     expect((await savedGame(page)).runs).toBe(2);
     expect(c.errors).toEqual([]);
   });
+
+  test('HUD: flask heals, map opens, pause freezes the world, sound setting persists, give up -> death scene', async ({ page }) => {
+    const c = await boot(page, { query: '?seed=9' }); // no god mode: hp can be lowered
+    await page.waitForTimeout(1200);
+    await c.fingers.tap(420, 200);
+    await waitScene(page, 'LevelScene');
+    await page.waitForFunction(() => (window as any).__ds.player?.onGround === true);
+    await page.waitForTimeout(3600); // level banner
+    // flask: heals and consumes a charge
+    await page.evaluate(() => { const p = (window as any).__ds.player; p.hp = 40; });
+    const f0 = (await run(page)).flasks;
+    await tapRegion(c, 'hud-flask');
+    await expect.poll(async () => (await player(page)).hp, { timeout: 5_000 }).toBeGreaterThan(40);
+    expect((await run(page)).flasks).toBe(f0 - 1);
+    // map
+    await tapRegion(c, 'hud-map');
+    await expect.poll(() => modalOpen(page), { timeout: 3_000 }).toBe(true);
+    await page.waitForTimeout(500);
+    await shot(page, '18_map');
+    await c.fingers.tap(420, 200); // tap closes
+    await expect.poll(() => modalOpen(page), { timeout: 3_000 }).toBe(false);
+    // pause: the world is frozen while the card is open
+    await tapRegion(c, 'hud-pause');
+    await expect.poll(() => modalOpen(page), { timeout: 3_000 }).toBe(true);
+    await page.waitForTimeout(500);
+    const t0 = await page.evaluate(() => (window as any).__ds.world.time);
+    await page.waitForTimeout(600);
+    expect(await page.evaluate(() => (window as any).__ds.world.time)).toBe(t0);
+    await shot(page, '19_pause');
+    await tapRegion(c, 'pause1'); // sound toggle
+    await expect.poll(async () => (await savedGame(page)).settings.muted, { timeout: 3_000 }).toBe(true);
+    await tapRegion(c, 'pause1');
+    await expect.poll(async () => (await savedGame(page)).settings.muted, { timeout: 3_000 }).toBe(false);
+    await tapRegion(c, 'pause0'); // resume
+    await expect.poll(() => modalOpen(page), { timeout: 3_000 }).toBe(false);
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => (window as any).__ds.world.time)).toBeGreaterThan(t0);
+    // give up (two taps)
+    await tapRegion(c, 'hud-pause');
+    await expect.poll(() => modalOpen(page), { timeout: 3_000 }).toBe(true);
+    await page.waitForTimeout(500);
+    await tapRegion(c, 'pause4');
+    await page.waitForTimeout(300);
+    await tapRegion(c, 'pause4');
+    await waitScene(page, 'DeathScene', 10_000);
+    expect(c.errors).toEqual([]);
+  });
+
+  test('traversal: the nav bot reaches the exit door with the real player on 8 seeds per biome', async ({ page }) => {
+    test.setTimeout(180_000);
+    const c = await boot(page, { query: '?seed=1&god=1&mute=1' });
+    const failures: string[] = [];
+    for (const biome of ['prison', 'ramparts'] as const) {
+      for (let seed = 1; seed <= 8; seed++) {
+        await page.evaluate(([s]) => { (window as any).__prev = (window as any).__ds.game.scene; (window as any).__ds.start(s); }, [seed * 13 + 1]);
+        await page.waitForFunction(() => { const g = (window as any).__ds.game; return g.scene !== (window as any).__prev && g.scene?.constructor?.name === 'LevelScene' && g.fade < 0.3; }, null, { timeout: 15_000 });
+        if (biome === 'ramparts') {
+          await page.evaluate(() => { (window as any).__prev = (window as any).__ds.game.scene; (window as any).__ds.gotoLevel('ramparts'); });
+          await page.waitForFunction(() => { const g = (window as any).__ds.game; return g.scene !== (window as any).__prev && g.scene?.constructor?.name === 'LevelScene' && g.fade < 0.3; }, null, { timeout: 15_000 });
+        }
+        expect(await misplacedEntities(page), `${biome} #${seed}`).toEqual([]);
+        await page.evaluate(() => (window as any).__ds.killAll());
+        const ex = (await entitiesOf(page, 'ExitDoor'))[0];
+        const res = await walkTo(page, ex, 30, 60 * 600);
+        if (!res.ok) failures.push(`${biome} seed ${seed * 13 + 1}: ${JSON.stringify(res)}`);
+      }
+    }
+    expect(failures).toEqual([]);
+    expect(c.errors).toEqual([]);
+  });
+
+  test('every weapon and skill fights without errors (all enemy kinds of the ramparts)', async ({ page }) => {
+    const c = await boot(page, { query: '?seed=4&god=1&mute=1' });
+    await page.evaluate(() => (window as any).__ds.start(4));
+    await waitScene(page, 'LevelScene');
+    await page.evaluate(() => { (window as any).__prev = (window as any).__ds.game.scene; (window as any).__ds.gotoLevel('ramparts'); });
+    await page.waitForFunction(() => { const g = (window as any).__ds.game; return g.scene !== (window as any).__prev && g.fade < 0.3; });
+    const WEAPONS = ['rusty_sword', 'blood_sword', 'spear', 'twin_daggers', 'war_hammer', 'hunter_bow', 'old_shield'];
+    const SKILLS = ['fire_grenade', 'ice_grenade', 'turret', 'wolf_trap'];
+    const res = await page.evaluate(({ WEAPONS, SKILLS }) => {
+      const ds = (window as any).__ds;
+      const out: { weapon: string; dealt: number }[] = [];
+      WEAPONS.forEach((wid, k) => {
+        ds.give(wid, 0); ds.give(WEAPONS[(k + 3) % WEAPONS.length], 1); ds.give(SKILLS[k % 4], 0); ds.give(SKILLS[(k + 1) % 4], 1);
+        const w = ds.world, p = w.player, inp = w.input;
+        const en = w.entities.filter((e: any) => e.team === 'enemy' && !e.dead);
+        const tgt = en[(k * 7) % en.length];
+        ds.teleport(tgt.x - 60, tgt.y - 2); ds.step(15);
+        const hp0 = en.reduce((a: number, e: any) => a + e.hp, 0);
+        for (let f = 0; f < 600; f++) {
+          const near = w.entities.filter((e: any) => e.team === 'enemy' && !e.dead && !e.dying && Math.abs(e.y - p.y) < 60 && Math.abs(e.x - p.x) < 300).sort((a: any, b: any) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
+          inp.setAxis('sweep', near && Math.abs(near.x - p.x) > 45 ? Math.sign(near.x - p.x) : 0, 0);
+          if (f % 14 === 0) inp.tap('attack1');
+          if (f % 140 === 70) inp.press('attack2');
+          if (f % 140 === 110) inp.release('attack2');
+          if (f % 160 === 40) inp.tap('skill1');
+          if (f % 160 === 100) inp.tap('skill2');
+          if (f % 150 === 20) inp.tap('roll');
+          if (f % 180 === 0) inp.tap('jump');
+          ds.step(1);
+        }
+        inp.setAxis('sweep', 0, 0);
+        inp.release('attack2');
+        ds.step(30);
+        out.push({ weapon: wid, dealt: hp0 - w.entities.filter((e: any) => e.team === 'enemy' && !e.dead).reduce((a: number, e: any) => a + e.hp, 0) });
+      });
+      return out;
+    }, { WEAPONS, SKILLS });
+    // the shield alone may not deal damage (skills / secondary weapon did the work); everything else must hurt something
+    for (const r of res) if (r.weapon !== 'old_shield') expect(r.dealt, `${r.weapon} deals damage`).toBeGreaterThan(0);
+    expect(c.errors).toEqual([]);
+  });
+
+  for (const [name, garbage] of [
+    ['wrong-shaped fields', '{"version":1,"unlocked":"x","upgrades":null,"settings":{"sfx":"loud","hints":5},"runs":"many","bestTime":"fast","totalKills":-4}'],
+    ['not JSON at all', '{not json'],
+  ] as const) {
+    test(`a corrupted save (${name}) does not break the game`, async ({ page }) => {
+      await page.addInitScript(([key, raw]) => { try { localStorage.setItem(key as string, raw as string); } catch { /* ignore */ } }, [SAVE_KEY, garbage] as const);
+      const c = await boot(page, { query: '?seed=2&god=1' });
+      await page.waitForTimeout(1200);
+      await c.fingers.tap(420, 200);
+      await waitScene(page, 'LevelScene');
+      await page.waitForTimeout(1500);
+      const ok = await page.evaluate(() => { const sv = (window as any).__ds.game.save; return Array.isArray(sv.unlocked) && sv.unlocked.includes('rusty_sword') && typeof sv.runs === 'number' && sv.totalKills >= 0; });
+      expect(ok).toBe(true);
+      await page.evaluate(() => (window as any).__ds.gotoLevel('passage'));
+      await page.waitForTimeout(1200);
+      await waitScene(page, 'LevelScene');
+      expect((await run(page)).kind).toBe('passage');
+      expect(c.errors).toEqual([]);
+    });
+  }
 
   test('deep link to the boss arena works (level=boss) and no input is needed to see the intro', async ({ page }) => {
     const c = await boot(page, { query: '?seed=5&god=1&level=boss' });

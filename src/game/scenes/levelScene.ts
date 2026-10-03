@@ -50,6 +50,11 @@ export class LevelScene implements Scene {
     this.ui.onLevelStart();
   }
 
+  /** Release the global listeners of the in-level UI (a touch-only player never sends the key press that disposes it lazily). */
+  exit(): void {
+    this.ui.dispose();
+  }
+
   private endAfter(secs: number, fn: () => void): void {
     if (this.endAction) return;
     this.endAction = fn;

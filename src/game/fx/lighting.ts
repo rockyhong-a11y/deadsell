@@ -40,13 +40,13 @@ export interface Mood {
 /** Per-biome look. Ambient is the *minimum* brightness, lights add on top of it. */
 export const MOODS: Record<string, Mood> = {
   // sunken prison: deep teal-green, wet and gloomy
-  prison: { ambient: '#41665f', vignette: 0.5, bloom: 1, atmosphere: 'prison' },
+  prison: { ambient: '#86b2a7', vignette: 0.42, bloom: 1, atmosphere: 'prison' },
   // moonlit ramparts: purple-blue, lighter and airy
-  ramparts: { ambient: '#8c8fc8', vignette: 0.38, bloom: 0.8, atmosphere: 'ramparts' },
+  ramparts: { ambient: '#a4a8dc', vignette: 0.34, bloom: 0.8, atmosphere: 'ramparts' },
   // bell tower: dark red-orange, firelit
-  tower: { ambient: '#6d3d3a', vignette: 0.6, bloom: 1.25, breathe: 0.07, atmosphere: 'tower' },
+  tower: { ambient: '#b27a72', vignette: 0.5, bloom: 1.25, breathe: 0.07, atmosphere: 'tower' },
   // passage: warm, safe, golden
-  passage: { ambient: '#b79c7e', vignette: 0.3, bloom: 1.1, atmosphere: 'passage' },
+  passage: { ambient: '#c9b08e', vignette: 0.28, bloom: 1.1, atmosphere: 'passage' },
 };
 const DEFAULT_MOOD: Mood = { ambient: '#7a7a8a', vignette: 0.4, bloom: 1, atmosphere: '' };
 

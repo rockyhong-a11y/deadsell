@@ -34,8 +34,9 @@ export class Display {
   }
 
   resize(): void {
-    const cssW = window.innerWidth;
-    const cssH = window.innerHeight;
+    // the canvas box (not the window): it is inset by the safe area on notched phones
+    const cssW = this.canvas.clientWidth || window.innerWidth;
+    const cssH = this.canvas.clientHeight || window.innerHeight;
     if (cssW === this.cssW && cssH === this.cssH) return;
     this.cssW = cssW;
     this.cssH = cssH;

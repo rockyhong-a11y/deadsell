@@ -42,6 +42,7 @@ export class Game {
   private last = 0;
   /** measured frames per second (debug/tests) */
   fps = 60;
+  private portraitPhone: MediaQueryList | null = typeof matchMedia === 'function' ? matchMedia('(orientation: portrait) and (pointer: coarse)') : null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.display = new Display(canvas);
@@ -128,6 +129,12 @@ export class Game {
   private frame(now: number): void {
     const elapsed = Math.min(0.25, (now - this.last) / 1000);
     this.last = now;
+    // phone held upright: the "rotate your device" overlay (index.html) covers the canvas, so freeze the game
+    if (this.portraitPhone?.matches) {
+      this.acc = 0;
+      this.input.reset();
+      return;
+    }
     if (elapsed > 0) this.fps += (1 / elapsed - this.fps) * 0.05;
     this.display.resize();
     this.acc += elapsed;

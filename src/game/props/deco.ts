@@ -31,13 +31,20 @@ export class Deco extends Prop {
     this.h = 24;
   }
 
+  /** low alcoves cannot hold a hanging prop: it would reach into the floor, so a standing one takes its place */
+  private static readonly STANDING: Partial<Record<DecoKind, DecoKind>> = { chains: 'bones', banner: 'barrel', cage: 'crates' };
+
   init(): void {
-    this.useSheet('props', this.kind);
+    let sheetKind: DecoKind = this.kind;
     const hang = HANG_HEIGHT[this.kind];
     if (hang && this.kind !== 'bell') {
       const c = ceilingAbove(this.world, this.x, this.y - 8);
-      if (c !== null) this.y = c + hang;
+      if (c !== null) {
+        if (c + hang <= this.y + 2) this.y = c + hang;
+        else sheetKind = Deco.STANDING[this.kind] ?? this.kind;
+      }
     }
+    this.useSheet('props', sheetKind);
   }
 
   draw(ctx: CanvasRenderingContext2D): void {

@@ -16,6 +16,7 @@ import { siteKey } from './templates/types';
  */
 export const TS = 24;
 const BW = 16; // hull used for planning (a little larger than the real 14 x 40)
+const BWS = 14; // width that counts when landing on an edge
 const BH = 44;
 const DT = 0.025;
 const SPEED = 150;
@@ -92,17 +93,25 @@ interface Arc {
   kind: 'jump' | 'fall' | 'drop';
   /** horizontal distance (px) the player keeps pressing the direction for */
   cut: number;
-  /** takeoff speed (px/s, jumps only) */
-  vy0: number;
+  /** jump button released after this many seconds (Infinity = held for the full jump) */
+  release: number;
   /** vertical offsets by vertical step (px, positive = down) */
   oy: Float32Array;
 }
 
-function makeOy(vy0: number): Float32Array {
+const JUMP_V = 466; // = player.ts; discrete 60 Hz integration peaks at ~80 px
+const JUMP_CUT = 0.4;
+
+/** Vertical profile of a jump whose button is released after `release` seconds (variable jump height). */
+function makeOy(vy0: number, release = Infinity): Float32Array {
   const oy = new Float32Array(NSAMPLES);
-  let y = 0, vy = -vy0;
+  let y = 0, vy = -vy0, released = false;
   for (let i = 0; i < NSAMPLES; i++) {
     vy = Math.min(MAXFALL, vy + GRAV * DT);
+    if (!released && (i + 1) * DT >= release && vy < 0) {
+      vy *= JUMP_CUT;
+      released = true;
+    }
     y += vy * DT;
     oy[i] = y;
   }
@@ -111,13 +120,13 @@ function makeOy(vy0: number): Float32Array {
 
 const FALL_OY = makeOy(0);
 const ARCS: Arc[] = [];
-for (const v of [456, 380, 290]) {
-  const oy = makeOy(v);
-  ARCS.push({ kind: 'jump', cut: 0, oy, vy0: v });
-  for (const c of [24, 48, 72, 96, 120, 1e9]) ARCS.push({ kind: 'jump', cut: c, oy, vy0: v });
+for (const rel of [Infinity, 0.16, 0.1, 0.05]) {
+  const oy = makeOy(JUMP_V, rel);
+  ARCS.push({ kind: 'jump', cut: 0, release: rel, oy });
+  for (const c of [24, 48, 72, 96, 120, 1e9]) ARCS.push({ kind: 'jump', cut: c, release: rel, oy });
 }
-for (const c of [24, 36, 48, 72, 96, 1e9]) ARCS.push({ kind: 'fall', cut: c, oy: FALL_OY, vy0: 0 });
-for (const c of [0, 24, 48, 72, 1e9]) ARCS.push({ kind: 'drop', cut: c, oy: FALL_OY, vy0: 0 });
+for (const c of [24, 36, 48, 72, 96, 1e9]) ARCS.push({ kind: 'fall', cut: c, release: 0, oy: FALL_OY });
+for (const c of [0, 24, 48, 72, 1e9]) ARCS.push({ kind: 'drop', cut: c, release: 0, oy: FALL_OY });
 
 /**
  * Run an arc from a standing cell. `dir` = +1/-1. The player holds the direction until `cut` px
@@ -129,6 +138,7 @@ function runArc(g: NavCtx, arc: Arc, dir: number, sx: number, sy: number): numbe
   const dropRow = arc.kind === 'drop' ? Math.round(sy / TS) : -1; // platform row we stand on
   const step = SPEED * DT;
   for (let i = 0; i < NSAMPLES; i++) {
+    const px0 = px;
     if (moved < arc.cut) {
       const mv = Math.min(step, arc.cut - moved);
       const nx = px + dir * mv;
@@ -144,11 +154,14 @@ function runArc(g: NavCtx, arc: Arc, dir: number, sx: number, sy: number): numbe
     if (ny === py) continue;
     if (ny > py) {
       const r1 = Math.floor((ny - EPS) / TS);
-      const cl = Math.floor((px - BW / 2 + EPS) / TS), cr = Math.floor((px + BW / 2 - EPS) / TS);
-      const cc = Math.floor(px / TS);
       for (let ry = Math.max(0, Math.floor(py / TS)); ry <= r1; ry++) {
         const top = ry * TS;
         if (py > top + EPS) continue;
+        // horizontal position at the moment the feet cross this row's top
+        const f = Math.min(1, (top - py) / (ny - py));
+        const pxl = px0 + (px - px0) * f;
+        const cl = Math.floor((pxl - BWS / 2 + EPS) / TS), cr = Math.floor((pxl + BWS / 2 - EPS) / TS);
+        const cc = Math.floor(pxl / TS);
         const ok = (cx: number): boolean => {
           const sk = supportKind(g, cx, ry);
           return sk === 1 || (sk === 2 && !(dropRow >= 0 && ry <= dropRow));
@@ -430,8 +443,8 @@ export interface NavEdge {
   from: number;
   to: number;
   kind: 'walk' | 'jump' | 'fall' | 'drop';
-  /** takeoff speed for jumps (px/s), 0 otherwise */
-  vy0: number;
+  /** seconds until the jump button is released (Infinity = full jump), jumps only */
+  release: number;
   /** px of horizontal travel the player holds the direction for */
   cut: number;
   dir: number;
@@ -444,13 +457,13 @@ export function edgesFrom(grid: NavGrid, node: number): NavEdge[] {
   const sx = x * TS + TS / 2, sy = (y + 1) * TS;
   const out: NavEdge[] = [];
   const onPlat = supportKind(g, x, y + 1) === 2;
-  for (const d of [-1, 1]) if (standableC(g, x + d, y)) out.push({ from: node, to: node + d, kind: 'walk', vy0: 0, cut: TS, dir: d });
+  for (const d of [-1, 1]) if (standableC(g, x + d, y)) out.push({ from: node, to: node + d, kind: 'walk', release: 0, cut: TS, dir: d });
   for (const arc of ARCS) {
     if (arc.kind === 'drop' && !onPlat) continue;
     for (const d of arc.cut === 0 ? [1] : [-1, 1]) {
       if (arc.kind === 'fall' && standableC(g, x + d, y)) continue;
       const to = runArc(g, arc, d, sx, sy);
-      if (to >= 0 && to !== node) out.push({ from: node, to, kind: arc.kind, vy0: arc.vy0, cut: arc.cut, dir: d });
+      if (to >= 0 && to !== node) out.push({ from: node, to, kind: arc.kind, release: arc.release, cut: arc.cut, dir: d });
     }
   }
   return out;

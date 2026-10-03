@@ -441,7 +441,7 @@ def build_tower():
     vo = m & (gb["mat"] == MAT["void"])
     vg = vgrad([(0.2, "#701c08"), (0.6, "#c8501a"), (1, "#ffa040")])
     layer[vo, :3] = vg[vo]
-    layer = glow_up(layer, 0.75, 0.40)
+    layer = glow_up(layer, 0.9, 0.22, power=1.4)
     L0 = to_img(layer)
 
     # ---- L1: trusses + bells
@@ -455,7 +455,7 @@ def build_tower():
     m = gb["A"]
     layer[m, :3] = im[m, :3]
     layer[m, 3] = 1
-    layer = glow_up(layer, 0.55, 0.55)
+    layer = glow_up(layer, 0.6, 0.4, power=1.5)
     ec, ea = embers(rng, 90, emb, 0.2)
     layer = over(layer, ec, ea * 0.9)
     layer[..., :3] *= 0.86

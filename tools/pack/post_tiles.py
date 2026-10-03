@@ -877,6 +877,21 @@ def lift_sheet(sheet, g, keep):
     return out
 
 
+def top_light(slot_arr, amount=(70, 32), x_wrap=False):
+    """Brighten the top 1-2 opaque pixel rows of every column (lit upper edge: platforms read in the dark)."""
+    out = slot_arr.copy()
+    h, w = out.shape[:2]
+    a = out[..., 3] > 0
+    for x in range(w):
+        col = np.nonzero(a[:, x])[0]
+        if len(col) == 0:
+            continue
+        for k, amt in enumerate(amount):
+            if k < len(col) and col[k] == col[0] + k:
+                out[col[k], x, :3] = np.clip(out[col[k], x, :3].astype(np.int32) + amt, 0, 255).astype(np.uint8)
+    return out
+
+
 def build_biome(biome, quiet=False):
     P = PAL[biome]
     cfg = dict(BIOME_CFG[biome])
@@ -975,7 +990,7 @@ def build_biome(biome, quiet=False):
                        rim=rim_for(P, ["wood", "iron"]) if biome != "tower" else None)
     pn = {}
     for nm in ("l", "m0", "m1", "m2", "r", "single"):
-        pn[nm] = A.add(outline(slot_of(pimg, "plat_" + nm, "platform"), ol), -PAD, -PAD)
+        pn[nm] = A.add(outline(top_light(slot_of(pimg, "plat_" + nm, "platform")), ol), -PAD, -PAD)
     atlas["platform"] = {"l": pn["l"], "m": [pn["m0"], pn["m1"], pn["m2"]], "r": pn["r"], "single": pn["single"]}
 
     # ---------------- spikes

@@ -138,6 +138,7 @@ def a_run():
     return out
 
 
+# (utility animations appended after the combat set)
 # ---------------------------------------------------------------------------
 # frame helpers for the combat poses
 
@@ -149,7 +150,7 @@ def torso(lean=0.0, head=0.0):
 
 
 def F(lean=0.0, a=None, hip=(0.0, 0.0), fn=None, ff=None, hn=None, hf=None, show=(), vel=(0.0, 0.0),
-      ground=0.0, head=0.0, **kw):
+      ground=0.0, head=0.0, free=False, **kw):
     aa = {"sh_n": 8, "el_n": 25, "ha_n": -10, "sh_f": -10, "el_f": 25, "ha_f": -10}
     aa.update(torso(lean, head))
     aa.update(a or {})
@@ -159,6 +160,12 @@ def F(lean=0.0, a=None, hip=(0.0, 0.0), fn=None, ff=None, hn=None, hf=None, show
         sp["hn"] = hn
     if hf is not None:
         sp["hf"] = hf
+    if free:
+        sp["ground"] = None
+        if fn is None:
+            del sp["fn"]
+        if ff is None:
+            del sp["ff"]
     sp.update(kw)
     return sp
 
@@ -438,6 +445,229 @@ def a_shield_parry():
           vel=(2.0, 0)),
         F(10, hip=(0.10, -0.12), fn=plant(0.38), ff=plant(-0.28, -15), hn=(0.42, 1.36, 180), hf=(-0.08, 1.0, 20), show=SHD),
         F(4, hip=(0.04, -0.1), fn=plant(0.28), ff=plant(-0.26), hn=(0.30, 1.36, 180), hf=(-0.1, 1.0, 20), show=SHD),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# AIR / EVASION
+
+OPEN = {"th_n": 18, "kn_n": -30, "an_n": 10, "th_f": -14, "kn_f": -40, "an_f": 10,
+        "sh_n": 55, "el_n": 30, "ha_n": -10, "sh_f": -45, "el_f": 30, "ha_f": -10}
+TUCK = {"th_n": 100, "kn_n": -128, "an_n": 25, "th_f": 84, "kn_f": -134, "an_f": 25,
+        "sh_n": 40, "el_n": 105, "ha_n": 0, "sh_f": 34, "el_f": 108, "ha_f": 0}
+
+
+def tuck_a(k, lean=0.0):
+    """Blend OPEN <-> TUCK (k 0..1) with a curling torso."""
+    a = common.lerp_pose(OPEN, TUCK, k)
+    a.update({"hips": -38 * k, "spine": -28 * k, "chest": -22 * k, "neck": 16 * k, "head": 10 * k})
+    return a
+
+
+@anim("jump", 12, phases=None)
+def a_jump():
+    return [
+        F(10, sc=(1.10, 0.88), hip=(0.02, -0.24), fn=plant(0.2), ff=plant(-0.18),
+          a={"sh_n": -32, "el_n": 30, "sh_f": -38, "el_f": 30}, vel=(0, 0)),
+        F(2, free=True, sc=(0.90, 1.14), hip=(0.0, 0.03), fn=(0.10, 0.17, -50), ff=(-0.12, 0.13, -55),
+          a={"sh_n": 55, "el_n": 35, "sh_f": 40, "el_f": 35}, vel=(0, 3.5)),
+        F(6, free=True, sc=(0.95, 1.06), hip=(0.0, 0.06), fn=(0.26, 0.50, 5), ff=(-0.16, 0.30, -35),
+          a={"sh_n": 70, "el_n": 45, "sh_f": -50, "el_f": 30}, vel=(0, 4.5)),
+        F(3, free=True, sc=(1.0, 1.0), hip=(0.0, 0.05), fn=(0.22, 0.40, 0), ff=(-0.14, 0.32, -12),
+          a={"sh_n": 40, "el_n": 30, "sh_f": -38, "el_f": 25}, vel=(0, 1.5)),
+    ]
+
+
+@anim("fall", 12, loop=True, pre=(0.0, -6.5))
+def a_fall():
+    out = []
+    n = 3
+    for i in range(n):
+        t = i / n
+        s = S(TAU * t)
+        out.append(F(4 + 2 * s, free=True, hip=(0.0, 0.04), fn=(0.10 + 0.03 * s, 0.14, -25), ff=(-0.14, 0.26 + 0.04 * s, -40),
+                     a={"sh_n": 78 + 8 * s, "el_n": 22, "ha_n": -10, "sh_f": 118 - 8 * s, "el_f": 18, "ha_f": -10},
+                     vel=(0.0, -6.5), wind=(0.0, 0.0)))
+    return out
+
+
+@anim("land", 14, phases=None)
+def a_land():
+    return [
+        F(22, sc=(1.16, 0.82), hip=(0.0, -0.30), fn=plant(0.26), ff=plant(-0.22),
+          a={"sh_n": 38, "el_n": 28, "sh_f": -34, "el_f": 26}, vel=(0, -1.5),
+          fx=[dust(0.55, 0.05, 1.3, 1.0), dust(-0.55, 0.05, 1.3, 1.0)]),
+        F(12, sc=(1.06, 0.94), hip=(0.0, -0.16), fn=plant(0.2), ff=plant(-0.2),
+          a={"sh_n": 20, "el_n": 28, "sh_f": -22, "el_f": 26}, vel=(0, 0.5),
+          fx=[dust(0.8, 0.07, 1.8, 1.6), dust(-0.8, 0.07, 1.8, 1.6)]),
+        F(4, sc=(1.0, 1.0), hip=(0.0, -0.07), fn=plant(0.14), ff=plant(-0.2)),
+    ]
+
+
+@anim("double_jump", 14, phases=None)
+def a_double_jump():
+    spec = [(0, 0.35), (-85, 0.9), (-170, 1.0), (-255, 1.0), (-330, 0.7), (-360, 0.0)]
+    out = []
+    for i, (ang, k) in enumerate(spec):
+        a = tuck_a(k)
+        sc = (0.94, 1.08) if i == 5 else ((1.06, 0.94) if i == 0 else (1.0, 1.0))
+        out.append(F(0, a=a, free=True, spin=(ang, "hips", (0.04, 0.10)), hip=(0.0, 0.14 if i else 0.04), sc=sc,
+                     vel=(1.0, 2.0 if i < 3 else -1.0)))
+    return out
+
+
+@anim("roll", 16, phases=None)
+def a_roll():
+    out = []
+    out.append(F(30, hip=(0.04, -0.28), fn=plant(0.26), ff=plant(-0.2), a={"sh_n": 50, "el_n": 40, "sh_f": 40, "el_f": 40},
+                 vel=(2.0, 0)))
+    for i, (ang, k) in enumerate([(-60, 0.8), (-125, 1.0), (-190, 1.0), (-255, 1.0), (-320, 1.0), (-385, 0.7)]):
+        a = tuck_a(k)
+        out.append(F(0, a=a, free=True, spin=(ang, "hips", (0.04, 0.0)), hip=(0.02, -0.30), vel=(4.0, 0)))
+    out.append(F(14, hip=(0.04, -0.2), fn=plant(0.28), ff=plant(-0.18), a={"sh_n": 30, "el_n": 40, "sh_f": -20, "el_f": 40},
+                 vel=(3.0, 0), fx=[dust(-0.3, 0.05, 1.3, 1.0)]))
+    return out
+
+
+@anim("ledge_climb", 14, phases=None)
+def a_ledge_climb():
+    return [
+        # hanging on the corner, knees up against the wall
+        F(14, free=True, hip=(0.04, -0.10), fn=(0.20, 0.45, -10), ff=(0.10, 0.30, -25),
+          hn=(0.30, 1.28, 80), hf=(0.34, 1.30, 80), a={}, vel=(0, 0)),
+        # pressing up: arms locked down on the ledge top, torso over the edge
+        F(26, free=True, hip=(0.12, -0.02), fn=(0.12, 0.28, -20), ff=(-0.04, 0.12, -10),
+          hn=(0.46, 0.52, 0), hf=(0.52, 0.52, 0), vel=(0, 1.5)),
+        # first foot up on the ledge, hands on the knee
+        F(38, hip=(0.20, -0.30), fn=plant(0.44, 0, 0.17), ff=plant(-0.06, 0, 0.0), ground=None,
+          hn=(0.50, 0.35, 0), hf=(0.34, 0.42, 0), vel=(0.5, 0.5)),
+        F(30, hip=(0.12, -0.28), fn=plant(0.40), ff=plant(-0.02), hn=(0.42, 0.50, 0), hf=(0.30, 0.55, 0), vel=(0.5, 0.5)),
+        F(16, hip=(0.04, -0.14), fn=plant(0.26), ff=plant(-0.12), vel=(0.5, 0.2)),
+        F(4, hip=(0.0, -0.06), fn=plant(0.14), ff=plant(-0.2)),
+    ]
+
+
+@anim("hurt", 12, phases=None)
+def a_hurt():
+    return [
+        F(-24, hip=(-0.10, -0.06), fn=plant(0.18, 10), ff=plant(-0.30, -20), sc=(0.94, 1.04),
+          a={"sh_n": 52, "el_n": 12, "sh_f": 38, "el_f": 12, "head": -14}, vel=(-3.5, 0.5), head=-8),
+        F(-30, hip=(-0.16, -0.04), fn=plant(0.2, 12, 0.05), ff=plant(-0.34, -30), ground=0.0,
+          a={"sh_n": 66, "el_n": 14, "sh_f": 50, "el_f": 14}, vel=(-3.0, 0.2), head=-10),
+        F(-12, hip=(-0.12, -0.14), fn=plant(0.14), ff=plant(-0.30, -10),
+          a={"sh_n": 30, "el_n": 30, "sh_f": 20, "el_f": 30}, vel=(-1.2, 0), head=-4),
+    ]
+
+
+@anim("death", 10, phases=None, dim_from=8, wind=(0.0, 0.0))
+def a_death():
+    kneel = {"th_n": 6, "kn_n": -96, "an_n": -25, "th_f": 10, "kn_f": -92, "an_f": -25}
+    prone = {"th_n": -86, "kn_n": -4, "an_n": 0, "th_f": -92, "kn_f": -8, "an_f": 0}
+    return [
+        F(-24, hip=(-0.10, -0.06), fn=plant(0.18, 10), ff=plant(-0.30, -20), sc=(0.94, 1.04),
+          a={"sh_n": 52, "el_n": 12, "sh_f": 38, "el_f": 12}, vel=(-3.5, 0.5), head=-8),
+        F(-32, hip=(-0.22, -0.12), fn=plant(0.02, 14, 0.06), ff=plant(-0.40, -30), ground=0.0,
+          a={"sh_n": 70, "el_n": 14, "sh_f": 56, "el_f": 14}, vel=(-3.5, 0.2), head=-10),
+        F(-6, hip=(-0.24, -0.34), fn=plant(0.04), ff=plant(-0.42, -50),
+          a={"sh_n": 22, "el_n": 26, "sh_f": 12, "el_f": 28}, vel=(-1.5, -0.5), head=-6),
+        F(10, free=True, hip=(-0.18, -0.44), a=dict(kneel, **{"sh_n": 14, "el_n": 22, "sh_f": 4, "el_f": 26}),
+          vel=(-0.5, -1.5), head=-22),
+        F(36, free=True, hip=(-0.10, -0.46), a=dict(kneel, **{"sh_n": 36, "el_n": 24, "sh_f": 28, "el_f": 24}),
+          vel=(1.5, -2.0), head=-10),
+        F(66, free=True, hip=(0.0, -0.56), a=dict(common.lerp_pose(kneel, prone, 0.45), **{"sh_n": 80, "el_n": 14, "sh_f": 70, "el_f": 14}),
+          vel=(2.0, -3.0), head=-4),
+        F(90, free=True, hip=(0.10, -0.76), sc=(1.04, 0.96),
+          a=dict(prone, **{"sh_n": 150, "el_n": 8, "sh_f": 160, "el_f": 8}), vel=(1.0, -1.0), head=6,
+          fx=[dust(-0.7, 0.04, 1.4, 1.0), dust(0.9, 0.04, 1.4, 1.0)]),
+        F(88, free=True, hip=(0.08, -0.72), a=dict(prone, **{"sh_n": 150, "el_n": 10, "sh_f": 158, "el_f": 10}),
+          vel=(0.0, 0.5), head=6),
+        F(90, free=True, hip=(0.08, -0.76), a=dict(prone, **{"sh_n": 158, "el_n": 8, "sh_f": 166, "el_f": 8}),
+          vel=(0, 0), head=8),
+        F(90, free=True, hip=(0.08, -0.77), a=dict(prone, **{"sh_n": 162, "el_n": 6, "sh_f": 170, "el_f": 6}),
+          vel=(0, 0), head=8),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# SLAM / SKILLS / HEAL
+
+
+@anim("slam_dive", 14, loop=True, pre=(0.0, -9.0))
+def a_slam_dive():
+    out = []
+    g = grip("sword", -0.06)
+    for i in range(2):
+        j = 0.5 * i
+        out.append(F(12, free=True, sc=(0.92, 1.10), hip=(0.02, 0.06), fn=(0.0, 0.22 + 0.03 * i, -35), ff=(-0.18, 0.26, -45),
+                     hn=(0.32 + 0.02 * i, 1.74, -88), hf=g, show=SWORD, vel=(0.0, -9.0), head=-4))
+    return out
+
+
+@anim("slam_land", 14, phases=(1, 2, 2))
+def a_slam_land():
+    g = grip("sword", -0.06)
+    return [
+        F(30, sc=(1.12, 0.88), hip=(0.12, -0.38), fn=plant(0.34), ff=plant(-0.30, -20), hn=(0.54, 0.84, -90), hf=g,
+          show=SWORD, vel=(0, -2), fx=[dust(0.0, 0.05, 1.4, 1.0), dust(1.1, 0.05, 1.4, 1.0)]),
+        F(32, sc=(1.14, 0.86), hip=(0.14, -0.40), fn=plant(0.36), ff=plant(-0.32, -25), hn=(0.56, 0.82, -90), hf=g,
+          show=SWORD, vel=(0, 0.5),
+          fx=[dust(-0.15, 0.06, 2.0, 1.4), dust(1.3, 0.06, 2.0, 1.4), ("obj", "puff", (0.56, -0.2, 0.06), (2.2, 2.2, 1.5), 0),
+              ("obj", "spark", (0.62, -0.3, 0.2), (1.5, 1, 1.5), 0)]),
+        F(26, sc=(1.08, 0.92), hip=(0.12, -0.34), fn=plant(0.34), ff=plant(-0.30, -20), hn=(0.54, 0.86, -90), hf=g,
+          show=SWORD, vel=(0, 0),
+          fx=[dust(-0.4, 0.08, 2.4, 1.8), dust(1.5, 0.08, 2.4, 1.8), ("obj", "puff", (0.56, -0.2, 0.06), (3.6, 3.6, 1.5), 0)]),
+        F(18, hip=(0.08, -0.22), fn=plant(0.28), ff=plant(-0.26, -10), hn=(0.46, 1.0, -70), hf=g, show=SWORD,
+          fx=[dust(-0.7, 0.1, 2.0, 2.0), dust(1.7, 0.1, 2.0, 2.0)]),
+        F(6, hip=(0.04, -0.1), fn=plant(0.2), ff=plant(-0.22), hn=(0.36, 1.1, -30), hf=(0.0, 1.0, 0), show=SWORD),
+    ]
+
+
+@anim("heal", 11, phases=None)
+def a_heal():
+    FL = ["flask"]
+    sp = []
+    sp.append(F(2, hip=(0.0, -0.06), hn=(0.10, 0.88, 10), show=FL))
+    sp.append(F(0, hip=(0.0, -0.05), hn=(0.30, 1.16, 60), show=FL))
+    sp.append(F(-3, hip=(-0.01, -0.05), hn=(0.22, 1.50, 125), show=FL, head=-8))
+    sp.append(F(-6, hip=(-0.02, -0.05), hn=(0.17, 1.56, 150), show=FL, head=-16))
+    sp.append(F(-6, hip=(-0.02, -0.06), hn=(0.17, 1.58, 156), show=FL, head=-18))
+    sp.append(F(-3, hip=(-0.01, -0.05), hn=(0.26, 1.28, 110), show=FL, head=-6,
+                fx=[("obj", "heal0", (0.15, -0.3, 1.9), (1, 1, 1), 0), ("obj", "heal1", (-0.3, -0.3, 1.5), (1, 1, 1), 0)]))
+    sp.append(F(-5, hip=(0.0, -0.03), hn=(0.24, 1.0, 60), show=FL, head=-2,
+                a={"sh_f": -30, "el_f": 10},
+                fx=[("obj", "heal0", (0.1, -0.3, 2.1), (1.2, 1, 1.2), 0), ("obj", "heal1", (-0.4, -0.3, 1.8), (1.2, 1, 1.2), 0),
+                    ("obj", "heal2", (0.4, -0.3, 1.6), (1, 1, 1), 0), ("obj", "heal3", (-0.1, -0.3, 1.2), (1, 1, 1), 0)]))
+    sp.append(F(0, hip=(0.0, -0.05),
+                fx=[("obj", "heal0", (0.05, -0.3, 2.4), (0.8, 1, 0.8), 0), ("obj", "heal2", (0.45, -0.3, 2.0), (0.8, 1, 0.8), 0),
+                    ("obj", "heal3", (-0.2, -0.3, 1.7), (0.8, 1, 0.8), 0)]))
+    return sp
+
+
+@anim("throw", 14, phases=(2, 1, 3))
+def a_throw():
+    GR = ["grenade"]
+    return [
+        F(-8, hip=(-0.05, -0.08), fn=plant(0.22), ff=plant(-0.26), hn=(-0.28, 1.05, 20), hf=(0.34, 1.3, 40), show=GR),
+        F(-15, hip=(-0.09, -0.06), fn=plant(0.18, -8), ff=plant(-0.28, -15), hn=(-0.32, 1.74, 100), hf=(0.42, 1.4, 50), show=GR),
+        F(14, hip=(0.12, -0.10), fn=plant(0.42), ff=plant(-0.28, -25), hn=(0.54, 1.66, 40), hf=(-0.12, 1.1, 0),
+          vel=(2.5, 0), fx=[("trail", 0, "sword", 0, 0.0)] if False else []),
+        F(20, hip=(0.14, -0.14), fn=plant(0.44), ff=plant(-0.28, -30), hn=(0.50, 1.0, -40), hf=(-0.12, 1.2, 0), vel=(1.5, 0)),
+        F(10, hip=(0.08, -0.10), fn=plant(0.34), ff=plant(-0.26, -10), hn=(0.34, 0.86, -20)),
+        F(3, hip=(0.03, -0.07), fn=plant(0.24), ff=plant(-0.22)),
+    ]
+
+
+@anim("deploy", 12, phases=(2, 2, 2))
+def a_deploy():
+    return [
+        F(16, hip=(0.04, -0.22), fn=plant(0.32), ff=plant(-0.2), hn=(0.38, 0.85, -20), hf=(0.1, 0.8, 0)),
+        F(32, hip=(0.08, -0.44), fn=plant(0.42), ff=(-0.38, 0.12, -70), ground=None, hn=(0.5, 0.52, -40), hf=(0.18, 0.5, 0)),
+        F(40, hip=(0.12, -0.46), fn=plant(0.44), ff=(-0.40, 0.12, -70), ground=None, hn=(0.66, 0.16, -80), hf=(0.22, 0.5, 0),
+          fx=[("obj", "puff", (0.7, -0.2, 0.08), (1.4, 1.4, 1.5), 0)]),
+        F(38, hip=(0.12, -0.46), fn=plant(0.44), ff=(-0.40, 0.12, -70), ground=None, hn=(0.66, 0.18, -80), hf=(0.22, 0.5, 0),
+          fx=[("obj", "puff", (0.7, -0.2, 0.08), (2.4, 2.4, 1.5), 0), ("obj", "spark", (0.78, -0.3, 0.3), (1.2, 1, 1.2), 0)]),
+        F(22, hip=(0.08, -0.28), fn=plant(0.36), ff=plant(-0.2, -20), hn=(0.4, 0.72, -20), hf=(0.1, 0.8, 0)),
+        F(6, hip=(0.03, -0.1), fn=plant(0.2), ff=plant(-0.2)),
     ]
 
 

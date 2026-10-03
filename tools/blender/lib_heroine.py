@@ -775,6 +775,24 @@ def solve_frame(h, spec):
         a["cog"] = spec["cog"]
     for k, v in spec.get("off", {}).items():
         off[k] = v
+    if "spin" in spec:
+        # whole-body rotation by `ang` about a world point that stays put: (ang, joint-or-(x,z)[, (ox, oz)])
+        ang, piv = spec["spin"][0], spec["spin"][1]
+        po = spec["spin"][2] if len(spec["spin"]) > 2 else (0.0, 0.0)
+        _pose(rig, a, off)
+        if isinstance(piv, str):
+            P = wpos(rig, piv)
+            px, pz = P.x + po[0], P.z + po[1]
+        else:
+            px, pz = piv
+        C = wpos(rig, "cog")
+        dx, dz = px - C.x, pz - C.z
+        th = ang * D2R
+        rx = dx * math.cos(th) - dz * math.sin(th)
+        rz = dx * math.sin(th) + dz * math.cos(th)
+        c0 = off.get("cog", (0.0, 0.0, 0.0))
+        off["cog"] = (c0[0] + dx - rx, 0.0, c0[2] + dz - rz)
+        a["cog"] = ang
     _pose(rig, a, off)
     # --- legs IK
     def legs():

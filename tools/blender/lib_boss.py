@@ -607,6 +607,7 @@ def build_matron(q=1, cast=False):
         J("th_" + s_, "hips", (0, y, 1.86))
         J("kn_" + s_, "th_" + s_, (0, y, 1.00))
         J("an_" + s_, "kn_" + s_, (0, y, 0.17))
+    J("skirt", "hips", (0, 0, 2.0))
     J("tab", "hips", (0.33, 0, 1.9))
     J("tab1", "tab", (0.35, 0, 1.24))
     A = lambda ob, j: attach_world(r, ob, j)  # noqa: E731
@@ -630,10 +631,10 @@ def build_matron(q=1, cast=False):
     A(box("buckle", (0.07, 0.17, 0.15), M.bronze, loc=(0.38, 0, 2.12), bevel=0.02), "hips")
     sk1 = lathe("skirt1", [(0.4, 2.08), (0.48, 1.84), (0.53, 1.62)], M.iron, segs=S(18), a0=40, a1=320, sy=1.08)
     solidify(sk1, 0.04)
-    A(sk1, "hips")
+    A(sk1, "skirt")
     sk4 = lathe("skirt4", [(0.525, 1.66), (0.545, 1.62), (0.525, 1.58)], M.bronze, segs=S(18), a0=40, a1=320, sy=1.08)
     solidify(sk4, 0.04)
-    A(sk4, "hips")
+    A(sk4, "skirt")
     # cloth skirt: dark red, tattered, open at the front
     NCs = 22
     hem_s = tattered(NCs, 0.3, pattern=[0.0, 0.7, 0.2, 1.0, 0.1, 0.5, 0.9, 0.15, 0.6, 0.05, 0.8, 0.3])
@@ -647,7 +648,7 @@ def build_matron(q=1, cast=False):
             z = 1.78 - 0.96 * v - (hem_s[c] if k == 6 else 0)
             row.append((rad * math.cos(a) - 0.04, rad * math.sin(a) * 1.1, z))
         rows.append(row)
-    A(grid_sheet("skirtc", rows, M.red, 0.035), "hips")
+    A(grid_sheet("skirtc", rows, M.red, 0.035), "skirt")
     # front tabard (2 rigid panels)
     def panel(name, x0, z0, z1, w0, w1, jag=None, mat=M.red):
         rows = []

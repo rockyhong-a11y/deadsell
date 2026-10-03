@@ -1,0 +1,104 @@
+{
+ "image": "matron.png",
+ "frameW": 288,
+ "frameH": 224,
+ "anchor": [
+  144,
+  212
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 8,
+   "fps": 7,
+   "loop": true
+  },
+  "walk": {
+   "row": 1,
+   "frames": 10,
+   "fps": 9,
+   "loop": true
+  },
+  "slam": {
+   "row": 2,
+   "frames": 14,
+   "fps": 12,
+   "loop": false,
+   "windup": 7,
+   "active": 2,
+   "recover": 5
+  },
+  "sweep": {
+   "row": 3,
+   "frames": 13,
+   "fps": 12,
+   "loop": false,
+   "windup": 6,
+   "active": 2,
+   "recover": 5
+  },
+  "charge_windup": {
+   "row": 4,
+   "frames": 8,
+   "fps": 10,
+   "loop": false
+  },
+  "charge": {
+   "row": 5,
+   "frames": 8,
+   "fps": 16,
+   "loop": true
+  },
+  "crash": {
+   "row": 6,
+   "frames": 12,
+   "fps": 8,
+   "loop": false
+  },
+  "leap": {
+   "row": 7,
+   "frames": 8,
+   "fps": 14,
+   "loop": false
+  },
+  "leap_fall": {
+   "row": 8,
+   "frames": 4,
+   "fps": 10,
+   "loop": true
+  },
+  "leap_land": {
+   "row": 9,
+   "frames": 10,
+   "fps": 12,
+   "loop": false,
+   "windup": 2,
+   "active": 2,
+   "recover": 6
+  },
+  "roar": {
+   "row": 10,
+   "frames": 12,
+   "fps": 8,
+   "loop": false
+  },
+  "summon": {
+   "row": 11,
+   "frames": 12,
+   "fps": 8,
+   "loop": false
+  },
+  "hurt": {
+   "row": 12,
+   "frames": 4,
+   "fps": 14,
+   "loop": false
+  },
+  "death": {
+   "row": 13,
+   "frames": 18,
+   "fps": 6,
+   "loop": false
+  }
+ }
+}

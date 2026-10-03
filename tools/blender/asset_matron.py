@@ -70,6 +70,18 @@ def bell_tip(jx, jz, a):
 CLOTH = ("braid", "braid1", "braid2", "braid3", "braid4", "cape", "cape1", "cape2", "cape3", "tab", "tab1")
 
 
+def cloth_scales(p, ang, off):
+    """Shorten the skirt / tabard / cape when the hips drop (deep lunges, kneeling) so the hems
+    never sink below the floor.  Not applied once she is tipping over (hips pitched forward)."""
+    oz = off.get("hips", (0, 0, 0))[2]
+    if abs(ang.get("hips", 0.0)) > 30:
+        return {}
+    sk = max(0.5, min(1.0, (2.0 + oz - 0.04) / 1.5))
+    tb = max(0.5, min(1.0, (1.9 + oz - 0.04) / 1.35))
+    cp = max(0.6, min(1.0, (3.1 + oz - 0.04) / 2.6))
+    return {"skirt": (1, 1, sk), "tab": (1, 1, tb), "cape": (1, 1, cp)}
+
+
 def resolve(p):
     """p: flat pose dict.  Returns (ang, off, scales, twists, W, bell(x,z,a))."""
     spec, off, tw = {}, {}, {}
@@ -110,7 +122,7 @@ def resolve(p):
         a = (ang.get("sh_" + s, 0.0) + 180.0) % 360.0 - 180.0
         ang["pa_" + s] = max(-45.0, min(55.0, 0.35 * a))
     bx, bz, ba = W["bell"]
-    return ang, off, {}, tw, W, (bx, bz, ba)
+    return ang, off, cloth_scales(p, ang, off), tw, W, (bx, bz, ba)
 
 
 def lerp(a, b, t):
@@ -296,6 +308,8 @@ def make_smear(name, fn, n, i0, i1, inner_r=0.25, steps=10, mat=None):
         ox, oz = rot(ba, 0.0, -1.1)
         outer.append((bx + ox * 1.0, bz + oz * 1.0))
         inner.append((mx, mz))
+    inner = [(x, max(0.12, z)) for x, z in inner]
+    outer = [(x, max(0.12, z)) for x, z in outer]
     return smear_mesh(name, inner, outer, mat or MT.smear)
 
 
@@ -318,7 +332,7 @@ def make_dust(name, x, scale=1.0, seed=0, y=-0.85):
     return join(parts, name)
 
 
-def make_stars(name, cx, cz, phase, n=3, rx=0.62, rz=0.12, s=0.17):
+def make_stars(name, cx, cz, phase, n=3, rx=0.7, rz=0.14, s=0.25):
     """Ring of 4-point sparkles orbiting (cx, cz) -- the 'dizzy' marker."""
     parts = []
     for k in range(n):
@@ -563,19 +577,19 @@ def _sweep_keys():
         "sh_f@": -30, "el_f": 30, "far_grip": (0.05, -0.16, 0.6)})
     c2 = merge(c1, feet(-0.9, 0.9), cloth(braid=(-34, -8, -2, 0, 0), cape=(2, 3, 4, 4)), {
         "off_hips": O(-0.3, -0.52), "hips": 6, "spine": 6, "chest": 14, "neck": 0, "head": 2,
-        "sh_n@": -100, "el_n": 8, "ca": -104, "ba": -104, "far_grip": (0.05, -0.15, 1.0)})
+        "sh_n@": -92, "el_n": 8, "ca": -94, "ba": -92, "far_grip": (0.05, -0.15, 1.0)})
     c3 = merge(c2, {"off_hips": O(-0.36, -0.56), "chest": 20, "spine": 8, "hips": 8,
-                    "sh_n@": -112, "el_n": 6, "ca": -116, "ba": -116})
+                    "sh_n@": -98, "el_n": 6, "ca": -100, "ba": -98})
     mid = merge(c3, cloth(braid=(-55, -30, -20, -15, -10), cape=(-20, -28, -34, -38)), feet(-0.8, 1.0), {
-        "off_hips": O(0.1, -0.66), "hips": -8, "spine": -8, "chest": -10, "head": 6,
-        "sh_n@": 12, "el_n": 6, "ca": 22, "ba": 24})
+        "off_hips": O(0.12, -0.7), "hips": -8, "spine": -8, "chest": -12, "head": 6,
+        "sh_n@": 38, "el_n": 6, "ca": 52, "ba": 54})
     ext = merge(mid, cloth(braid=(-62, -36, -24, -18, -12), cape=(-28, -36, -42, -46)), feet(-0.7, 1.12), {
-        "off_hips": O(0.55, -0.78), "hips": -12, "spine": -14, "chest": -22, "neck": 8, "head": 8,
-        "sh_n@": 64, "el_n": -4, "ca": 76, "ba": 80})
+        "off_hips": O(0.3, -0.78), "hips": -12, "spine": -14, "chest": -22, "neck": 8, "head": 8,
+        "sh_n@": 60, "el_n": -2, "ca": 74, "ba": 78})
     ov = merge(ext, cloth(braid=(-30, -10, -4, -2, 0), cape=(-14, -20, -26, -30)), {
-        "off_hips": O(0.62, -0.8), "hips": -14, "chest": -26, "sh_n@": 72, "ca": 86, "ba": 90,
-        "bw": 1.0, "bpx": 3.15, "bpz": gz(90)})
-    r1 = merge(ov, {"off_hips": O(0.5, -0.66), "chest": -20, "ba": 88, "bpx": 2.8, "bpz": gz(88),
+        "off_hips": O(0.4, -0.8), "hips": -14, "chest": -26, "sh_n@": 66, "ca": 84, "ba": 88,
+        "bw": 1.0, "bpx": 3.0, "bpz": gz(88)})
+    r1 = merge(ov, {"off_hips": O(0.36, -0.66), "chest": -20, "ba": 88, "bpx": 2.7, "bpz": gz(88),
                     "far_grip": None, "sh_n@": 60, "sh_f@": 30, "el_f": 30})
     r2 = merge(r1, feet(-0.5, 1.0), {"off_hips": O(0.36, -0.46), "hips": -8, "spine": -8, "chest": -14,
                                       "ba": 70, "bpx": 2.3, "bpz": gz(70), "sh_n@": 40, "head": 12})
@@ -704,7 +718,7 @@ def _crash_keys():
         "off_hips": O(-0.28, -0.46), "hips": -2, "spine": -4, "chest": -6, "neck": 14, "head": 20, "jaw": 0,
         "sh_n@": 12, "el_n": 16, "sh_f@": 8, "el_f": 26})
     slump = merge(IDLE, feet(-0.7, 0.16), cloth(braid=(-30, -10, -4, -2, 0), cape=(-2, -3, -4, -4)), {
-        "off_hips": O(-0.1, -0.56), "hips": -10, "spine": -12, "chest": -26, "neck": 22, "head": 34, "jaw": 0,
+        "off_hips": O(-0.05, -0.72), "hips": -14, "spine": -16, "chest": -34, "neck": 24, "head": 36, "jaw": 0,
         "tw_head": -10, "sh_n@": 24, "el_n": 22, "ha_n": -10, "sh_f@": 22, "el_f": 26, "bpx": 1.0})
     return [(f(0), hit), (f(1), rec, "o"), (f(2), stag, "s"), (f(3), buck, "s"), (f(4), slump, "s"),
             (f(11), slump, "s")]
@@ -749,8 +763,8 @@ def _fall_pose():
     return merge(IDLE, feet(-0.28, 0.34, 0.6, 0.46, -14, -8),
                  cloth(braid=(-86, -62, -52, -46, -42), cape=(-26, -44, -58, -70)), {
         "off_hips": O(0.02, 0.05), "hips": -3, "spine": 4, "chest": 6, "neck": 0, "head": -4,
-        "sh_n@": -168, "el_n": 12, "ha_n": -10, "sh_f@": -166, "el_f": 16,
-        "ca": -172, "cl": 1.0, "ba": -174, "bw": 0.0, "far_grip": (0.05, -0.14, 1.0)})
+        "sh_n@": -150, "el_n": 16, "ha_n": -10, "sh_f@": -148, "el_f": 20,
+        "ca": -128, "cl": 1.0, "ba": -124, "bw": 0.0, "far_grip": (0.05, -0.14, 1.0)})
 
 
 def _leap_keys():
@@ -764,7 +778,7 @@ def _leap_keys():
     c2 = merge(c1, {"off_hips": O(-0.14, -0.86), "chest": -26, "sh_n@": -80, "ca": -86, "ba": -88, "hips": -10})
     launch = merge(fall, feet(-0.12, 0.1, 0.24, 0.3, -20, -8), {
         "off_hips": O(0.1, -0.04), "hips": -2, "spine": 0, "chest": 0, "head": 2,
-        "sh_n@": -140, "el_n": 12, "sh_f@": -136, "el_f": 18, "ca": -142, "ba": -144,
+        "sh_n@": -128, "el_n": 14, "sh_f@": -126, "el_f": 18, "ca": -118, "ba": -116,
         "far_grip": (0.05, -0.14, 0.6)})
     return [(f(0), c0), (f(1), c1, "s"), (f(2), c2, "o"), (f(3), c2, "s"), (f(4), launch, "i"),
             (f(5), fall, "o"), (f(7), fall, "s")]
@@ -985,9 +999,9 @@ def _death_keys():
         "sh_n@": 100, "el_n": 4, "sh_f@": 92, "el_f": 6, "bpx": 3.1, "bpz": gz(88), "ba": 88, "ca": 82,
         "ik_th_n": (-0.66, 0.5, -72), "ik_th_f": (-0.42, 0.52, -72)})
     t4 = merge(t3, cloth(braid=(-82, -80, -80, -80, -80), cape=(-86, -88, -90, -90), tab=(-84, -88)), {
-        "off_hips": O(1.04, -1.46), "hips": -88, "spine": -2, "chest": -2, "head": 10, "neck": 2, "jaw": 4,
+        "off_hips": O(1.04, -1.46), "hips": -88, "spine": -2, "chest": -2, "head": 34, "neck": 12, "jaw": 4,
         "sh_n@": 112, "sh_f@": 104})
-    t5 = merge(t4, {"off_hips": O(1.06, -1.5), "hips": -92, "head": 6})
+    t5 = merge(t4, {"off_hips": O(1.06, -1.5), "hips": -92, "head": 38})
     return [(f(0), d0), (f(2), d2, "o"), (f(4), d4, "s"), (f(6), k1, "s"), (f(8), k2, "s"), (f(10), k3, "s"),
             (f(11), t1, "i"), (f(12), t2, "i"), (f(13), t3, "i"), (f(14), t4, "i"), (f(15), t5, "o"),
             (f(17), t5, "s")]
@@ -1040,7 +1054,7 @@ def setup_fx_for(name, a):
         for k in range(2):
             fx.add("dust_cw_%d" % k, make_dust("dust_cw_%d" % k, fn(6, n)[4]["an_n"][0] - 0.35, 0.5 + 0.2 * k, 4 + k))
     elif name == "crash":
-        wx = fn(0, n)[4]["chest"][0] + 0.75
+        wx = fn(0, n)[4]["chest"][0] + 1.0
         fx.add("dust_crash_0", make_dust("dust_crash_0", wx, 0.55, 6, y=-0.95))
         fx.add("dust_crash_1", make_dust("dust_crash_1", wx + 0.05, 0.85, 7, y=-0.95))
         for i in range(3, n):

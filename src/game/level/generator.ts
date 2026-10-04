@@ -385,6 +385,7 @@ export function verifyLayout(L: Layout): boolean {
 export const MARKER_SPAWN: Record<string, SpawnType> = {
   E: 'enemy', F: 'flyer', T: 'chest', S: 'altar', I: 'pedestal', M: 'merchant', A: 'alchemist', X: 'exit', B: 'boss', N: 'miniboss',
   L: 'torch', D: 'deco', $: 'shop', H: 'fountain',
+  Z: 'seamstress', C: 'corpse_shop', G: 'golem_pile',
 };
 
 /** Assemble the tile map + spawn list of a layout. */

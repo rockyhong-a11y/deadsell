@@ -16,6 +16,12 @@ export interface SewPlan {
   surplus: number;
 }
 
+/** The outcome of a sew: the plan that was carried out and, when it made the body whole, the loop that was cleared. */
+export interface SewResult {
+  plan: SewPlan;
+  cleared: LoopInfo | null;
+}
+
 /** A loop that was just cleared: its number and how many runs it took. */
 export interface LoopInfo {
   loop: number;
@@ -43,7 +49,7 @@ export function completeLoop(save: SaveData): LoopInfo {
  * Sew every carried piece into the body. A sew that completes the body clears the loop (`cleared`) and the surplus is lost.
  * Changes `run` and `save`; the caller persists the save.
  */
-export function sewPieces(run: RunState, save: SaveData): { plan: SewPlan; cleared: LoopInfo | null } {
+export function sewPieces(run: RunState, save: SaveData): SewResult {
   const plan = sewPlan(run.pieces, save.body);
   if (plan.n <= 0) return { plan, cleared: null };
   run.pieces = plan.completes ? 0 : run.pieces - plan.n;

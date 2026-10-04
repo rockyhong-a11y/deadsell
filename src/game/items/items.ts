@@ -1,7 +1,7 @@
 import type { Rng } from '../../engine/rng';
 import type { ItemDef, ItemId, ItemInstance, AffixId } from './types';
 import { WEAPONS, type MeleeWeapon } from '../player/weapons';
-import { AFFIX, AFFIX_ROLL, TIER_DMG } from '../rules';
+import { AFFIX, AFFIX_ROLL, TIER_DMG, loopPriceMul } from '../rules';
 
 /**
  * Item catalogue + rolling. OWNER: player agent.
@@ -88,4 +88,12 @@ export function itemLines(inst: ItemInstance): string[] {
 export function itemPrice(inst: ItemInstance): number {
   const base = ITEMS[inst.id].slot === 'skill' ? 100 : 80;
   return base + 60 * (inst.tier - 1) + (inst.affix ? 40 : 0);
+}
+
+/** 시체 상점 base price (pieces, loop 1) of each unique item (docs/CONTENT3.md §5). */
+export const UNIQUE_PRICE: Partial<Record<ItemId, number>> = {};
+
+/** What Selma asks for a unique item in the given loop: its base price times the loop multiplier, rounded. */
+export function uniquePrice(id: ItemId, loop: number): number {
+  return Math.round((UNIQUE_PRICE[id] ?? 20) * loopPriceMul(loop));
 }

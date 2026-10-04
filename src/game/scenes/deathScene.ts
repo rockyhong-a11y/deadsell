@@ -1,6 +1,6 @@
 import type { Game, Scene } from '../game';
 import type { RunState } from '../run';
-import { COL, SZ, button, formatTime, icon, pulse, text } from '../ui/draw';
+import { COL, SZ, button, formatTime, icon, pieceIcon, pulse, text } from '../ui/draw';
 import { Embers, gradientBg, vignette } from '../ui/backdrop';
 import type { NavKey } from '../../engine/gamepad';
 
@@ -75,11 +75,12 @@ export class DeathScene implements Scene {
     c.fillRect(Math.round(cx - 90 * k), Math.round(H * 0.2 + 30), Math.round(180 * k), 1);
 
     // stat card, rows appear one after another
-    const rows: { label: string; value: string; color?: string; cells?: boolean }[] = [
+    const rows: { label: string; value: string; color?: string; cells?: boolean; pieces?: boolean }[] = [
       { label: '도달한 구역', value: run.level.name },
       { label: '생존 시간', value: formatTime(run.time) },
       { label: '처치한 적', value: String(run.kills) },
       { label: '잃어버린 셀', value: String(run.cells), color: run.cells > 0 ? COL.cell : COL.dim, cells: true },
+      { label: '잃어버린 시체 조각', value: String(run.pieces), color: run.pieces > 0 ? COL.bone : COL.dim, pieces: true },
     ];
     const rw = 230;
     const ry0 = Math.round(H * 0.34);
@@ -91,11 +92,18 @@ export class DeathScene implements Scene {
       text(c, r.label, cx - rw / 2, y, { color: COL.dim });
       text(c, r.value, cx + rw / 2, y, { size: SZ.m, bold: true, align: 'right', color: r.color ?? COL.text });
       if (r.cells) icon(g.assets, c, 'cells', cx + rw / 2 - 22 - r.value.length * 7, y, 16);
+      if (r.pieces) pieceIcon(g.assets, c, cx + rw / 2 - 22 - r.value.length * 7, y, 16);
       c.fillStyle = 'rgba(141,155,184,0.25)';
       c.fillRect(cx - rw / 2, y + 12, rw, 1);
     });
     c.globalAlpha = Math.max(0, Math.min(1, (t - 1.3) / 0.4));
-    if (run.cells > 0) text(c, '※ 쓰지 않은 셀은 사라졌습니다. 통로의 연금술사에게 맡기세요.', cx, ry0 + 4 * 28 + 6, { align: 'center', color: COL.amber });
+    // one hint line per kind of loss (both when both apply)
+    let hy = ry0 + rows.length * 28 + 4;
+    if (run.cells > 0) {
+      text(c, '※ 쓰지 않은 셀은 사라졌습니다. 쉼터의 연금술사에게 맡기세요.', cx, hy, { align: 'center', color: COL.amber });
+      hy += 16;
+    }
+    if (run.pieces > 0) text(c, '※ 꿰매지 않은 시체 조각은 사라졌습니다. 쉼터의 재봉사 셀마에게 맡기세요.', cx, hy, { align: 'center', color: COL.bone });
     c.globalAlpha = 1;
 
     if (t > 1) {

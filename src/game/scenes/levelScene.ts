@@ -4,6 +4,7 @@ import { World } from '../world';
 import { buildLevel, populateLevel } from '../level/build';
 import { LevelRenderer } from '../level/render';
 import { Player } from '../player/player';
+import { Golem } from '../allies/golem';
 import { LevelUI } from '../ui/levelUI';
 import { DEBUG } from '../../engine/config';
 import type { Actor } from '../entity';
@@ -29,6 +30,13 @@ export class LevelScene implements Scene {
     const p = new Player(level.playerStart.x, level.playerStart.y);
     w.player = p;
     w.spawn(p);
+    // the rag golem follows her through the levels of the run (healed in every 쉼터)
+    if (run.golem) {
+      if (spec.kind === 'passage') run.golem.hp = run.golem.maxHp;
+      const g = new Golem(p.x - 40, p.y, run.golem);
+      g.facing = p.facing;
+      w.spawn(g);
+    }
     populateLevel(w, level);
     w.camera.snap(p.x, p.y - 20);
     this.renderer = new LevelRenderer(w);

@@ -14,6 +14,8 @@ import { LevelScene } from './scenes/levelScene';
 import { TitleScene } from './scenes/titleScene';
 import { DeathScene } from './scenes/deathScene';
 import { VictoryScene } from './scenes/victoryScene';
+import { LoopClearScene } from './scenes/loopClearScene';
+import { sewPieces, type LoopInfo } from './meta/body';
 import { applyRunStart } from './meta/progression';
 
 export interface Scene {
@@ -124,6 +126,7 @@ export class Game {
     const run = new RunState(s);
     applyRunStart(run, this.save);
     this.save.runs++;
+    this.save.loopRuns++;
     this.persist();
     this.run = run;
     if (DEBUG.level) {
@@ -157,8 +160,22 @@ export class Game {
     this.save.wins++;
     this.save.totalKills += run.kills;
     if (this.save.bestTime === null || run.time < this.save.bestTime) this.save.bestTime = run.time;
+    // the pieces she still carries are sewn into the body on the spot (a body made whole clears the loop)
+    const sew = sewPieces(run, this.save);
     this.persist();
-    this.goto(() => new VictoryScene(this, run));
+    this.goto(() => new VictoryScene(this, run, sew));
+  }
+
+  /**
+   * The body is whole: the run ends with the loop-clear scene (the next loop has already begun in the save, see
+   * `completeLoop`). Selma calls it after she sewed the last piece; the victory scene hands over to it after a won run.
+   */
+  loopClear(info: LoopInfo): void {
+    const run = this.run!;
+    // a won run was counted by victory() already
+    if (!run.bossDefeated) this.save.totalKills += run.kills;
+    this.persist();
+    this.goto(() => new LoopClearScene(this, run, info));
   }
 
   start(): void {

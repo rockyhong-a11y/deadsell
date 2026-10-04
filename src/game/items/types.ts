@@ -34,3 +34,9 @@ export interface ItemDef {
 }
 
 export const STARTER_UNLOCKS: ItemId[] = ['rusty_sword', 'hunter_bow', 'old_shield', 'fire_grenade'];
+
+/**
+ * Unique items (docs/CONTENT3.md §5): sold only by Selma at the 시체 상점, paid in corpse pieces. The shop copes with any
+ * number of them (none = three empty "품절" pedestals); the unique-item table fills this list in.
+ */
+export const UNIQUE_IDS: readonly ItemId[] = [];

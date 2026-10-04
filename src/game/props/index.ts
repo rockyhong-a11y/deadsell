@@ -10,3 +10,6 @@ export { Torch } from './torch';
 export { Deco, pickDeco, type DecoKind } from './deco';
 export { BossGate } from './bossGate';
 export { RoomTracker } from './roomTracker';
+export { Seamstress, SELMA_LINES } from './seamstress';
+export { CorpseShopItem, corpseShopStock } from './corpseShop';
+export { GolemPile } from './golemPile';

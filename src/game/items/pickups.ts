@@ -8,10 +8,10 @@ import { approach, overlaps } from '../../engine/math';
 import { moveBody } from '../physics';
 import type { ItemInstance } from './types';
 import { ITEMS, COLOR_NAMES, itemLines, itemName, AFFIX_NAMES } from './items';
-import { FOODS, SCROLL } from '../rules';
+import { CORPSE, FOODS, SCROLL } from '../rules';
 
 /**
- * Pickups: cells, gold, food, scrolls, dropped items. OWNER: player agent.
+ * Pickups: cells, gold, corpse pieces, food, scrolls, dropped items. OWNER: player agent.
  * Loot bursts out with physics, homes in on the player, and is collected on touch.
  */
 
@@ -80,18 +80,25 @@ function collectPitch(world: World): number {
   return 1 + c.n * 0.04;
 }
 
+type CoinKind = 'cell' | 'gold' | 'piece';
+
+/** the bone colour of corpse pieces (HUD counter, glow, particles) */
+export const PIECE_COLOR = '#e8d7c3';
+
 class Coin extends Drop {
   private age = 0;
   private homing = false;
   private speed = 120;
 
-  constructor(x: number, y: number, readonly kind: 'cell' | 'gold', readonly value: number) {
+  constructor(x: number, y: number, readonly kind: CoinKind, readonly value: number) {
     super(x, y);
   }
 
   init(): void {
-    this.setSheet(this.world.assets.sheet('pickups'));
-    this.anim!.play(this.kind === 'cell' ? 'cell' : 'gold_coin');
+    const piece = this.kind === 'piece';
+    // 시체 조각 live on the `corpse` sheet; a drop worth CORPSE.big or more is drawn bigger
+    this.setSheet(this.world.assets.sheet(piece ? 'corpse' : 'pickups'));
+    this.anim!.play(piece ? (this.value >= CORPSE.big ? 'piece_big' : 'piece') : this.kind === 'cell' ? 'cell' : 'gold_coin');
     this.anim!.t = Math.random();
   }
 
@@ -122,18 +129,23 @@ class Coin extends Drop {
       run.cells += this.value;
       w.audio.play('pickup_cell', { pitch, vol: 0.6 });
       w.particles.emit('cell', this.x, this.y - 6, { count: 3 });
+    } else if (this.kind === 'piece') {
+      run.pieces += this.value;
+      w.audio.play('pickup_cell', { pitch: pitch * 0.7, vol: 0.6 });
+      w.particles.emit('cell', this.x, this.y - 6, { count: 3, color: PIECE_COLOR });
     } else {
       run.gold += this.value;
       w.audio.play('pickup_gold', { pitch, vol: 0.6 });
       w.particles.emit('gold', this.x, this.y - 6, { count: 3 });
     }
-    w.emit({ type: 'pickup', what: this.kind === 'cell' ? 'cells' : 'gold', amount: this.value });
+    w.emit({ type: 'pickup', what: this.kind === 'cell' ? 'cells' : this.kind === 'piece' ? 'pieces' : 'gold', amount: this.value });
     this.dead = true;
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
     this.anim?.draw(ctx, this.x, this.y + 2, false);
-    this.world.lights.add(this.x, this.y - 6, this.kind === 'cell' ? 26 : 20, this.kind === 'cell' ? '#4fd8ff' : '#ffd23f', this.kind === 'cell' ? 0.6 : 0.4);
+    const light = this.kind === 'cell' ? { r: 26, c: '#4fd8ff', a: 0.6 } : this.kind === 'piece' ? { r: 22, c: PIECE_COLOR, a: 0.45 } : { r: 20, c: '#ffd23f', a: 0.4 };
+    this.world.lights.add(this.x, this.y - 6, light.r, light.c, light.a);
   }
 }
 
@@ -146,9 +158,9 @@ function split(total: number, maxN: number, perCoin: number): number[] {
   return Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
 }
 
-/** Scatter cells and gold from a defeated enemy / opened chest. */
-export function dropLoot(world: World, x: number, y: number, loot: { cells?: number; gold?: number }): void {
-  const burst = (kind: 'cell' | 'gold', value: number) => {
+/** Scatter cells, gold and corpse pieces from a defeated enemy / opened chest. */
+export function dropLoot(world: World, x: number, y: number, loot: { cells?: number; gold?: number; pieces?: number }): void {
+  const burst = (kind: CoinKind, value: number) => {
     const c = new Coin(x + world.rng.range(-6, 6), y - 12, kind, value);
     c.vx = world.rng.range(-110, 110);
     c.vy = -world.rng.range(170, 320);
@@ -156,6 +168,7 @@ export function dropLoot(world: World, x: number, y: number, loot: { cells?: num
   };
   for (const v of split(loot.cells ?? 0, 12, 1)) burst('cell', v);
   for (const v of split(loot.gold ?? 0, 8, 5)) burst('gold', v);
+  for (const v of split(loot.pieces ?? 0, 6, CORPSE.big)) burst('piece', v);
 }
 
 // ---------------------------------------------------------------------------

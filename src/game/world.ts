@@ -25,7 +25,7 @@ export type GameEvent =
   | { type: 'minibossStart'; boss: Actor; name: string }
   | { type: 'minibossDefeated'; boss: Actor }
   | { type: 'levelExit' }
-  | { type: 'pickup'; what: 'cells' | 'gold' | 'item' | 'food' | 'scroll' | 'flask'; amount: number }
+  | { type: 'pickup'; what: 'cells' | 'gold' | 'pieces' | 'item' | 'food' | 'scroll' | 'flask'; amount: number }
   | { type: 'roomEntered'; roomId: number }
   | { type: 'tileBroken'; tx: number; ty: number }
   | { type: 'toast'; text: string; color?: string };

@@ -14,9 +14,9 @@ export interface LevelSpec {
 /** The fixed order of levels in a run (docs/DESIGN.md §2). */
 export const LEVEL_SEQUENCE: LevelSpec[] = [
   { kind: 'biome', biome: 'prison', name: '가라앉은 감옥' },
-  { kind: 'passage', biome: 'prison', name: '통로' },
+  { kind: 'passage', biome: 'prison', name: '쉼터' },
   { kind: 'biome', biome: 'ramparts', name: '달빛 성벽' },
-  { kind: 'passage', biome: 'ramparts', name: '통로' },
+  { kind: 'passage', biome: 'ramparts', name: '쉼터' },
   { kind: 'boss', biome: 'tower', name: '사슬의 종탑' },
 ];
 
@@ -40,6 +40,14 @@ export class RunState {
   scrolls = 0;
   cellsSpentThisRun = 0;
   bossDefeated = false;
+  /** 회차, copied from the save when the run starts (docs/CONTENT3.md §1) */
+  loop = 1;
+  /** 시체 조각 carried (lost on death, sewn into the body at Selma's) */
+  pieces = 0;
+  /** pieces sewn into the body during this run (stats) */
+  piecesSewn = 0;
+  /** the rag golem fighting beside the heroine; null while there is none */
+  golem: { hp: number; maxHp: number } | null = null;
 
   constructor(seed: number) {
     this.seed = seed >>> 0;

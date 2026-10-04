@@ -20,6 +20,8 @@ export const COL = {
   cyan: '#9fe8ff',
   gold: '#ffd23f',
   cell: '#4fd8ff',
+  /** 시체 조각 (corpse pieces) */
+  bone: '#e8d7c3',
   red: '#ff5a5f',
   green: '#7bd96a',
   amber: '#ffb347',
@@ -181,6 +183,39 @@ export function icon(assets: Pick<Assets, 'sheet'>, c: CanvasRenderingContext2D,
   c.save();
   c.imageSmoothingEnabled = s < 1;
   sheet.draw(c, name, 0, cx + (sheet.ax - sheet.frameW / 2) * s, cy + (sheet.ay - sheet.frameH / 2) * s, false, { scale: s, alpha });
+  c.restore();
+}
+
+/**
+ * The 시체 조각 icon centred at (cx, cy): `corpse_piece` of the `icons` sheet once the art has it, until then a small
+ * stitched lump drawn with paths (the sheet would show an unrelated icon for an unknown name).
+ */
+export function pieceIcon(assets: Pick<Assets, 'sheet'>, c: CanvasRenderingContext2D, cx: number, cy: number, size = 18, alpha = 1): void {
+  if (assets.sheet('icons').has('corpse_piece')) {
+    icon(assets, c, 'corpse_piece', cx, cy, size, alpha);
+    return;
+  }
+  const r = size / 2;
+  c.save();
+  c.globalAlpha *= alpha;
+  c.fillStyle = COL.bone;
+  c.strokeStyle = '#7a1f2a';
+  c.lineWidth = 1.5;
+  c.beginPath();
+  c.ellipse(cx, cy + 1, r * 0.85, r * 0.62, -0.35, 0, Math.PI * 2);
+  c.fill();
+  c.stroke();
+  c.strokeStyle = '#c8324a';
+  c.lineWidth = 1.2;
+  c.beginPath();
+  for (const k of [-0.45, 0, 0.45]) {
+    const x = cx + r * k;
+    c.moveTo(x - 1.6, cy - 2.2);
+    c.lineTo(x + 1.6, cy + 3);
+    c.moveTo(x + 1.6, cy - 2.2);
+    c.lineTo(x - 1.6, cy + 3);
+  }
+  c.stroke();
   c.restore();
 }
 

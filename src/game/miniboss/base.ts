@@ -7,7 +7,7 @@ import type { Player } from '../player/player';
 import { dropLoot, spawnItemDrop } from '../items/pickups';
 import { rollItem } from '../items/items';
 import { warnBang } from '../enemies/telegraph';
-import { TIER2 } from '../rules';
+import { CORPSE, TIER2, loopDmgMul, loopHpMul } from '../rules';
 
 export type MiniBossId = 'mb_abbess' | 'mb_arachne' | 'mb_valkyrie' | 'mb_witch';
 
@@ -71,8 +71,8 @@ const NO_HIT: DamageResult = { applied: false, amount: 0, killed: false };
 export abstract class MiniBoss extends Actor {
   readonly spec: MiniBossSpec;
   readonly tier: number;
-  /** damage multiplier of the tier (prison 1, ramparts 1.4) */
-  readonly dmgMult: number;
+  /** damage multiplier of the tier (prison 1, ramparts 1.4) and the loop */
+  dmgMult: number;
 
   state: MiniState = 'dormant';
   stateT = 0;
@@ -123,6 +123,12 @@ export abstract class MiniBoss extends Actor {
 
   init(): void {
     this.setSheet(this.world.assets.sheet(this.spec.id));
+    // 회차: stronger in every loop after the first
+    const loop = this.world.run.loop;
+    if (loop > 1) {
+      this.maxHp = this.hp = Math.round(this.maxHp * loopHpMul(loop));
+      this.dmgMult *= loopDmgMul(loop);
+    }
     this.anim?.play('idle');
     this.groundY = this.y;
     this.scanArena();
@@ -275,7 +281,7 @@ export abstract class MiniBoss extends Actor {
   protected dropRewards(): void {
     const w = this.world;
     const unlocked = w.game.save.unlocked;
-    dropLoot(w, this.x, this.y - this.h * 0.5, { cells: w.rng.int(MB.cells[0], MB.cells[1]), gold: w.rng.int(MB.gold[0], MB.gold[1]) });
+    dropLoot(w, this.x, this.y - this.h * 0.5, { cells: w.rng.int(MB.cells[0], MB.cells[1]), gold: w.rng.int(MB.gold[0], MB.gold[1]), pieces: CORPSE.drop.miniboss });
     const tier = this.tier + 1;
     spawnItemDrop(w, this.x - 32, this.y - 30, rollItem(w.rng, tier, unlocked, 'weapon', { guaranteeAffix: true }));
     spawnItemDrop(w, this.x + 32, this.y - 30, rollItem(w.rng, tier, unlocked, 'skill', { guaranteeAffix: true }));

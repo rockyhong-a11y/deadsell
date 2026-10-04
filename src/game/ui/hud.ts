@@ -9,7 +9,7 @@ import { COLOR_HEX } from '../combat';
 import { touchView } from './touch';
 import { drawVButtons, vbLayout, type VSkillView } from './vbuttons';
 import { MapView } from './mapview';
-import { COL, SZ, atLeast, icon, panel, pie, pulse, text, textWidth, wrap } from './draw';
+import { COL, SZ, atLeast, icon, panel, pie, pieceIcon, pulse, text, textWidth, wrap } from './draw';
 
 /** Minimum size (virtual px) of anything tappable. */
 export const MIN_TAP = 40;
@@ -22,6 +22,8 @@ export interface HudLayout {
   pips: { x: number; y: number };
   gold: { x: number; y: number };
   cells: { x: number; y: number };
+  /** 시체 조각 counter, right of the cells */
+  pieces: { x: number; y: number };
   minimap: AABB;
   /** pause tap target (visual button is `pauseBtn`) */
   pause: AABB;
@@ -58,6 +60,7 @@ export function hudLayout(W: number, H: number, maxFlasks = 1): HudLayout {
     pips: { x: 38, y: 38 },
     gold: { x: gx, y: 46 },
     cells: { x: gx + 56, y: 46 },
+    pieces: { x: gx + 112, y: 46 },
     minimap,
     pause: atLeast(pauseBtn, MIN_TAP, MIN_TAP),
     pauseBtn,
@@ -103,11 +106,13 @@ export class Hud {
   private lastHp: number;
   private popGold = 0;
   private popCells = 0;
+  private popPieces = 0;
   private lastGold: number;
   private lastCells: number;
+  private lastPieces: number;
   private ready: [number, number] = [0, 0];
   private prevCd: [number, number] = [0, 0];
-  private agg = { cells: 0, gold: 0, t: 0 };
+  private agg = { cells: 0, gold: 0, pieces: 0, t: 0 };
   private bossActor: unknown = null;
   private bossT = -1;
   private bossHp = 1;
@@ -125,11 +130,13 @@ export class Hud {
     this.hpTrail = this.lastHp = w.player?.hp ?? 100;
     this.lastGold = w.run.gold;
     this.lastCells = w.run.cells;
+    this.lastPieces = w.run.pieces;
     w.on((e) => {
       if (e.type === 'playerHurt') this.hurt = 0.35;
       else if (e.type === 'pickup') {
         if (e.what === 'cells') this.agg.cells += e.amount;
         else if (e.what === 'gold') this.agg.gold += e.amount;
+        else if (e.what === 'pieces') this.agg.pieces += e.amount;
         else if (e.what === 'flask') this.toast('플라스크 충전', COL.green);
         else return;
         this.agg.t = 0.7;
@@ -182,12 +189,15 @@ export class Hud {
     if (this.agg.t > 0 && (this.agg.t -= dt) <= 0) {
       if (this.agg.cells) this.toast(`+${this.agg.cells} 셀`, COL.cell, 'cells');
       if (this.agg.gold) this.toast(`+${this.agg.gold} 골드`, COL.gold, 'gold');
-      this.agg.cells = this.agg.gold = 0;
+      if (this.agg.pieces) this.toast(`+${this.agg.pieces} 조각`, COL.bone, 'pieces');
+      this.agg.cells = this.agg.gold = this.agg.pieces = 0;
     }
     if (run.gold !== this.lastGold) { this.popGold = 0.3; this.lastGold = run.gold; }
     if (run.cells !== this.lastCells) { this.popCells = 0.3; this.lastCells = run.cells; }
+    if (run.pieces !== this.lastPieces) { this.popPieces = 0.3; this.lastPieces = run.pieces; }
     this.popGold = Math.max(0, this.popGold - dt);
     this.popCells = Math.max(0, this.popCells - dt);
+    this.popPieces = Math.max(0, this.popPieces - dt);
     if (p) {
       if (p.hp < this.lastHp - 0.01) this.hpTrailHold = 0.5;
       this.lastHp = p.hp;
@@ -418,7 +428,8 @@ export class Hud {
     }
     const pop = (t: number) => 1 + t * 1.2;
     const drawCounter = (name: string, value: number, pos: { x: number; y: number }, color: string, popT: number) => {
-      icon(game.assets, c, name, pos.x + 8, pos.y, 18);
+      if (name === 'corpse_piece') pieceIcon(game.assets, c, pos.x + 8, pos.y, 18);
+      else icon(game.assets, c, name, pos.x + 8, pos.y, 18);
       c.save();
       c.translate(pos.x + 22, pos.y);
       c.scale(pop(popT), pop(popT));
@@ -427,6 +438,7 @@ export class Hud {
     };
     drawCounter('gold', run.gold, L.gold, COL.gold, this.popGold);
     drawCounter('cells', run.cells, L.cells, COL.cell, this.popCells);
+    drawCounter('corpse_piece', run.pieces, L.pieces, COL.bone, this.popPieces);
     if (interactive) {
       game.taps.add({ id: 'hud-flask', rect: L.flask, mode: 'down', onTap: () => game.input.tap('heal') });
     }
@@ -666,7 +678,8 @@ export class Hud {
       c.fillRect(Math.round(W / 2 - lw / 2), y + 17, lw, 1);
       c.globalAlpha = 1;
     }
-    let y = 46 + (this.miniCardActive ? 50 : 0);
+    // below the counters row (gold / cells / pieces), and below the mid-boss name card while it is up
+    let y = 70 + (this.miniCardActive ? 42 : 0);
     for (const t of this.toasts) {
       const a = clamp(t.t / 0.4, 0, 1) * clamp((t.life - t.t) / 0.15, 0, 1);
       const rise = (1 - clamp(t.t / 0.4, 0, 1)) * -6;

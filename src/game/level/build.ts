@@ -9,6 +9,7 @@ import { ENEMY_POOLS, FLYERS, createEnemy, pickEnemy } from '../enemies/factory'
 import { createBoss } from '../boss/matron';
 import { createMiniBoss, pickMiniBoss } from '../miniboss';
 import { rollItem } from '../items/items';
+import { loopEliteBonus } from '../rules';
 import { Alchemist, Altar, BossGate, Chest, Deco, ExitDoor, Fountain, Merchant, Pedestal, RoomTracker, ShopItem, Torch, pickDeco, type DecoKind } from '../props';
 
 /**
@@ -45,7 +46,7 @@ export function populateLevel(world: World, level: LevelData): void {
     const prog = room?.progress ?? 0;
     // base types early, variants (and the late ones) as the level progresses; ramparts lean on variants
     const kind = pickEnemy(rng, biome, prog, flyer);
-    const eliteChance = Math.max(0, Math.min(0.3, (prog - 0.35) * 0.45)) * (flyer ? 0.5 : 1) + (tier > 1 ? 0.03 : 0);
+    const eliteChance = Math.max(0, Math.min(0.3, (prog - 0.35) * 0.45)) * (flyer ? 0.5 : 1) + (tier > 1 ? 0.03 : 0) + loopEliteBonus(run.loop);
     const elite = prog > 0.3 && rng.chance(eliteChance);
     // flyers hover: spawn them a little above the marker's floor
     world.spawn(createEnemy(kind, s.x, flyer ? s.y - 70 : s.y, { tier, elite }));

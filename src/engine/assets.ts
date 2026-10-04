@@ -235,6 +235,8 @@ export const SHEETS = [
   'lancer_halberd', 'lancer_paladin', 'lancer_duelist', 'lancer_dragoon',
   // mid-bosses (docs/CONTENT2.md §2)
   'mb_abbess', 'mb_arachne', 'mb_valkyrie', 'mb_witch',
+  // corpse pieces, Selma and the rag golem (docs/CONTENT3.md §6): a missing sheet falls back to a placeholder box
+  'corpse', 'seamstress', 'golem',
 ] as const;
 export type SheetName = (typeof SHEETS)[number];
 export const BIOMES_ART = ['prison', 'ramparts', 'tower'] as const;
@@ -244,6 +246,9 @@ const PLACEHOLDER_SIZE: Record<string, [number, number, number, number, string]>
   matron: [288, 224, 144, 212, '#b5482f'],
   alchemist: [128, 128, 64, 116, '#4f8de0'],
   merchant: [128, 128, 64, 116, '#d9a441'],
+  corpse: [24, 24, 12, 22, '#e8d7c3'],
+  seamstress: [128, 128, 64, 124, '#c8324a'],
+  golem: [128, 128, 64, 124, '#b89a72'],
   projectiles: [48, 48, 24, 24, '#ffd27a'],
   pickups: [24, 24, 12, 22, '#4fd8ff'],
   props: [96, 96, 48, 92, '#7b6a58'],

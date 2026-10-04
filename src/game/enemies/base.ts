@@ -7,7 +7,7 @@ import { dropLoot, spawnItemDrop } from '../items/pickups';
 import { rollItem } from '../items/items';
 import { warnBang } from './telegraph';
 import type { BaseKind, EnemyDef, EnemyKind } from './variants';
-import { ELITE, LOOT, enemyDmgMul, enemyHpMul } from '../rules';
+import { CORPSE, ELITE, LOOT, enemyDmgMul, enemyHpMul } from '../rules';
 
 export type { BaseKind, EnemyKind } from './variants';
 
@@ -65,8 +65,8 @@ export abstract class Enemy extends Actor {
   readonly tier: number;
   readonly elite: boolean;
   readonly spec: EnemySpec;
-  /** damage multiplier (tier + elite) */
-  readonly dmgMult: number;
+  /** damage multiplier (tier + elite + loop) */
+  dmgMult: number;
   /** speed multiplier (elites are a bit faster) */
   readonly speedMult: number;
   /** draw scale (always 1: elites are not bigger) */
@@ -135,6 +135,12 @@ export abstract class Enemy extends Actor {
       this.fallbackOutline = `hsl(${this.variant.hue}, 85%, 58%)`;
     }
     this.setSheet(sheet);
+    // 회차: stronger in every loop after the first (the run knows which one it is)
+    const loop = this.world.run.loop;
+    if (loop > 1) {
+      this.maxHp = this.hp = Math.round(this.spec.hp * enemyHpMul(this.variant?.hp ?? 1, this.tier, this.elite, loop));
+      this.dmgMult = enemyDmgMul(this.variant?.dmg ?? 1, this.tier, this.elite, loop);
+    }
     this.homeX = this.x;
     this.patrolTimer = this.world.rng.range(2, 5);
     this.anim?.play('idle');
@@ -554,7 +560,11 @@ export abstract class Enemy extends Actor {
     const w = this.world;
     const L = LOOT.enemy;
     const mult = this.elite ? L.eliteMult : 1;
-    dropLoot(w, this.x, this.y - this.h / 2, { cells: w.rng.int(L.cells[0], L.cells[1]) * mult, gold: w.rng.int(L.gold[0], L.gold[1]) * mult });
+    dropLoot(w, this.x, this.y - this.h / 2, {
+      cells: w.rng.int(L.cells[0], L.cells[1]) * mult,
+      gold: w.rng.int(L.gold[0], L.gold[1]) * mult,
+      pieces: this.elite ? CORPSE.drop.elite : CORPSE.drop.enemy,
+    });
     if (this.elite && w.rng.chance(L.eliteItemChance)) {
       spawnItemDrop(w, this.x, this.y - 10, rollItem(w.rng, w.run.tier, w.game.save.unlocked));
     }

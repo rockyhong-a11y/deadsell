@@ -83,6 +83,7 @@ export function unlockedCount(save: SaveData): { have: number; total: number } {
 
 /** Initialise a new run from the meta save (flasks, gold, starting equipment). */
 export function applyRunStart(run: RunState, save: SaveData): void {
+  run.loop = save.loop;
   run.maxFlasks = 1 + save.upgrades.flask;
   run.flasks = run.maxFlasks;
   run.gold = save.upgrades.gold ? 100 : 0;

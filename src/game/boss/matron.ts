@@ -9,7 +9,7 @@ import { dropLoot, spawnFood, spawnItemDrop } from '../items/pickups';
 import { rollItem } from '../items/items';
 import { warnCircle, warnPath, warnRect } from '../enemies/telegraph';
 import { Debris, Shockwave } from './hazards';
-import { FOODS } from '../rules';
+import { CORPSE, FOODS, loopDmgMul, loopHpMul } from '../rules';
 
 /** Tuning (docs/DESIGN.md §5: 2200 HP, hits 18–30). */
 export const MATRON = {
@@ -65,6 +65,8 @@ export class Matron extends Actor {
   private lastSummon = -99;
   private stepT = 0;
   private lockedFacing: 1 | -1 = 1;
+  /** damage multiplier of the loop */
+  private dmgMult = 1;
   private deathFxT = 0;
   private walking = false;
   private roarT = 0;
@@ -83,6 +85,10 @@ export class Matron extends Actor {
 
   init(): void {
     this.setSheet(this.world.assets.sheet('matron'));
+    // 회차: stronger in every loop after the first
+    const loop = this.world.run.loop;
+    this.dmgMult = loopDmgMul(loop);
+    this.maxHp = this.hp = Math.round(MATRON.hp * loopHpMul(loop));
     this.anim?.play('idle');
     this.groundY = this.y;
   }
@@ -93,6 +99,10 @@ export class Matron extends Actor {
   }
 
   // ------------------------------------------------------------ derived
+
+  private dmg(base: number): number {
+    return Math.max(1, Math.round(base * this.dmgMult));
+  }
 
   /** Windup multiplier (phase 2 = ×0.8). */
   private get ws(): number {
@@ -169,7 +179,7 @@ export class Matron extends Actor {
     w.particles.emit('death', this.x, this.y - 60, { power: 2, count: 40 });
     w.emit({ type: 'enemyKilled', enemy: this, elite: true });
     // lots of loot
-    dropLoot(w, this.x, this.y - 50, { cells: MATRON.drop.cells, gold: MATRON.drop.gold });
+    dropLoot(w, this.x, this.y - 50, { cells: MATRON.drop.cells, gold: MATRON.drop.gold, pieces: CORPSE.drop.matron });
     const unlocked = w.game.save.unlocked;
     spawnItemDrop(w, this.x - 40, this.y - 30, rollItem(w.rng, MATRON.drop.itemTier, unlocked));
     spawnItemDrop(w, this.x + 40, this.y - 30, rollItem(w.rng, MATRON.drop.itemTier, unlocked));
@@ -419,8 +429,8 @@ export class Matron extends Actor {
       w.particles.emit('debris', this.x + f * 110, this.y - 8, { count: 10 });
       w.fx.ring(this.x + f * 110, this.y - 6, { radius: 80, color: '#ffb35a', life: 0.3 });
       const sp = MATRON.wave.speed[this.p2];
-      w.spawn(new Shockwave(this.x + f * 150, this.y, f, sp, MATRON.wave.dmg, this));
-      w.spawn(new Shockwave(this.x - f * 40, this.y, f > 0 ? -1 : 1, sp, MATRON.wave.dmg, this));
+      w.spawn(new Shockwave(this.x + f * 150, this.y, f, sp, this.dmg(MATRON.wave.dmg), this));
+      w.spawn(new Shockwave(this.x - f * 40, this.y, f > 0 ? -1 : 1, sp, this.dmg(MATRON.wave.dmg), this));
     } else if (this.state === 'sweep') {
       w.audio.play('swing_heavy');
       w.audio.play('bell');
@@ -439,7 +449,7 @@ export class Matron extends Actor {
         this.world,
         { x: f > 0 ? this.x + 8 : this.x - 148, y: this.y - 90, w: 140, h: 90 },
         'enemy',
-        { amount: MATRON.slam.dmg, dir: f, kind: 'melee', source: this, unblockable: true, knockback: 320, knockup: 210, hitstun: 0.45 },
+        { amount: this.dmg(MATRON.slam.dmg), dir: f, kind: 'melee', source: this, unblockable: true, knockback: 320, knockup: 210, hitstun: 0.45 },
         this.hitSet,
       );
     } else if (this.state === 'sweep') {
@@ -447,7 +457,7 @@ export class Matron extends Actor {
         this.world,
         { x: f > 0 ? this.x - 8 : this.x - MATRON.sweep.reach + 8, y: this.y - 70, w: MATRON.sweep.reach, h: 70 },
         'enemy',
-        { amount: MATRON.sweep.dmg, dir: f, kind: 'melee', source: this, knockback: 340, hitstun: 0.4 },
+        { amount: this.dmg(MATRON.sweep.dmg), dir: f, kind: 'melee', source: this, knockback: 340, hitstun: 0.4 },
         this.hitSet,
       );
     }
@@ -484,7 +494,7 @@ export class Matron extends Actor {
         w,
         { x: f > 0 ? this.x - 30 : this.x - 54, y: this.y - 100, w: 84, h: 100 },
         'enemy',
-        { amount: MATRON.charge.dmg, dir: f, kind: 'melee', source: this, unblockable: true, knockback: 380, knockup: 150, hitstun: 0.4 },
+        { amount: this.dmg(MATRON.charge.dmg), dir: f, kind: 'melee', source: this, unblockable: true, knockback: 380, knockup: 150, hitstun: 0.4 },
         this.hitSet,
       );
       if (this.hitWallX === f) this.crash();
@@ -580,7 +590,7 @@ export class Matron extends Actor {
           w,
           { x: this.x - ra, y: this.y - 64, w: ra * 2, h: 64 },
           'enemy',
-          { amount: L.dmg, dir: 1, kind: 'melee', source: this, unblockable: true, knockback: 330, knockup: 220, hitstun: 0.45 },
+          { amount: this.dmg(L.dmg), dir: 1, kind: 'melee', source: this, unblockable: true, knockback: 330, knockup: 220, hitstun: 0.45 },
           this.hitSet,
         );
       }
@@ -646,7 +656,7 @@ export class Matron extends Actor {
       const floor = map.floorBelow(x, this.groundY - 40, 700) ?? this.groundY;
       let top = floor - 40;
       while (top > 0 && !map.solidAt(x, top - 8) && floor - top < 360) top -= TILE / 2;
-      w.spawn(new Debris(x, floor, Math.max(8, top + 14), delay + i * 0.22, MATRON.debris.dmg, this, MATRON.debris.radius));
+      w.spawn(new Debris(x, floor, Math.max(8, top + 14), delay + i * 0.22, this.dmg(MATRON.debris.dmg), this, MATRON.debris.radius));
     }
   }
 

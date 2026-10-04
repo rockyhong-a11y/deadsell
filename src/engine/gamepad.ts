@@ -275,3 +275,19 @@ export class GamepadManager {
     return frame;
   }
 }
+
+/** Why no pad may be visible: API missing, or blocked by the page's permissions policy (embedded frames). */
+export type PadEnv = 'ok' | 'unsupported' | 'blocked';
+
+export function padEnvironment(): PadEnv {
+  if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return 'unsupported';
+  try {
+    const doc = document as any;
+    const policy = doc.permissionsPolicy ?? doc.featurePolicy;
+    if (policy?.allowsFeature && !policy.allowsFeature('gamepad')) return 'blocked';
+    navigator.getGamepads();
+  } catch {
+    return 'blocked'; // SecurityError: gamepad disallowed by permissions policy
+  }
+  return 'ok';
+}

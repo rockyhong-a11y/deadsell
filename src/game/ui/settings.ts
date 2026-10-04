@@ -3,7 +3,7 @@ import type { AABB } from '../../engine/math';
 import { FILTER_IDS, FILTER_LABEL } from '../../engine/filters';
 import { WORLD_HEIGHTS } from '../../engine/config';
 import {
-  DPAD_BUTTONS, PAD_ACTIONS, PAD_ACTION_LABEL, assignButton, isDefaultMap, padButtonName, DEFAULT_PAD_MAP,
+  DPAD_BUTTONS, PAD_ACTIONS, PAD_ACTION_LABEL, assignButton, isDefaultMap, padButtonName, DEFAULT_PAD_MAP, padEnvironment,
   type NavKey, type PadAction,
 } from '../../engine/gamepad';
 import {
@@ -420,7 +420,11 @@ export class SettingsScreen {
     if (pad.connected) {
       text(c, `연결됨${pad.mapping === 'standard' ? '' : '  ·  표준 배치가 아니므로 버튼을 직접 지정하세요'}`, r.x + 12, r.y + 29, { color: COL.green, bold: true });
     } else {
-      text(c, '게임패드를 연결하고 아무 버튼이나 누르세요', r.x + 12, r.y + 29, { color: COL.amber, bold: true, alpha: 0.6 + 0.4 * pulse(this.age, 0.8) });
+      const env = padEnvironment();
+      const msg = env === 'unsupported' ? '이 브라우저는 게임패드를 지원하지 않습니다'
+        : env === 'blocked' ? '이 화면(임베드)은 게임패드가 차단됨 · 게임 링크를 브라우저에서 직접 여세요'
+        : '게임패드를 연결하고 아무 버튼이나 누르세요';
+      text(c, msg, r.x + 12, r.y + 29, { color: env === 'ok' ? COL.amber : COL.red, bold: true, alpha: env === 'ok' ? 0.6 + 0.4 * pulse(this.age, 0.8) : 1 });
     }
     if (!isDefaultMap(this.settings.gamepadMap)) text(c, '사용자 지정', r.x + r.w - 12, r.y + 13, { align: 'right', color: COL.amber });
   }

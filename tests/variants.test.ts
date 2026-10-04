@@ -214,7 +214,7 @@ describe('spawn picker', () => {
         world.spawn(pl);
         populateLevel(world, lvl);
         steps(world, 2);
-        for (const e of world.entities) if (e instanceof Actor && e.team === 'enemy') seen.add((e as Enemy).kind);
+        for (const e of world.entities) if (e instanceof Actor && e.team === 'enemy' && typeof (e as Enemy).kind === 'string') seen.add((e as Enemy).kind); // (the mid-boss and its orbs are enemy-team actors without a `kind`)
         if (seed <= 3) steps(world, 90);
       }
       expect(seen.size, biome).toBeGreaterThanOrEqual(12);

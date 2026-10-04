@@ -31,6 +31,8 @@ export class LevelUI {
   readonly world: World;
   readonly hud: Hud;
   boss: { actor: Actor; name: string } | null = null;
+  /** the mid-boss whose name card / HP bar is up (set on minibossStart, cleared by the HUD after its death fade) */
+  miniboss: { actor: Actor; name: string } | null = null;
   private stack: Modal[] = [];
   private started = false;
   private gaveUp = false;
@@ -45,6 +47,7 @@ export class LevelUI {
     world.on((e) => {
       if (e.type === 'toast') this.toast(e.text, e.color);
       if (e.type === 'bossStart') this.boss = { actor: e.boss, name: '강철 여교도관' };
+      else if (e.type === 'minibossStart') this.miniboss = { actor: e.boss, name: e.name };
     });
     if (game.save.settings.muted) game.audio.setMuted(true);
     if (typeof window !== 'undefined') {

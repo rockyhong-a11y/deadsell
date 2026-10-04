@@ -4,7 +4,7 @@ import type { TemplateDef } from './types';
  * Mid-boss arenas (docs/CONTENT2.md section 2): 2 x 1 chunks, a flat 56-tile hall with a 4-tile doorway
  * (rows 12..15) at both ends so the generator can put it on the main path. Marker `N` = where the
  * biome's mid-boss stands (populateLevel picks which one by the level seed); the doorways are
- * 4 tiles deep, which is where the room's two gates close during the fight (build.ts).
+ * 4 tiles deep (rows 12..15).
  * The generator places exactly one of these per level; they never carry ordinary enemies.
  */
 export const MINIBOSS_TEMPLATES: TemplateDef[] = [

@@ -22,8 +22,8 @@ export const VALKYRIE_SPEC: MiniBossSpec = {
 export const VALKYRIE = {
   /** 2-hit greatsword combo; the second swing follows after a short (still visible) windup */
   slash: { w1: 0.7, a1: 0.18, w2: 0.38, a2: 0.2, r: 0.85, dmg: [14, 18], reach: 114, step: 200 },
-  /** takes off (`rise`), hovers over the player (the last `aim` s the line is locked), dives along it */
-  dive: { rise: 0.5, w: 1.3, aim: 0.35, a: 0.6, r: 0.95, height: 132, speed: 700, dmg: 22, radius: 56 },
+  /** takes off (`rise`), hovers over the player (the last `aim` s the line is locked), dives along it; `height` keeps the sprite (the art already lifts her ~30 px) inside the screen */
+  dive: { rise: 0.5, w: 1.3, aim: 0.35, a: 0.6, r: 0.95, height: 96, speed: 700, dmg: 22, radius: 56 },
   /** sword beam along the floor (jump it) */
   wave: { w: 0.8, a: 0.25, r: 0.75, dmg: 13, speed: 330, dist: 760 },
 } as const;
@@ -37,6 +37,7 @@ export class Valkyrie extends MiniBoss {
   private diveFy = 0;
   private diveLocked = false;
   private landed = false;
+  private beams: SwordBeam[] = [];
 
   constructor(x: number, y: number, tier = 1) {
     super(VALKYRIE_SPEC, x, y, tier);
@@ -136,7 +137,10 @@ export class Valkyrie extends MiniBoss {
       w.audio.play('boss_slam', { vol: 0.5 });
       w.shake(4, 0.2);
       w.fx.slash(this.x + f * 60, this.y - 40, { dir: f, radius: 84, from: -1.0, to: 1.2, color: '#9fd0ff', width: 6, life: 0.22 });
-      w.spawn(new SwordBeam(this.x + f * 56, this.y, f, W.speed, this.dmg(W.dmg), this, W.dist));
+      const beam = new SwordBeam(this.x + f * 56, this.y, f, W.speed, this.dmg(W.dmg), this, W.dist);
+      this.beams = this.beams.filter((b) => !b.dead);
+      this.beams.push(beam);
+      w.spawn(beam);
     } else if (name === 'dive') {
       w.audio.play('boss_roar', { vol: 0.6, pitch: 1.3 });
       w.shake(3, 0.2);
@@ -223,6 +227,11 @@ export class Valkyrie extends MiniBoss {
 
   protected attackDone(): void {
     this.physics = true;
+  }
+
+  protected clearConjured(): void {
+    for (const b of this.beams) b.dead = true;
+    this.beams = [];
   }
 
   protected drawMarkers(ctx: CanvasRenderingContext2D, p: number): void {

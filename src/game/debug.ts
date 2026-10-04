@@ -1,3 +1,4 @@
+import { TILE } from '../engine/config';
 import type { Game } from './game';
 import type { LevelScene } from './scenes/levelScene';
 import { LEVEL_SEQUENCE } from './run';
@@ -5,6 +6,7 @@ import type { ItemId } from './items/types';
 import { Actor } from './entity';
 import { createEnemy } from './enemies/factory';
 import { ENEMY_DEFS, type EnemyKind } from './enemies/variants';
+import { isMiniBoss } from './miniboss';
 
 /**
  * Debug / test hooks exposed as `window.__ds` (used by e2e tests and manual QA).
@@ -22,6 +24,22 @@ export function installDebug(game: Game): void {
       if (!game.run) game.startRun(1);
       const i = LEVEL_SEQUENCE.findIndex((l) => l.kind === kindOrBiome || l.biome === kindOrBiome);
       if (i >= 0 && game.run) { game.run.levelIndex = i - 1; game.nextLevel(); }
+    },
+    /**
+     * Teleport the player into the mid-boss room, to the doorway farthest from the boss, so walking in wakes it.
+     * Biome levels with a mid-boss only (prison / ramparts); anywhere else this loads the prison level (async,
+     * call again after a few steps) and returns null. Returns the mid-boss entity (or null).
+     */
+    gotoMiniboss() {
+      const w = level()?.world;
+      const mb = w?.level.spawns.find((s) => s.type === 'miniboss');
+      if (!w || !mb) { api.gotoLevel('prison'); return null; }
+      const room = w.level.rooms[mb.roomId];
+      const left = mb.x - room.x * TILE > (room.w * TILE) / 2 ? room.x + 6 : room.x + room.w - 6;
+      const p = w.player;
+      p.x = left * TILE + TILE / 2; p.y = mb.y; p.vx = p.vy = 0;
+      w.camera.snap(p.x, p.y - 20);
+      return w.entities.find((e) => isMiniBoss(e)) ?? null;
     },
     god(on = true) { (api as any)._god = on; const p = level()?.world.player; if (p) { p.hp = p.maxHp; } },
     teleport(x: number, y: number) { const p = level()?.world.player; if (p) { p.x = x; p.y = y; p.vx = p.vy = 0; } },

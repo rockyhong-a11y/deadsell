@@ -208,18 +208,31 @@ test.describe('full run', () => {
     });
 
     await test.step('prison: pedestal item + shop purchase', async () => {
-      const w0 = (await run(page)).weapons;
+      // the pedestal's own drop = the item drop that appears after interacting (loot from the chest / enemies may lie around)
+      const dropCount = () => page.evaluate(() => (window as any).__ds.world.entities.filter((e: any) => e.constructor.name === 'ItemDrop' && !e.dead).length as number);
+      const known = await page.evaluate(() => { const w = (window as any).__ds.world; (window as any).__known = w.entities.filter((e: any) => e.constructor.name === 'ItemDrop'); return (window as any).__known.length as number; });
       await interactKey(page, 'Pedestal');
-      await expect.poll(() => entitiesOf(page, 'ItemDrop').then((l) => l.length), { timeout: 4_000 }).toBeGreaterThan(0);
+      await expect.poll(dropCount, { timeout: 4_000 }).toBeGreaterThan(await page.evaluate(() => (window as any).__known.filter((e: any) => !e.dead).length as number));
       await page.waitForTimeout(700);
-      const d = (await entitiesOf(page, 'ItemDrop'))[0];
-      await teleportNear(page, d.x - 6, d.y - 2, 10);
-      await page.keyboard.press('KeyF');
-      await page.waitForTimeout(300);
-      if (await modalOpen(page)) await page.keyboard.press('Enter');
-      await page.waitForTimeout(300);
-      const w1 = (await run(page)).weapons;
-      expect(JSON.stringify(w1) !== JSON.stringify(w0) || (await entitiesOf(page, 'ItemDrop')).length === 0, 'pedestal item was taken').toBe(true);
+      const d = await page.evaluate(() => {
+        const w = (window as any).__ds.world;
+        const e = w.entities.find((o: any) => o.constructor.name === 'ItemDrop' && !o.dead && !(window as any).__known.includes(o));
+        (window as any).__ped = e ?? null;
+        return e ? { x: e.x as number, y: e.y as number, id: e.inst.id as string } : null;
+      });
+      expect(d, `the pedestal produced a new item drop (${known} drops were already there)`).not.toBeNull();
+      // walk onto it and press interact until THAT drop is gone. It has a short pickup delay, and a full loadout opens the swap
+      // modal (Enter = first slot; picking an identical item leaves the loadout unchanged, so the loadout is no signal).
+      let taken = false;
+      for (let i = 0; i < 8 && !taken; i++) {
+        await teleportNear(page, d!.x - 6, d!.y - 2, 10);
+        await page.keyboard.press('KeyF');
+        await page.waitForTimeout(300);
+        if (await modalOpen(page)) await page.keyboard.press('Enter');
+        await page.waitForTimeout(300);
+        taken = await page.evaluate(() => !!(window as any).__ped?.dead);
+      }
+      expect(taken, `pedestal item ${d!.id} was taken`).toBe(true);
 
       // shop: needs gold
       await page.evaluate(() => { (window as any).__ds.game.run.gold = 900; });
@@ -532,7 +545,8 @@ test.describe('full run', () => {
       WEAPONS.forEach((wid, k) => {
         ds.give(wid, 0); ds.give(WEAPONS[(k + 3) % WEAPONS.length], 1); ds.give(SKILLS[k % 4], 0); ds.give(SKILLS[(k + 1) % 4], 1);
         const w = ds.world, p = w.player, inp = w.input;
-        const en = w.entities.filter((e: any) => e.team === 'enemy' && !e.dead);
+        // real enemies only: arrows / bolts / orbs on the enemy team have no hp (a lingering arrow made the sum NaN)
+        const en = w.entities.filter((e: any) => e.team === 'enemy' && !e.dead && typeof e.hp === 'number' && e.targetable);
         const tgt = en[(k * 7) % en.length];
         ds.teleport(tgt.x - 60, tgt.y - 2); ds.step(15);
         const hp0 = en.reduce((a: number, e: any) => a + e.hp, 0);
@@ -551,7 +565,7 @@ test.describe('full run', () => {
         inp.setAxis('sweep', 0, 0);
         inp.release('attack2');
         ds.step(30);
-        out.push({ weapon: wid, dealt: hp0 - w.entities.filter((e: any) => e.team === 'enemy' && !e.dead).reduce((a: number, e: any) => a + e.hp, 0) });
+        out.push({ weapon: wid, dealt: hp0 - w.entities.filter((e: any) => e.team === 'enemy' && !e.dead && typeof e.hp === 'number').reduce((a: number, e: any) => a + e.hp, 0) });
       });
       return out;
     }, { WEAPONS, SKILLS });

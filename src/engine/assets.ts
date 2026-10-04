@@ -35,6 +35,9 @@ export interface DrawOpts {
   rotation?: number;
 }
 
+/** max cached frame silhouettes per sheet (a 288×224 boss frame is ~0.26 MB) */
+const SILHOUETTE_CACHE = 96;
+
 export class SpriteSheet {
   readonly name: string;
   readonly img: CanvasImageSource;
@@ -44,6 +47,7 @@ export class SpriteSheet {
   readonly ay: number;
   readonly anims: Record<string, AnimDef>;
   readonly placeholder: boolean;
+  /** per-frame silhouettes, LRU (Map keeps insertion order); see silhouette() */
   private silhouettes = new Map<string, HTMLCanvasElement>();
 
   constructor(name: string, img: CanvasImageSource, m: SheetManifest, placeholder = false) {
@@ -65,19 +69,34 @@ export class SpriteSheet {
     return this.anims[name] ?? this.anims[Object.keys(this.anims)[0]] ?? { row: 0, frames: 1, fps: 1, loop: true };
   }
 
-  /** Solid-colour silhouette of the whole sheet (cached per colour). */
-  silhouette(color: string): HTMLCanvasElement {
-    let c = this.silhouettes.get(color);
-    if (!c) {
-      c = document.createElement('canvas');
-      c.width = (this.img as HTMLImageElement).width;
-      c.height = (this.img as HTMLImageElement).height;
-      const x = c.getContext('2d')!;
-      x.drawImage(this.img, 0, 0);
-      x.globalCompositeOperation = 'source-in';
-      x.fillStyle = color;
-      x.fillRect(0, 0, c.width, c.height);
-      this.silhouettes.set(color, c);
+  /**
+   * Solid-colour silhouette of ONE frame (source rect sx, sy), cached per colour + frame.
+   * Per frame, not per sheet: a whole-sheet copy of the boss sheet is 65 MB, and iOS Safari caps the
+   * total canvas memory of a page (~384 MB), so whole-sheet copies broke rendering on iPhones.
+   * The cache is bounded; evicted canvases are shrunk to 0×0 so the browser frees their memory at once.
+   */
+  silhouette(color: string, sx: number, sy: number): HTMLCanvasElement {
+    const key = `${color}|${sx}|${sy}`;
+    let c = this.silhouettes.get(key);
+    if (c) {
+      this.silhouettes.delete(key);
+      this.silhouettes.set(key, c);
+      return c;
+    }
+    c = document.createElement('canvas');
+    c.width = this.frameW;
+    c.height = this.frameH;
+    const x = c.getContext('2d')!;
+    x.drawImage(this.img, sx, sy, this.frameW, this.frameH, 0, 0, this.frameW, this.frameH);
+    x.globalCompositeOperation = 'source-in';
+    x.fillStyle = color;
+    x.fillRect(0, 0, c.width, c.height);
+    this.silhouettes.set(key, c);
+    if (this.silhouettes.size > SILHOUETTE_CACHE) {
+      const oldest = this.silhouettes.keys().next().value as string;
+      const old = this.silhouettes.get(oldest)!;
+      old.width = old.height = 0;
+      this.silhouettes.delete(oldest);
     }
     return c;
   }
@@ -97,16 +116,16 @@ export class SpriteSheet {
     const dx = -this.ax;
     const dy = -this.ay;
     if (o.outline) {
-      const sil = this.silhouette(o.outline);
+      const sil = this.silhouette(o.outline, sx, sy);
       for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-        ctx.drawImage(sil, sx, sy, this.frameW, this.frameH, dx + ox, dy + oy, this.frameW, this.frameH);
+        ctx.drawImage(sil, dx + ox, dy + oy);
       }
     }
     if (o.blend) ctx.globalCompositeOperation = o.blend;
     ctx.drawImage(this.img, sx, sy, this.frameW, this.frameH, dx, dy, this.frameW, this.frameH);
     if (o.flash && o.flash > 0) {
       ctx.globalAlpha = (o.alpha ?? 1) * Math.min(1, o.flash);
-      ctx.drawImage(this.silhouette(o.flashColor ?? '#ffffff'), sx, sy, this.frameW, this.frameH, dx, dy, this.frameW, this.frameH);
+      ctx.drawImage(this.silhouette(o.flashColor ?? '#ffffff', sx, sy), dx, dy);
     }
     ctx.restore();
   }

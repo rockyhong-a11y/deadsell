@@ -35,7 +35,6 @@ export type WitchAttack = 'orb' | 'blink' | 'shards';
 export class Witch extends MiniBoss {
   private blinkTx = 0;
   private orbs: MoonOrb[] = [];
-  private shardSpots: number[] = [];
 
   constructor(x: number, y: number, tier = 1) {
     super(WITCH_SPEC, x, y, tier);
@@ -129,7 +128,6 @@ export class Witch extends MiniBoss {
       while (top > 0 && !w.map.solidAt(x, top - 8) && floor - top < 360) top -= TILE / 2;
       w.spawn(new MoonShard(x, floor, Math.max(8, top + 14), delay + i * S.gap, this.dmg(S.dmg), this, S.radius));
     }
-    this.shardSpots = xs;
   }
 
   protected activeStart(name: string, p: Player): void {

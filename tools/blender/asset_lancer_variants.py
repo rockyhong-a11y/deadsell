@@ -118,6 +118,21 @@ def shaft(name, z0, z1, rad, mat, segs=7):
     return L.tube(name, [(0, 0, z0), (0, 0, (z0 + z1) / 2), (0, 0, z1)], [rad, rad * 1.1, rad], mat, segs=segs)
 
 
+def poly_plate(name, pts, thick, mat, y=0.0, sx=1.0):
+    """Flat polygon in the (local) XZ plane extruded along Y; pts are (x, z) pairs, x multiplied by sx."""
+    import bmesh
+    bm = bmesh.new()
+    fr = [bm.verts.new((px * sx, y - thick / 2, pz)) for px, pz in pts]
+    bk = [bm.verts.new((px * sx, y + thick / 2, pz)) for px, pz in pts]
+    bm.faces.new(fr)
+    bm.faces.new(list(reversed(bk)))
+    n = len(pts)
+    for i in range(n):
+        j = (i + 1) % n
+        bm.faces.new((fr[i], fr[j], bk[j], bk[i]))
+    return L._mesh_ob(name, bm, mat, smooth=False)
+
+
 def side_leaf(name, length, width, thick, mat, z, direction, tip=0.3, base=0.8):
     """Flat blade in the XZ plane growing from the shaft at height z toward local +X (1) or -X (-1)."""
     f = L.leaf(name, length, width, thick, mat, tip=tip, base=base)
@@ -135,6 +150,8 @@ def v_halberd(r, M):
     A = r.attach
     iron = L.mat("v_iron", "#7a8296", "#343a52", "#c4ccdc")
     brass = L.mat("v_brass", "#b09a4c", "#5a4a2a", "#ecd884")
+    bladem = L.mat("v_blade", "#5a627c", "#262a40", "#8c96b4")
+    edgem = L.mat("v_edge", "#eef4ff", "#8e9ab8", "#ffffff")
     rc(M["steel"], "#868ea6", "#3a405a", "#d2dae8")
     rc(M["dsteel"], "#464d66", "#1e2238", "#747e9c")
     rc(M["purple"], "#3a4160", "#181a32", "#5a6488")
@@ -158,19 +175,27 @@ def v_halberd(r, M):
     A(ellipsoid("helm_ridge", (0.32 * S, 0.05 * S, 0.07 * S), iron), "head", (-0.02 * S, 0, 0.3 * S))
     A(box("visor_bar", (0.05 * S, 0.24 * S, 0.04 * S), M["dsteel"], bevel=0.008), "head", (0.115 * S, 0, 0.17 * S))
     A(box("nasal", (0.04 * S, 0.035 * S, 0.14 * S), iron, bevel=0.008), "head", (0.14 * S, 0, 0.08 * S))
-    # halberd: long haft, axe blade one side, hook the other, spike on top
-    top = -1.02
-    parts = [shaft("haft", 0.78, top, 0.032, M["wood"]),
+    # halberd: haft (kept ~0.2 shorter than the base lance so the thrust frames stay inside the frame), crescent
+    # bearded axe facing the way she faces (local -X), pick on the other side, spike on top
+    top = -0.84
+    dz = 0.18                     # blade profile below is drawn for a longer haft; shift it up by dz
+    blade = [(0.1, -0.72), (0.3, -0.6), (0.4, -0.76), (0.45, -0.92), (0.4, -1.08), (0.3, -1.2), (0.1, -1.04),
+             (0.07, -0.88)]
+    edge = [(0.3, -0.6), (0.4, -0.76), (0.45, -0.92), (0.4, -1.08), (0.3, -1.2), (0.3, -1.1), (0.34, -0.98),
+            (0.36, -0.9), (0.34, -0.8), (0.3, -0.7)]
+    blade = [(x, z + dz) for x, z in blade]
+    edge = [(x, z + dz) for x, z in edge]
+    parts = [shaft("haft", 0.78, top - 0.1, 0.032, M["wood"]),
              L.tube("butt", [(0, 0, 0.78), (0, 0, 0.88)], [0.045, 0.012], iron, segs=7),
-             cone("spike", 0.05, 0.0, 0.36, iron, loc=(0, 0, top + 0.02), rot=(180, 0, 0)),
-             L.disc("collar", 0.065, 0.05, M["gold"], loc=(0, 0, top + 0.02)),
-             L.disc("collar2", 0.06, 0.05, M["gold"], loc=(0, 0, -0.62)),
-             side_leaf("axe", 0.42, 0.5, 0.045, iron, -0.88, 1, tip=0.2, base=0.82),
-             side_leaf("axe_edge", 0.14, 0.42, 0.05, M["steel"], -0.9, 1, tip=0.2, base=0.9),
-             cone("hook", 0.045, 0.0, 0.24, iron, loc=(0, 0, -0.85), rot=(0, -90, 0)),
-             L.tube("tassel", [(0, 0, -0.62), (0.0, 0.02, -0.74), (0.0, 0.0, -0.9)], [0.03, 0.035, 0.01], M["purple"],
+             cone("spike", 0.05, 0.0, 0.3, iron, loc=(0, 0, top - 0.08), rot=(180, 0, 0)),
+             L.disc("collar", 0.065, 0.05, M["gold"], loc=(0, 0, top - 0.06)),
+             L.disc("collar2", 0.06, 0.05, M["gold"], loc=(0, 0, -0.4)),
+             poly_plate("axe", blade, 0.05, bladem, y=0.0, sx=-1),
+             poly_plate("axe_edge", edge, 0.06, edgem, y=-0.012, sx=-1),
+             L.disc("axe_bolt", 0.05, 0.07, M["gold"], loc=(0, 0, -0.9 + dz)),
+             side_leaf("pick", 0.26, 0.1, 0.04, iron, -0.9 + dz, 1, tip=0.2, base=0.7),
+             L.tube("tassel", [(0, 0, -0.4), (0.0, 0.02, -0.52), (0.0, 0.0, -0.64)], [0.03, 0.035, 0.01], M["purple"],
                     segs=5)]
-    parts[-5].location = (0, 0, -0.9)
     set_weapon(r, parts)
     return None
 
@@ -191,13 +216,15 @@ def v_paladin(r, M):
     set_glow(M["streak"], "#fff0b0")
     # shield moves from the back to the front: big kite shield with a glowing cross
     drop("shieldm")
-    sh_ = [B.kite("sp_border", 0.92, 0.95, 0.06, M["gold"], y=0.0),
-           B.kite("sp_field", 0.74, 0.78, 0.06, M["steel"], y=-0.016, z=0.0),
-           box("sp_c1", (0.07, 0.05, 0.56), holy, loc=(0, -0.045, -0.04)),
-           box("sp_c2", (0.3, 0.05, 0.07), holy, loc=(0, -0.045, 0.1)),
-           ellipsoid("sp_boss", (0.1, 0.07, 0.1), holy2, loc=(0, -0.05, 0.1))]
+    sfield = L.mat("v_sfield", "#d8962a", "#7a4410", "#ffd270")
+    sbord = L.mat("v_sbord", "#fff4d0", "#a8905c", "#ffffff")
+    sh_ = [B.kite("sp_border", 1.0, 1.04, 0.06, sbord, y=0.0),
+           B.kite("sp_field", 0.8, 0.84, 0.06, sfield, y=-0.016, z=0.0),
+           box("sp_c1", (0.07, 0.05, 0.58), holy2, loc=(0, -0.05, -0.04)),
+           box("sp_c2", (0.3, 0.05, 0.07), holy2, loc=(0, -0.05, 0.1)),
+           ellipsoid("sp_boss", (0.1, 0.07, 0.1), holy, loc=(0, -0.055, 0.1))]
     shield = L.joined("shield_front", sh_)
-    A(shield, "chest", (0.17 * S, -0.1 * S, -0.1 * S), rot=(0, -6, 0))
+    A(shield, "chest", (0.24 * S, -0.12 * S, -0.1 * S), rot=(0, -6, 0))
     # halo + gold glow on the tabard
     A(L.tube("halo", L.arc_pts((0, 0.07 * S, 0.34 * S), 0.25 * S, 0, 360, 22), 0.028 * S, holy, segs=6, depth=0.7), "head")
     A(ellipsoid("halo_in", (0.46 * S, 0.02, 0.46 * S), holy2), "head", (0.0, 0.1 * S, 0.34 * S))
@@ -289,7 +316,7 @@ def v_dragoon(r, M):
     rc(M["gold"], "#3ccfc0", "#18666e", "#a8fff2")
     rc(M["leather"], "#262e48", "#0e1220", "#46547a")
     rc(M["wood"], "#2a3050", "#0e1220", "#4a5a88")
-    rc(M["hair"], "#dce8f8", "#8a9ab8", "#ffffff")
+    rc(M["hair"], "#e0562c", "#8a2414", "#ff9a5a")
     set_glow(M["eye"], "#ffb030")
     drop("plume_*", "crest_base", "shieldm")
     # scale armour: overlapping teal-blue scale rows on pauldrons, chest and tassets
@@ -303,10 +330,9 @@ def v_dragoon(r, M):
     for k, (a, b) in enumerate(((0.28, 0.4), (0.55, 0.67), (0.82, 0.94))):
         A(skirt_band("sk_scale%d" % k, 0.16 * S, 0.29 * S, 0.035 * S, 0.32 * S, 0.88, 1.12, a, b, teal), "skirt")
     # winged helm: two silver wings sweeping back/up + a dragon-fin crest
-    for k, (phi, ln) in enumerate(((118, 0.5), (138, 0.44), (158, 0.36))):
-        A(L.bake(L.leaf("hw_n%d" % k, ln * S, 0.13 * S, 0.025, silver if k != 1 else teal, tip=0.55, base=0.3)
-                 ).__class__ and _wing_leaf("hw_n%d" % k, ln * S, silver if k != 1 else teal, phi, -0.14 * S), "head")
-        A(_wing_leaf("hw_f%d" % k, ln * S, silver if k != 1 else teal, phi, 0.14 * S), "head")
+    for k, (phi, ln) in enumerate(((100, 0.58), (124, 0.5))):
+        A(_wing_leaf("hw_n%d" % k, ln * S, silver if k == 0 else teal, phi, -0.14 * S), "head")
+        A(_wing_leaf("hw_f%d" % k, ln * S, silver if k == 0 else teal, phi, 0.14 * S), "head")
     A(ellipsoid("fin", (0.3 * S, 0.04 * S, 0.1 * S), teal), "head", (-0.04 * S, 0, 0.3 * S))
     # dragon wings on the back: bone + fanned membrane fingers
     A(L.tube("dw_bone", [(-0.12 * S, 0.1 * S, 0.12 * S), (-0.3 * S, 0.1 * S, 0.3 * S), (-0.46 * S, 0.1 * S, 0.5 * S)],

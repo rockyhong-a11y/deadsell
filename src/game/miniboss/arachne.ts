@@ -4,7 +4,7 @@ import type { Player } from '../player/player';
 import { shockAoE } from '../enemies/hazards';
 import { warnCircle, warnLine, warnRect } from '../enemies/telegraph';
 import { MiniBoss, type AttackStep, type MiniBossSpec } from './base';
-import { WebBlob } from './hazards';
+import { WebBlob, WebRoot } from './hazards';
 
 /** 거미 여왕 (prison): a woman's upper body on a huge black spider body (~4 u long, ~2.4 u tall). */
 export const ARACHNE_SPEC: MiniBossSpec = {
@@ -37,6 +37,7 @@ export class Arachne extends MiniBoss {
   private leapX0 = 0;
   private leapY0 = 0;
   private leapFy = 0;
+  private blobs: WebBlob[] = [];
 
   constructor(x: number, y: number, tier = 1) {
     super(ARACHNE_SPEC, x, y, tier);
@@ -100,7 +101,10 @@ export class Arachne extends MiniBoss {
       const shots = this.rage ? [-0.22, 0, 0.22] : [0];
       for (const off of shots) {
         const a = base + off;
-        w.spawn(new WebBlob(m.x, m.y, Math.cos(a) * ARACHNE.web.speed, Math.sin(a) * ARACHNE.web.speed, this.dmg(ARACHNE.web.dmg), ARACHNE.web.root, this));
+        const blob = new WebBlob(m.x, m.y, Math.cos(a) * ARACHNE.web.speed, Math.sin(a) * ARACHNE.web.speed, this.dmg(ARACHNE.web.dmg), ARACHNE.web.root, this);
+        this.blobs = this.blobs.filter((b) => !b.dead);
+        this.blobs.push(blob);
+        w.spawn(blob);
       }
       w.audio.play('throw', { vol: 0.7, pitch: 0.6 });
       w.particles.emit('smoke', m.x, m.y, { count: 6, color: '#e9edf5' });
@@ -157,6 +161,13 @@ export class Arachne extends MiniBoss {
     w.particles.emit('debris', this.x, this.y - 6, { count: 10, w: 60 });
     const r = this.atk?.r ?? 0.85;
     this.anim?.playPhased('leap_land', 0.1, 0.12, Math.max(0.1, r - 0.22));
+  }
+
+  /** Her webs in the air and the one around the player's feet go with her. */
+  protected clearConjured(): void {
+    for (const b of this.blobs) b.dead = true;
+    this.blobs = [];
+    for (const e of this.world.entities) if (e instanceof WebRoot) e.dead = true;
   }
 
   protected drawMarkers(ctx: CanvasRenderingContext2D, p: number): void {

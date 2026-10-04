@@ -29,6 +29,10 @@ export interface HudLayout {
   skills: { cx: number; cy: number; r: number; hit: AABB }[];
   weapons: AABB[];
   boss: AABB;
+  /** mid-boss HP bar: top-centre between the HP bar and the pause button, smaller than the boss bar */
+  mini: AABB;
+  /** mid-boss name card ("중간 보스" + name), below the counters row so it never covers them */
+  miniCard: AABB;
 }
 
 /** All fixed HUD geometry for a W × H virtual view (pure; used by tests to check tap target sizes). */
@@ -46,6 +50,7 @@ export function hudLayout(W: number, H: number, maxFlasks = 1): HudLayout {
     return { cx, cy, r: sr, hit: { x: cx - 22, y: cy - 22, w: 44, h: 44 } };
   });
   const bw = Math.min(420, W - 230);
+  const mw = clamp(W - 330, 150, 250);
   return {
     hp,
     flask,
@@ -59,6 +64,8 @@ export function hudLayout(W: number, H: number, maxFlasks = 1): HudLayout {
     skills,
     weapons: [0, 1].map((i) => ({ x: 8 + i * 28, y: H - 32, w: 24, h: 24 })),
     boss: { x: (W - bw) / 2, y: H - 20, w: bw, h: 10 },
+    mini: { x: Math.round((W - mw) / 2), y: 20, w: mw, h: 7 },
+    miniCard: { x: Math.round(W / 2 - 75), y: 56, w: 150, h: 32 },
   };
 }
 
@@ -80,6 +87,9 @@ export function itemOf(e: unknown): ItemInstance | null {
 const BOSS_NAME = '강철 여교도관';
 const BOSS_SUB = '사슬의 종탑을 지키는 간수';
 const BOSS_INTRO = 3.4;
+/** mid-boss name card: how long it stays up (s) */
+const MINI_CARD = 2.8;
+export const MINI_LABEL = '중간 보스';
 
 /** The always-on HUD: bars, counters, minimap, skill buttons, prompts, boss bar, toasts, touch feedback. */
 export class Hud {
@@ -103,6 +113,11 @@ export class Hud {
   private bossHp = 1;
   private bossTrail = 1;
   private bossFade = 1;
+  private miniActor: unknown = null;
+  private miniT = -1;
+  private miniHp = 1;
+  private miniTrail = 1;
+  private miniFade = 1;
 
   constructor(readonly ui: LevelUI) {
     const w = ui.world;
@@ -141,6 +156,16 @@ export class Hud {
 
   get bossIntroActive(): boolean {
     return this.bossT >= 0 && this.bossT < BOSS_INTRO;
+  }
+
+  /** The compact "중간 보스" name card is on screen. */
+  get miniCardActive(): boolean {
+    return !!this.ui.miniboss && this.miniT >= 0 && this.miniT < MINI_CARD;
+  }
+
+  /** The mid-boss HP bar is on screen (hidden once the boss is dead and the bar has faded out). */
+  get miniBarVisible(): boolean {
+    return !!this.ui.miniboss && this.miniFade > 0.01;
   }
 
   update(dt: number): void {
@@ -191,6 +216,28 @@ export class Hud {
       this.bossTrail = f > this.bossTrail ? f : Math.max(f, this.bossTrail - 0.25 * dt);
       if (b.actor.dead || b.actor.hp <= 0) this.bossFade = Math.max(0, this.bossFade - dt * 0.8);
     }
+    // mid-boss
+    const m = this.ui.miniboss;
+    if (m && m.actor !== this.miniActor) {
+      this.miniActor = m.actor;
+      this.miniT = 0;
+      this.miniHp = this.miniTrail = 1;
+      this.miniFade = 1;
+    }
+    if (m) {
+      this.miniT += dt;
+      const f = clamp(m.actor.hp / Math.max(1, m.actor.maxHp), 0, 1);
+      this.miniHp = f;
+      this.miniTrail = f > this.miniTrail ? f : Math.max(f, this.miniTrail - 0.25 * dt);
+      if (m.actor.dead || m.actor.hp <= 0) {
+        this.miniFade = Math.max(0, this.miniFade - dt * 0.9);
+        if (this.miniFade <= 0) {
+          this.ui.miniboss = null;
+          this.miniActor = null;
+          this.miniT = -1;
+        }
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -212,6 +259,7 @@ export class Hud {
     this.drawVButtons(c, W, H, interactive);
     if (interactive && !p.dying) this.drawPrompt(c, W, H);
     this.drawBoss(c, L, W, H);
+    this.drawMiniBoss(c, L);
     this.drawToasts(c, W, H);
   }
 
@@ -576,6 +624,36 @@ export class Hud {
     c.globalAlpha = 1;
   }
 
+  /** Mid-boss: compact name card ("중간 보스" + name) for the first seconds, then a slim HP bar at the top centre. */
+  private drawMiniBoss(c: CanvasRenderingContext2D, L: HudLayout): void {
+    const m = this.ui.miniboss;
+    if (!m || this.miniFade <= 0.01 || this.bossIntroActive) return;
+    const r = L.mini;
+    const fade = this.miniFade * clamp(this.miniT / 0.3, 0, 1);
+    c.globalAlpha = fade;
+    text(c, m.name, r.x + r.w / 2, r.y - 8, { align: 'center', bold: true, color: '#ffe3c2' });
+    c.fillStyle = '#07060b';
+    c.fillRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
+    c.fillStyle = '#2a1424';
+    c.fillRect(r.x, r.y, r.w, r.h);
+    c.fillStyle = '#f3e7d3';
+    c.fillRect(r.x, r.y, Math.round(r.w * this.miniTrail), r.h);
+    c.fillStyle = '#d6762a';
+    c.fillRect(r.x, r.y, Math.round(r.w * this.miniHp), r.h);
+    c.fillStyle = '#ffb06a';
+    c.fillRect(r.x, r.y, Math.round(r.w * this.miniHp), 2);
+    if (this.miniCardActive) {
+      const t = this.miniT;
+      const a = Math.min(1, t / 0.25) * Math.min(1, (MINI_CARD - t) / 0.5);
+      const k = L.miniCard;
+      c.globalAlpha = a * this.miniFade;
+      panel(c, k.x, k.y, k.w, k.h, { fill: '#0b0a12', alpha: 0.82, stroke: '#d6762a', r: 5 });
+      text(c, MINI_LABEL, k.x + k.w / 2, k.y + 9, { align: 'center', color: '#ff8a5c', spacing: 2 });
+      text(c, m.name, k.x + k.w / 2, k.y + 22, { size: SZ.m, bold: true, align: 'center', color: '#ffe3c2' });
+    }
+    c.globalAlpha = 1;
+  }
+
   private drawToasts(c: CanvasRenderingContext2D, W: number, H: number): void {
     if (this.banner) {
       const t = this.banner.t;
@@ -588,7 +666,7 @@ export class Hud {
       c.fillRect(Math.round(W / 2 - lw / 2), y + 17, lw, 1);
       c.globalAlpha = 1;
     }
-    let y = 46;
+    let y = 46 + (this.miniCardActive ? 50 : 0);
     for (const t of this.toasts) {
       const a = clamp(t.t / 0.4, 0, 1) * clamp((t.life - t.t) / 0.15, 0, 1);
       const rise = (1 - clamp(t.t / 0.4, 0, 1)) * -6;

@@ -553,7 +553,8 @@ export class Matron extends Actor {
       // fall
       this.vy = Math.min(1100, this.vy + 3200 * dt);
       this.y += this.vy * dt;
-      const floor = w.map.floorBelow(this.x, this.groundY - L.rd - 10, 900) ?? this.groundY;
+      // land on the floor she jumped from, not on a one-way ledge she happens to be above (she would hover out of reach)
+      const floor = w.map.floorBelow(this.x, this.groundY - 10, 900) ?? this.groundY;
       if (this.y >= floor) {
         this.y = floor;
         this.vy = 0;

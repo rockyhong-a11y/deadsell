@@ -1,0 +1,68 @@
+{
+ "image": "mb_arachne.png",
+ "frameW": 224,
+ "frameH": 176,
+ "anchor": [
+  112,
+  164
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 8,
+   "fps": 7,
+   "loop": true
+  },
+  "walk": {
+   "row": 1,
+   "frames": 12,
+   "fps": 12,
+   "loop": true
+  },
+  "web": {
+   "row": 2,
+   "frames": 12,
+   "fps": 12,
+   "loop": false,
+   "windup": 5,
+   "active": 2,
+   "recover": 5
+  },
+  "leap": {
+   "row": 3,
+   "frames": 10,
+   "fps": 12,
+   "loop": false
+  },
+  "leap_land": {
+   "row": 4,
+   "frames": 9,
+   "fps": 12,
+   "loop": false,
+   "windup": 2,
+   "active": 2,
+   "recover": 5
+  },
+  "bite": {
+   "row": 5,
+   "frames": 11,
+   "fps": 12,
+   "loop": false,
+   "windup": 4,
+   "active": 2,
+   "recover": 5
+  },
+  "hurt": {
+   "row": 6,
+   "frames": 4,
+   "fps": 14,
+   "loop": false
+  },
+  "death": {
+   "row": 7,
+   "frames": 16,
+   "fps": 8,
+   "loop": false
+  }
+ }
+}

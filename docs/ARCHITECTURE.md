@@ -46,6 +46,8 @@ src/game/player/*               Player controller, weapons, skills              
 src/game/items/*                item catalogue, rolling, pickups, item drops          [player]
 src/game/enemies/*              enemy AI, enemy projectiles, createEnemy, pools       [enemies]
 src/game/boss/*                 The Iron Matron, boss projectiles/hazards             [enemies]
+src/game/enemies/variants.ts    30 enemy types: 6 bases + 24 variants (table, spawn picker)  [enemies]
+src/game/miniboss/*             4 mid-bosses (abbess, arachne, valkyrie, witch), hazards  [enemies]
 src/game/level/*                templates, generator, populate, LevelRenderer         [level]
 src/game/props/*                interactables & decor (doors, chests, altars, NPCs, shop, fountain, torches, gates) [level]
 src/game/ui/*                   touch gestures, virtual buttons (vbuttons.ts), HUD, overlays, minimap, menus, settings screen (settings.ts) [ui]
@@ -67,14 +69,16 @@ note the dependency in your report; do not edit the other module.
   `actor.takeDamage(info)`. Subclasses customise via `intercept()` (block/parry/shield),
   `onHurt()`, `die()`. Never subtract hp directly.
 * Events (`GameEvent` in world.ts): enemyKilled, playerHurt, playerDied, bossStart,
-  bossDefeated, levelExit, pickup, roomEntered, tileBroken, toast.
+  bossDefeated, minibossStart, minibossDefeated, levelExit, pickup, roomEntered, tileBroken, toast.
 * Interactables: implement `Interactable` (world.ts) on an Entity; the player picks the
   nearest one, the HUD shows the prompt bubble, `interact()` performs it.
 * Level flow: `levelExit` event → next level; `playerDied` → death screen after 1.6 s;
   `bossDefeated` → slow-mo then victory.
 * Items: `ITEMS`, `rollItem`, `itemName`, `itemLines`, `itemPrice` (items.ts);
   `dropLoot`, `spawnItemDrop`, `spawnFood`, `spawnScroll` (pickups.ts).
-* Enemies: `createEnemy(kind, x, y, {tier, elite})`, `ENEMY_POOLS`, `FLYERS`; boss: `createBoss(x, y)`.
+* Enemies: `createEnemy(kind, x, y, {tier, elite})` (`kind` = any of the 30 ids of `ENEMY_DEFS`), `pickEnemy(rng, biome, depth01, flyer)`,
+  `ENEMY_POOLS`, `FLYERS`; boss: `createBoss(x, y)`; mid-boss: `createMiniBoss(id, x, y, tier)`, `pickMiniBoss(biome, seed)`
+  (docs/CONTENT2.md).
 * Level: `buildLevel(spec, seed, save)`, `populateLevel(world, level)`, `LevelRenderer`.
 * UI: `LevelUI` (`modal`, `toast`, `openChoice`, `openAlchemist`, `openMap`, `openPause`, `boss`).
 
@@ -100,7 +104,7 @@ note the dependency in your report; do not edit the other module.
 * Visual/e2e: run a dev server on your own port (`npx vite --port <p> --strictPort`) and
   drive it with Playwright (`node_modules/playwright`, Chromium is pre-installed):
   `window.__ds` offers `start(seed)`, `gotoLevel('boss')`, `god()`, `teleport(x,y)`,
-  `killAll()`, `give(itemId, slot)`, `step(n)`, `info()`. URL flags: `?seed=1&debug=2&god=1&level=boss&mute=1`.
+  `killAll()`, `give(itemId, slot)`, `step(n)`, `info()`, `spawn(enemyId, dx)`, `gotoMiniboss()`. URL flags: `?seed=1&debug=2&god=1&level=boss&mute=1`.
   Screenshot and look at the result (Read tool) — do not assume it looks right.
 * End-to-end (Playwright, `npx playwright test`, 844x390 mobile-landscape Chromium against the Vite dev server):
   * `e2e/smoke.spec.ts` - real touch gestures (CDP touch events) on the title / HUD / death screens.

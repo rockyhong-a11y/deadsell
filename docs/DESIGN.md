@@ -56,7 +56,7 @@ bought from the Alchemist, best time, runs won.
 | `alchemist` | 연금술사 모르웬 (Morwen) | Meta NPC (Collector role) | Tall hooded alchemist woman with a bird-beak plague mask pushed up on her head, many glowing blue vials on her coat, a huge backpack with a tank of cells. |
 | `merchant` | 상인 펠 (Pell) | Shop NPC | Cheerful merchant woman with a big backpack of goods, wide hat, scarf, lantern. |
 
-Elite enemies are the normal sprite drawn 1.3× with a coloured aura (code side).
+Elite enemies are the normal sprite at 1.0× scale with a stat boost and a coloured aura (code side; see docs/CONTENT2.md — elites are not mid-bosses).
 
 ---------------------------------------------------------------------------
 ## 4. Controls (touch first, minimal UI)

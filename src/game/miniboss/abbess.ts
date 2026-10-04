@@ -33,6 +33,7 @@ export type AbbessAttack = 'cleave' | 'spin' | 'summon';
 export class Abbess extends MiniBoss {
   private lastSummon = -99;
   private spots: number[] = [];
+  private waves: FloorWave[] = [];
 
   constructor(x: number, y: number, tier = 1) {
     super(ABBESS_SPEC, x, y, tier);
@@ -112,7 +113,10 @@ export class Abbess extends MiniBoss {
       w.particles.emit('debris', cx, this.y - 6, { count: 8 });
       w.fx.slash(this.x + f * 50, this.y - 56, { dir: f, radius: 70, from: -1.3, to: 0.7, color: '#dfe6ff', width: 5, life: 0.2 });
       const C = ABBESS.cleave;
-      w.spawn(new FloorWave(this.x + f * (C.reach + 6), this.y, f, { speed: C.crackSpeed, damage: this.dmg(C.crackDmg), maxDist: C.crackDist, source: this }));
+      const crack = new FloorWave(this.x + f * (C.reach + 6), this.y, f, { speed: C.crackSpeed, damage: this.dmg(C.crackDmg), maxDist: C.crackDist, source: this });
+      this.waves = this.waves.filter((x) => !x.dead);
+      this.waves.push(crack);
+      w.spawn(crack);
     } else if (name === 'spin') {
       w.audio.play('swing_heavy');
       w.shake(3, 0.3);
@@ -173,6 +177,11 @@ export class Abbess extends MiniBoss {
 
   protected activeEnd(name: string): void {
     if (name === 'spin') this.anim?.playFor('spin_end', this.atk?.r ?? 1);
+  }
+
+  protected clearConjured(): void {
+    for (const f of this.waves) f.dead = true;
+    this.waves = [];
   }
 
   protected drawMarkers(ctx: CanvasRenderingContext2D, p: number): void {

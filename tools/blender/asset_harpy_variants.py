@@ -242,8 +242,8 @@ def v_siren(r, M):
     for k, (y, ln, rr) in enumerate(((-0.07, 0.34, 0.1), (0.0, 0.4, 0.108), (0.075, 0.3, 0.092))):
         A(L.tube("lock%d" % k, [(0, y * S, 0), (-0.03 * S, y * S, -0.15), (-0.02 * S, y * S, -ln)],
                  [rr * S, rr * S * 0.95, rr * S * 0.9], M["hair"], depth=0.9), "hb")
-        A(L.tube("lockb%d" % k, [(0, y * S, 0.02), (-0.02 * S, y * S, -0.2), (0.01 * S, y * S, -0.42 - 0.1 * k),
-                                 (0.0, y * S, -0.62 - 0.12 * k)],
+        A(L.tube("lockb%d" % k, [(0, y * S, 0.02), (-0.02 * S, y * S, -0.17), (0.01 * S, y * S, -0.3 - 0.07 * k),
+                                 (0.0, y * S, -0.44 - 0.08 * k)],
                  [rr * S * 0.95, rr * S * 0.85, rr * S * 0.6, 0.012], M["hair"], depth=0.9), "hb1")
     # shell ornaments: bikini shells, hair shells + starfish, pearl strand, hip shell
     for y in (-0.085, 0.085):

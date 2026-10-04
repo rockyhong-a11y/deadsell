@@ -7,6 +7,7 @@ import { generateBiome } from './generator';
 import { buildPassage, buildBossArena } from './special';
 import { ENEMY_POOLS, FLYERS, createEnemy, pickEnemy } from '../enemies/factory';
 import { createBoss } from '../boss/matron';
+import { createMiniBoss, pickMiniBoss } from '../miniboss';
 import { rollItem } from '../items/items';
 import { Alchemist, Altar, BossGate, Chest, Deco, ExitDoor, Fountain, Merchant, Pedestal, RoomTracker, ShopItem, Torch, pickDeco, type DecoKind } from '../props';
 
@@ -25,7 +26,7 @@ const TORCH_COLOR: Record<string, string> = { prison: '#ffa040', ramparts: '#ffb
 /**
  * Spawn every entity described by the level's spawn list (not the player): enemies (pool weights,
  * elites later in the level), chests, altars, pedestals, the shop, NPCs, the exit door, decoration,
- * torches and - in the boss arena - the boss and the gate. Uses world.rng (seeded per level).
+ * torches, the biome's mid-boss ('N' marker) and - in the boss arena - the boss and the gate. Uses world.rng (seeded per level).
  */
 export function populateLevel(world: World, level: LevelData): void {
   const { run, rng } = world;
@@ -106,6 +107,12 @@ export function populateLevel(world: World, level: LevelData): void {
       case 'boss':
         world.spawn(createBoss(s.x, s.y));
         break;
+      case 'miniboss': {
+        // one of the biome's two mid-bosses, chosen by the level seed (the generator places exactly one 'N')
+        const id = pickMiniBoss(biome, level.seed);
+        if (id) world.spawn(createMiniBoss(id, s.x, s.y, tier));
+        break;
+      }
     }
   }
   world.spawn(new RoomTracker(rooms));

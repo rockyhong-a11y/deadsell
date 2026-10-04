@@ -1149,14 +1149,14 @@ def m_reaper_scythe(haft=1.1):
     """Long curved scythe: dark blade sweeping back from the top of the haft, stitched grip."""
     steel, steel_d = mat("steel"), mat("steel_dark")
     top = haft * 0.5
-    parts = [cyl("rs_haft", 0.034, haft, mat("wood_dark"), loc=(0, 0, -haft * 0.5))]
+    parts = [cyl("rs_haft", 0.046, haft, mat("wood_dark"), loc=(0, 0, -haft * 0.5))]
     for i in range(5):
-        parts.append(torus("rs_wrap%d" % i, 0.037, 0.009, mat("thread"), loc=(0, 0, -0.32 + i * 0.06), segs=12,
+        parts.append(torus("rs_wrap%d" % i, 0.05, 0.012, mat("thread"), loc=(0, 0, -0.32 + i * 0.06), segs=12,
                            rsegs=4))
-    parts.append(cyl("rs_collar", 0.052, 0.12, mat("bone_w"), loc=(0, 0, top - 0.08), r_top=0.04))
+    parts.append(cyl("rs_collar", 0.066, 0.12, mat("bone_w"), loc=(0, 0, top - 0.08), r_top=0.052))
     R = 0.62
-    blade = crescent_pts(R, 92, 166, 0.025, 0.14)
-    parts.append(prism("rs_blade", blade, 0.034, steel_d, loc=(0, 0, top - R + 0.02), bevel=0.006))
+    blade = crescent_pts(R, 92, 166, 0.03, 0.17)
+    parts.append(prism("rs_blade", blade, 0.04, steel_d, loc=(0, 0, top - R + 0.02), bevel=0.006))
     edge = crescent_pts(R - 0.05, 98, 160, 0.0, 0.07)
     parts.append(prism("rs_edge", edge, 0.04, steel, loc=(0, 0, top - R + 0.02), y0=-0.003))
     for i, a in enumerate((0.0, 0.02)):
@@ -1349,3 +1349,40 @@ def m_chain_hook():
                        twist0=0 if i % 2 == 0 else 90, width_ratio=0.62)
     hook = group("ch_hookg", parts[:4], scale=1.6)
     return group("chain_hook", [hook] + parts[4:])
+
+
+def m_golem_head():
+    """Rag golem bust for the codex icon: burlap head, red yarn hair and braids, cyan button eyes, stitched smile
+    (faces -Y, toward the camera)."""
+    burlap, burlap_l = mat("burlap"), mat("sack")
+    yarn, yarn_d = mat("yarn"), mat("blood_dry")
+    dark = mat("blood_dry")
+    cyan, hot = glow("#4fe3ff"), glow("#e6fdff")
+    parts = [sphere("gh_skull", 0.4, burlap, loc=(0, 0, 0.4), segs=18, rings=12, scale=(1.0, 0.95, 0.95)),
+             sphere("gh_body", 0.36, burlap_l, loc=(0, 0.02, -0.18), segs=14, rings=10, scale=(1.35, 0.8, 0.7)),
+             torus("gh_collar", 0.2, 0.05, mat("bone"), loc=(0, 0, 0.03), segs=14, rsegs=5, scale=(1, 0.9, 1))]
+    # yarn hair: cap, fringe, braids with a bow
+    parts.append(sphere("gh_cap", 0.43, yarn, loc=(0, 0.03, 0.55), segs=16, rings=10, scale=(1.0, 0.95, 0.62)))
+    parts.append(sphere("gh_fringe", 0.3, yarn, loc=(0, -0.2, 0.72), segs=12, rings=8, scale=(1.3, 0.5, 0.35)))
+    for i, x in enumerate((-0.27, -0.09, 0.09, 0.27)):
+        parts.append(sphere("gh_bang%d" % i, 0.08, yarn if i % 2 else yarn_d, loc=(x, -0.3, 0.62), segs=8, rings=6,
+                            scale=(1, 0.8, 1.7)))
+    for sx in (-1, 1):
+        for k, z in enumerate((0.3, 0.05, -0.2)):
+            parts.append(sphere("gh_braid%d_%d" % (sx, k), 0.15, yarn if k % 2 == 0 else yarn_d, loc=(sx * 0.46, 0.02, z),
+                                segs=10, rings=8, scale=(1, 1, 1.25)))
+        parts.append(torus("gh_tie%d" % sx, 0.12, 0.03, mat("thread"), loc=(sx * 0.46, 0.02, -0.33), segs=12, rsegs=5))
+    # button eyes: one big, one small (mismatched), glowing cyan
+    for nm, x, rad in (("a", -0.15, 0.125), ("b", 0.16, 0.088)):
+        parts.append(torus("gh_ring" + nm, rad + 0.015, 0.025, mat("brass"), loc=(x, -0.375, 0.45), rot=(90, 0, 0), segs=16, rsegs=5))
+        parts.append(cyl("gh_eye" + nm, rad * 0.9, 0.06, cyan, loc=(x, -0.37, 0.45), rot=(90, 0, 0), segs=14))
+        parts.append(sphere("gh_hot" + nm, rad * 0.4, hot, loc=(x - rad * 0.2, -0.43, 0.48), segs=8, rings=5))
+    # nose + stitched smile + cheek patch
+    parts.append(sphere("gh_nose", 0.06, mat("sack"), loc=(0.0, -0.4, 0.33), segs=8, rings=6))
+    sm = [(-0.2, -0.375, 0.2), (-0.1, -0.395, 0.15), (0.0, -0.4, 0.135), (0.1, -0.395, 0.15), (0.2, -0.375, 0.2)]
+    parts.append(tube("gh_smile", sm, 0.016, dark, segs=5))
+    for i, (x, z) in enumerate(((-0.14, 0.17), (0.0, 0.155), (0.14, 0.17))):
+        parts.append(box("gh_tick%d" % i, (0.02, 0.02, 0.09), dark, loc=(x, -0.4, z + 0.01)))
+    parts.append(sphere("gh_patch", 0.1, mat("flesh_pale"), loc=(-0.3, -0.27, 0.27), segs=10, rings=6, scale=(1, 0.3, 1)))
+    parts.append(torus("gh_patch_st", 0.09, 0.012, dark, loc=(-0.3, -0.31, 0.27), rot=(90, 0, 0), segs=14, rsegs=4))
+    return group("golem_head", parts)

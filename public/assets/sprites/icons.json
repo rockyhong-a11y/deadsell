@@ -96,6 +96,78 @@
    "frames": 1,
    "fps": 1,
    "loop": false
+  },
+  "bone_cleaver": {
+   "row": 15,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "reaper_scythe": {
+   "row": 16,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "stitch_needle": {
+   "row": 17,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "widow_fangs": {
+   "row": 18,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "coffin_lid": {
+   "row": 19,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "marrow_bow": {
+   "row": 20,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "corpse_bomb": {
+   "row": 21,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "bone_spikes": {
+   "row": 22,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "soul_lantern": {
+   "row": 23,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "chain_hook": {
+   "row": 24,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "corpse_piece": {
+   "row": 25,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  },
+  "golem": {
+   "row": 26,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
   }
  }
 }

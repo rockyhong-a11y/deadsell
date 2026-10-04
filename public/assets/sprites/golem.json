@@ -1,0 +1,62 @@
+{
+ "image": "golem.png",
+ "frameW": 128,
+ "frameH": 128,
+ "anchor": [
+  64,
+  124
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 6,
+   "fps": 7,
+   "loop": true
+  },
+  "walk": {
+   "row": 1,
+   "frames": 8,
+   "fps": 9,
+   "loop": true
+  },
+  "attack": {
+   "row": 2,
+   "frames": 8,
+   "fps": 12,
+   "loop": false,
+   "windup": 3,
+   "active": 2,
+   "recover": 3
+  },
+  "hurt": {
+   "row": 3,
+   "frames": 3,
+   "fps": 12,
+   "loop": false
+  },
+  "jump": {
+   "row": 4,
+   "frames": 2,
+   "fps": 8,
+   "loop": false
+  },
+  "death": {
+   "row": 5,
+   "frames": 8,
+   "fps": 10,
+   "loop": false
+  },
+  "assemble": {
+   "row": 6,
+   "frames": 8,
+   "fps": 10,
+   "loop": false
+  },
+  "pile": {
+   "row": 7,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  }
+ }
+}

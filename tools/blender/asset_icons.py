@@ -265,6 +265,12 @@ def i_corpse_piece():
     return [r]
 
 
+def i_golem():
+    r = L.m_golem_head()
+    orient(r, 0, twist=-12)
+    return [r]
+
+
 ICONS = [
     # id, builder, yaw, pitch
     ("rusty_sword", i_rusty_sword, 15, 10),
@@ -294,6 +300,7 @@ ICONS = [
     ("soul_lantern", i_soul_lantern, 15, 10),
     ("chain_hook", i_chain_hook, 15, 10),
     ("corpse_piece", i_corpse_piece, 15, 22),
+    ("golem", i_golem, 10, 8),
 ]
 
 

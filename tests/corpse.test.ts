@@ -25,6 +25,10 @@ import { Golem, golemDamage, golemMaxHp, newGolemState, spawnRunGolem } from '..
 import { buildLevel, populateLevel } from '../src/game/level/build';
 import { generateBiome } from '../src/game/level/generator';
 import { hudLayout } from '../src/game/ui/hud';
+import { Game } from '../src/game/game';
+import { DeathScene } from '../src/game/scenes/deathScene';
+import { VictoryScene } from '../src/game/scenes/victoryScene';
+import { LoopClearScene } from '../src/game/scenes/loopClearScene';
 
 const FLOOR = 16 * 24;
 
@@ -953,5 +957,100 @@ describe('누더기 골렘', () => {
     expect(Math.abs(t.g.x - x)).toBeLessThan(2);
     steps(t.world, 60);
     expect(t.g.x).toBeGreaterThan(x + 20);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+describe('run flow: the Game owns the save, the run and the scene changes', () => {
+  /** a Game without its devices: only what startRun / playerDied / victory / loopClear touch */
+  function fakeGame() {
+    const game = Object.create(Game.prototype) as Game & { made: (() => unknown)[]; persisted: number };
+    const g = game as unknown as Record<string, unknown>;
+    g.save = defaultSave();
+    g.run = null;
+    g.persisted = 0;
+    g.made = [];
+    g.audio = { play() {} };
+    g.persist = () => { (game as unknown as { persisted: number }).persisted++; };
+    g.goto = (make: () => unknown) => { (game as unknown as { made: (() => unknown)[] }).made.push(make); };
+    return game;
+  }
+  const lastScene = (game: ReturnType<typeof fakeGame>) => game.made[game.made.length - 1]();
+
+  it('a new run carries nothing: pieces 0, no golem, the save\'s loop; the loop\'s run counter goes up', () => {
+    const game = fakeGame();
+    game.save.loop = 3;
+    game.startRun(11);
+    expect(game.run!.pieces).toBe(0);
+    expect(game.run!.golem).toBeNull();
+    expect(game.run!.loop).toBe(3);
+    expect([game.save.runs, game.save.loopRuns]).toEqual([1, 1]);
+    game.startRun(12);
+    expect([game.save.runs, game.save.loopRuns]).toEqual([2, 2]);
+  });
+
+  it('dying loses the carried pieces: the body stays, nothing reaches the save, the next run starts empty', () => {
+    const game = fakeGame();
+    game.save.body = 41;
+    game.startRun(1);
+    game.run!.pieces = 17;
+    game.run!.kills = 9;
+    game.playerDied();
+    expect(game.save.body).toBe(41);
+    expect(game.save.totalKills).toBe(9);
+    expect(JSON.stringify(game.save)).not.toContain('"pieces"');
+    expect(lastScene(game)).toBeInstanceOf(DeathScene);
+    game.startRun(2);
+    expect(game.run!.pieces).toBe(0);
+    expect(game.save.body).toBe(41);
+  });
+
+  it('winning sews the carried pieces on the spot and counts the win once', () => {
+    const game = fakeGame();
+    game.save.body = 30;
+    game.startRun(1);
+    game.run!.pieces = 25;
+    game.run!.kills = 40;
+    game.victory();
+    expect(game.save.body).toBe(55);
+    expect(game.run!.pieces).toBe(0);
+    expect(game.run!.piecesSewn).toBe(25);
+    expect([game.save.wins, game.save.totalKills, game.save.loop]).toEqual([1, 40, 1]);
+    expect(lastScene(game)).toBeInstanceOf(VictoryScene);
+  });
+
+  it('a won run that completes the body: the loop is cleared, the victory scene hands over to the loop-clear scene', () => {
+    const game = fakeGame();
+    game.save.body = 90;
+    game.startRun(1);
+    game.run!.pieces = 25;
+    game.run!.kills = 40;
+    game.victory();
+    expect([game.save.loop, game.save.body, game.save.loopRuns]).toEqual([2, 0, 0]);
+    expect(game.save.wins).toBe(1);
+    const scene = lastScene(game) as VictoryScene;
+    expect(scene).toBeInstanceOf(VictoryScene);
+    game.made.length = 0;
+    (scene as unknown as { t: number; tap(): void; skipped: boolean }).t = 5;
+    (scene as unknown as { skipped: boolean }).skipped = true;
+    (scene as unknown as { tap(): void }).tap();
+    expect(lastScene(game)).toBeInstanceOf(LoopClearScene);
+    // a won run's kills were counted by victory(), not again by the loop clear
+    expect(game.save.totalKills).toBe(40);
+  });
+
+  it('Selma\'s loop clear counts the run\'s kills once and shows the cleared loop', () => {
+    const game = fakeGame();
+    game.startRun(1);
+    game.run!.kills = 12;
+    game.save.loopRuns = 4;
+    game.save.body = 99;
+    game.run!.pieces = 1;
+    const sewn = sewPieces(game.run!, game.save);
+    expect(sewn.cleared).toEqual({ loop: 1, runs: 4 });
+    game.loopClear(sewn.cleared!);
+    expect(game.save.totalKills).toBe(12);
+    expect(lastScene(game)).toBeInstanceOf(LoopClearScene);
+    expect(game.save.loop).toBe(2);
   });
 });

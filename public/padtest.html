@@ -18,6 +18,7 @@
 <body>
 <h1>게임패드 진단 페이지</h1>
 <div>컨트롤러를 연결한 상태에서 <b>A 버튼을 여러 번</b> 누르고 스틱을 움직여 보세요. 이 화면을 캡처해 주시면 원인을 확인할 수 있습니다.</div>
+<button id="focusBtn" style="font-size:18px;padding:12px 18px;margin:10px 0;border-radius:10px;border:0;background:#2b6cff;color:#fff">① 여기를 탭한 뒤 ② 컨트롤러 A 버튼</button>
 <div class="row" id="env"></div>
 <div class="big" id="summary">입력 대기 중…</div>
 <h1>실시간 상태 (navigator.getGamepads)</h1>
@@ -44,6 +45,7 @@
   addEventListener('gamepaddisconnected', (e) => { add(`gamepaddisconnected #${e.gamepad.index} "${e.gamepad.id}"`); });
   addEventListener('keydown', (e) => { keys++; add(`keydown key=${e.key} code=${e.code}`); });
   addEventListener('pointerdown', () => { try { navigator.getGamepads(); } catch (e) {} });
+  $('focusBtn').addEventListener('click', () => { $('focusBtn').focus(); add('화면 탭 (포커스 확보)'); try { navigator.getGamepads(); } catch (e) {} });
   function frame() {
     let out = '';
     try {

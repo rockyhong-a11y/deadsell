@@ -429,6 +429,18 @@ export interface TouchController {
  *  - the virtual buttons ("buttons" mode) when it starts on one (and not on a UI tap region),
  *  - otherwise the gesture recogniser (UI taps always; stick / swipes only in "gesture" mode).
  */
+/** Give the page keyboard / game-controller focus (iOS delivers Gamepad API input only to the focused web view). */
+function focusPage(canvas: HTMLCanvasElement): void {
+  if (document.activeElement === canvas) return;
+  if (canvas.tabIndex < 0) canvas.tabIndex = 0;
+  canvas.style.outline = 'none';
+  try {
+    canvas.focus({ preventScroll: true });
+  } catch {
+    /* focus is best effort */
+  }
+}
+
 export function attachTouch(game: Game): TouchController {
   const canvas = game.display.canvas;
   // phones/tablets: show touch hints from the first frame (keyboard presses switch it back)
@@ -450,7 +462,10 @@ export function attachTouch(game: Game): TouchController {
 
   canvas.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    e.preventDefault();
+    // touches keep their native tap: on iOS that tap is what makes the page the "first responder",
+    // and WebKit only delivers game-controller (Gamepad API) input to the first responder
+    if (e.pointerType === 'mouse') e.preventDefault();
+    focusPage(canvas);
     game.audio.unlock();
     if (e.pointerType !== 'mouse') game.input.device = 'touch';
     try {
@@ -499,9 +514,10 @@ export function attachTouch(game: Game): TouchController {
   canvas.addEventListener('pointercancel', lost);
   canvas.addEventListener('lostpointercapture', lost);
 
-  // no browser gestures: scrolling, pinch zoom, double-tap zoom, long-press menus, selection
+  // no browser gestures: scrolling (touchmove), pinch zoom (gesturestart), double-tap zoom (touch-action: none),
+  // long-press menus and selection (CSS). touchstart/touchend are NOT cancelled: see pointerdown above.
   const stop = (e: Event) => e.preventDefault();
-  for (const ev of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) canvas.addEventListener(ev, stop, { passive: false });
+  canvas.addEventListener('touchmove', stop, { passive: false });
   canvas.addEventListener('contextmenu', stop);
   canvas.addEventListener('dblclick', stop);
   document.addEventListener('gesturestart', stop as EventListener, { passive: false } as AddEventListenerOptions);

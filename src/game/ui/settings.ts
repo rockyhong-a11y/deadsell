@@ -423,7 +423,7 @@ export class SettingsScreen {
       const env = padEnvironment();
       const msg = env === 'unsupported' ? '이 브라우저는 게임패드를 지원하지 않습니다'
         : env === 'blocked' ? '이 화면(임베드)은 게임패드가 차단됨 · 게임 링크를 브라우저에서 직접 여세요'
-        : '게임패드를 연결하고 아무 버튼이나 누르세요';
+        : '화면을 한 번 탭한 뒤 컨트롤러 버튼을 누르세요';
       text(c, msg, r.x + 12, r.y + 29, { color: env === 'ok' ? COL.amber : COL.red, bold: true, alpha: env === 'ok' ? 0.6 + 0.4 * pulse(this.age, 0.8) : 1 });
     }
     if (!isDefaultMap(this.settings.gamepadMap)) text(c, '사용자 지정', r.x + r.w - 12, r.y + 13, { align: 'right', color: COL.amber });

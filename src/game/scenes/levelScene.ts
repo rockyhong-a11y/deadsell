@@ -7,6 +7,7 @@ import { Player } from '../player/player';
 import { LevelUI } from '../ui/levelUI';
 import { DEBUG } from '../../engine/config';
 import type { Actor } from '../entity';
+import type { NavKey } from '../../engine/gamepad';
 
 /** Plays one level of the run (biome, passage or boss arena). */
 export class LevelScene implements Scene {
@@ -55,6 +56,16 @@ export class LevelScene implements Scene {
     this.ui.dispose();
   }
 
+  /** Gamepad menu keys (the pause / map buttons also arrive here). */
+  nav(k: NavKey): void {
+    this.ui.nav(k);
+  }
+
+  /** a modal is open: the pad drives the menu, not the (paused) world */
+  captures(): boolean {
+    return this.ui.modal;
+  }
+
   private endAfter(secs: number, fn: () => void): void {
     if (this.endAction) return;
     this.endAction = fn;
@@ -81,8 +92,9 @@ export class LevelScene implements Scene {
     const ctx = d.wctx;
     const w = this.world;
     const cam = w.camera;
-    cam.w = d.W;
-    cam.h = d.H;
+    // the world buffer size is a graphics setting (288 / 360 / 432 tall); the UI keeps its own fixed 360-tall space
+    cam.w = d.worldW;
+    cam.h = d.worldH;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
@@ -97,12 +109,12 @@ export class LevelScene implements Scene {
     this.renderer.drawFront(ctx, cam);
     if (DEBUG.hitboxes) drawHitboxes(ctx, w.actors);
     ctx.restore();
-    w.lights.render(ctx, cam, d.W, d.H, w.time);
+    w.lights.render(ctx, cam, d.worldW, d.worldH, w.time);
     ctx.save();
     ctx.translate(-cam.viewX, -cam.viewY);
     w.fx.draw(ctx);
     ctx.restore();
-    w.fx.drawScreen(ctx, d.W, d.H);
+    w.fx.drawScreen(ctx, d.worldW, d.worldH);
     d.present();
     this.ui.draw(d.ui);
   }

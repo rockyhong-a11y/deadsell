@@ -2,7 +2,8 @@ import type { Game } from '../game';
 import type { World } from '../world';
 import type { Actor } from '../entity';
 import { Hud } from './hud';
-import { Modal, ChoiceModal, AlchemistModal, MapModal, PauseModal, TutorialModal, type ModalKey } from './modals';
+import { Modal, ChoiceModal, AlchemistModal, MapModal, PauseModal, SettingsModal, TutorialModal, type ModalKey } from './modals';
+import type { NavKey } from '../../engine/gamepad';
 
 export interface ChoiceOption {
   label: string;
@@ -134,6 +135,12 @@ export class LevelUI {
     this.push(new TutorialModal(this, firstRun));
   }
 
+  openSettings(): void {
+    if (this.top instanceof SettingsModal) return;
+    this.game.audio.play('ui_open');
+    this.push(new SettingsModal(this));
+  }
+
   /** Pause menu "give up": end the run now (death screen). The pause card stays up while the screen fades. */
   giveUp(): void {
     if (this.gaveUp) return;
@@ -144,6 +151,18 @@ export class LevelUI {
   /** Feed a navigation key to the top modal (keyboard; also used by tests). */
   key(k: ModalKey): void {
     this.top?.key(k);
+  }
+
+  /** Gamepad navigation (Game.step): menu keys go to the top modal; Start = Esc, Back = M like the keyboard. */
+  nav(k: NavKey): void {
+    if (!this.isActive()) return;
+    if (k === 'pause') {
+      if (this.top) this.top.key('cancel');
+      else if (!this.world.player.dying) this.openPause();
+    } else if (k === 'map') {
+      if (this.top instanceof MapModal) this.top.key('cancel');
+      else if (!this.top && !this.world.player.dying) this.openMap();
+    } else if (this.top) this.top.key(k);
   }
 
   private onKeyDown(e: KeyboardEvent): void {

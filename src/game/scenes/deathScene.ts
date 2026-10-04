@@ -2,6 +2,7 @@ import type { Game, Scene } from '../game';
 import type { RunState } from '../run';
 import { COL, SZ, button, formatTime, icon, pulse, text } from '../ui/draw';
 import { Embers, gradientBg, vignette } from '../ui/backdrop';
+import type { NavKey } from '../../engine/gamepad';
 
 /** Death screen: "사망", run stats, cells lost, tap to retry. */
 export class DeathScene implements Scene {
@@ -28,10 +29,16 @@ export class DeathScene implements Scene {
     this.game.showTitle();
   }
 
+  /** gamepad: A = retry, B = title */
+  nav(k: NavKey): void {
+    if (k === 'confirm') this.retry();
+    else if (k === 'cancel') this.title();
+  }
+
   update(dt: number): void {
     this.t += dt;
     const d = this.game.display;
-    this.embers.update(dt, d.W, d.H);
+    this.embers.update(dt, d.worldW, d.worldH);
     const i = this.game.input;
     if (this.t > 1 && (i.pressed('confirm') || i.pressed('attack1') || i.pressed('jump'))) this.retry();
   }
@@ -40,13 +47,14 @@ export class DeathScene implements Scene {
     const g = this.game;
     const d = g.display;
     const { W, H } = d;
+    const { worldW, worldH } = d;
     const t = this.t;
     const w = d.wctx;
     w.setTransform(1, 0, 0, 1, 0, 0);
     w.globalAlpha = 1;
     w.globalCompositeOperation = 'source-over';
-    gradientBg(w, W, H, [[0, '#080308'], [0.7, '#1a060c'], [1, '#2a0a10']]);
-    vignette(w, W, H, 0.75, '4,2,6');
+    gradientBg(w, worldW, worldH, [[0, '#080308'], [0.7, '#1a060c'], [1, '#2a0a10']]);
+    vignette(w, worldW, worldH, 0.75, '4,2,6');
     this.embers.draw(w);
     d.present();
 

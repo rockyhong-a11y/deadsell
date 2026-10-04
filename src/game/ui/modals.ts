@@ -4,6 +4,8 @@ import type { LevelUI, ChoiceOption } from './levelUI';
 import { META_UPGRADES, buyBlock, buyUpgrade, type MetaUpgrade } from '../meta/progression';
 import { COL, SZ, button, dim, formatTime, icon, panel, pulse, text, textWidth, wrap } from './draw';
 import { LEVEL_SEQUENCE } from '../run';
+import { drawGestureGlyph, type Glyph } from './glyphs';
+import { SettingsScreen, MODE_LABEL, drawButtonsPreview, drawPadList, type SettingsTab } from './settings';
 
 export type ModalKey = 'left' | 'right' | 'up' | 'down' | 'confirm' | 'cancel';
 
@@ -125,7 +127,7 @@ export class ChoiceModal extends Modal {
       if (o.icon) icon(this.ui.game.assets, c, o.icon, cx, r.y + 52, 56);
       text(c, o.label, cx, r.y + 100, { size: SZ.m, bold: true, align: 'center', color: accent });
       if (o.sub) wrap(c, o.sub, r.w - 16, SZ.s).slice(0, 4).forEach((l, li) => text(c, l, cx, r.y + 120 + li * 14, { align: 'center', color: COL.dim }));
-      if (sel && this.ui.game.input.device === 'keyboard') text(c, 'Enter', cx, r.y + r.h - 10, { align: 'center', color: accent, alpha: 0.5 + 0.5 * pulse(this.age, 1.2) });
+      if (sel && this.ui.game.input.device !== 'touch') text(c, this.ui.game.input.device === 'gamepad' ? 'A' : 'Enter', cx, r.y + r.h - 10, { align: 'center', color: accent, alpha: 0.5 + 0.5 * pulse(this.age, 1.2) });
       c.globalAlpha = this.ease;
       this.hit('choice' + i, r, () => this.pick(i));
     });
@@ -373,7 +375,7 @@ export class PauseModal extends Modal {
           this.rebuild();
         },
       },
-      { label: '조작 방법 보기', act: () => ui.openTutorial(false) },
+      { label: '설정', sub: '조작 · 그래픽 · 사운드', act: () => ui.openSettings() },
       {
         label: this.confirmGiveUp > 0 ? '정말 포기할까요? 한 번 더 터치' : '포기하기',
         color: COL.red,
@@ -430,8 +432,6 @@ export class PauseModal extends Modal {
 // ---------------------------------------------------------------------------
 // Gesture tutorial
 
-type Glyph = 'drag' | 'tap' | 'up' | 'side' | 'down' | 'hold';
-
 const TUTORIAL: { glyph: Glyph; title: string; how: string }[] = [
   { glyph: 'drag', title: '이동', how: '왼쪽을 누른 채\n드래그' },
   { glyph: 'tap', title: '공격', how: '오른쪽을 톡 탭' },
@@ -466,6 +466,12 @@ export class TutorialModal extends Modal {
   draw(c: CanvasRenderingContext2D, W: number, H: number): void {
     this.backdrop(c, W, H, 0.86, () => this.dismiss());
     c.globalAlpha = this.ease;
+    const mode = this.ui.game.save.settings.controlMode;
+    if (mode !== 'gesture') {
+      this.drawOtherMode(c, W, H, mode);
+      c.globalAlpha = 1;
+      return;
+    }
     const cols = W >= 740 ? 6 : 3;
     const rows = Math.ceil(TUTORIAL.length / cols);
     const cw = Math.min(150, Math.floor((W - 32) / cols));
@@ -477,7 +483,7 @@ export class TutorialModal extends Modal {
     TUTORIAL.forEach((t, i) => {
       const cx = x0 + (i % cols) * cw + cw / 2;
       const cy = y0 + 30 + Math.floor(i / cols) * ch;
-      this.drawGlyph(c, t.glyph, cx, cy + 28);
+      drawGestureGlyph(c, t.glyph, cx, cy + 28, this.age);
       text(c, t.title, cx, cy + 62, { bold: true, align: 'center', size: SZ.m, color: COL.cyan });
       wrap(c, t.how, cw - 8, SZ.s).forEach((l, li) => text(c, l, cx, cy + 79 + li * 13, { align: 'center', color: COL.dim }));
     });
@@ -490,62 +496,58 @@ export class TutorialModal extends Modal {
     c.globalAlpha = 1;
   }
 
-  /** Animated mini screen: left half blue (stick), right half orange (gestures), finger dot showing the motion. */
-  private drawGlyph(c: CanvasRenderingContext2D, g: Glyph, cx: number, cy: number): void {
-    const w = 86;
-    const h = 48;
-    const x = cx - w / 2;
-    const y = cy - h / 2;
-    panel(c, x, y, w, h, { fill: '#0a0d18', stroke: COL.line, r: 5 });
-    c.fillStyle = 'rgba(79,216,255,0.10)';
-    c.fillRect(x + 1, y + 1, w / 2 - 1, h - 2);
-    c.fillStyle = 'rgba(255,179,71,0.10)';
-    c.fillRect(x + w / 2, y + 1, w / 2 - 1, h - 2);
-    c.fillStyle = COL.line;
-    c.fillRect(Math.round(x + w / 2), y + 3, 1, h - 6);
-    const t = (this.age * 0.8) % 1;
-    const e = t < 0.7 ? t / 0.7 : 1;
-    const fade = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
-    const lx = x + w * 0.25;
-    const rx = x + w * 0.75;
-    const my = y + h / 2;
-    let fx = rx, fy = my, ring = 0;
-    let dirx = 0, diry = 0;
-    switch (g) {
-      case 'drag': fx = lx - 12 + 24 * Math.abs(Math.sin(this.age * 2.2)); fy = my; ring = 12; break;
-      case 'tap': fx = rx; fy = my; ring = 4 + 8 * e; break;
-      case 'up': fx = rx; fy = my + 14 - 28 * e; diry = -1; break;
-      case 'side': fx = rx - 14 + 28 * e; fy = my; dirx = 1; break;
-      case 'down': fx = rx; fy = my - 14 + 28 * e; diry = 1; break;
-      case 'hold': fx = rx; fy = my; ring = 3 + 11 * Math.min(1, (this.age % 1.4) / 1.1); break;
+  /** 가상 버튼 / 게임패드: the same "how to play" card, showing the layout or the pad mapping instead of gestures. */
+  private drawOtherMode(c: CanvasRenderingContext2D, W: number, H: number, mode: 'buttons' | 'gamepad'): void {
+    const game = this.ui.game;
+    const s = game.save.settings;
+    text(c, '조작 방법', W / 2, 34, { size: SZ.l, bold: true, align: 'center', spacing: 3 });
+    text(c, MODE_LABEL[mode], W / 2, 56, { align: 'center', color: COL.cyan, bold: true });
+    if (mode === 'buttons') {
+      const pw = Math.min(300, W - 48);
+      const r = { x: Math.round((W - pw) / 2), y: 72, w: pw, h: Math.round((pw * 9) / 16) };
+      drawButtonsPreview(c, s, r);
+      text(c, '왼쪽 방향키로 이동, 오른쪽 버튼으로 공격·점프·구르기·보조 무기·스킬', W / 2, r.y + r.h + 36, { align: 'center', color: COL.text });
+      text(c, '플라스크·말풍선·미니맵은 화면의 아이콘을 터치', W / 2, r.y + r.h + 52, { align: 'center', color: COL.dim });
+    } else {
+      const pad = game.pad;
+      const lw = Math.min(460, W - 32);
+      const r = { x: Math.round((W - lw) / 2), y: 72, w: lw, h: 5 * 30 };
+      drawPadList(c, s, r);
+      text(c, pad.connected ? `연결됨: ${pad.id}` : '게임패드를 연결하고 아무 버튼이나 누르세요', W / 2, r.y + r.h + 10, { align: 'center', color: pad.connected ? COL.green : COL.amber });
+      text(c, '이동: 왼쪽 스틱 / 십자키   메뉴: A 확인 · B 뒤로', W / 2, r.y + r.h + 28, { align: 'center', color: COL.dim });
     }
-    c.save();
-    c.globalAlpha *= fade;
-    if (g === 'drag') {
-      c.strokeStyle = 'rgba(159,232,255,0.5)';
-      c.lineWidth = 1.5;
-      c.beginPath();
-      c.arc(lx, my, ring, 0, Math.PI * 2);
-      c.stroke();
-    } else if (ring) {
-      c.strokeStyle = g === 'hold' ? 'rgba(255,179,71,0.8)' : 'rgba(255,255,255,0.6)';
-      c.lineWidth = 1.5;
-      c.beginPath();
-      c.arc(fx, fy, ring, 0, Math.PI * 2);
-      c.stroke();
-    }
-    if (dirx || diry) {
-      c.strokeStyle = 'rgba(255,255,255,0.4)';
-      c.lineWidth = 1.5;
-      c.beginPath();
-      c.moveTo(rx - dirx * 14, my - diry * 14);
-      c.lineTo(rx + dirx * 14, my + diry * 14);
-      c.stroke();
-    }
-    c.fillStyle = '#ffffff';
-    c.beginPath();
-    c.arc(fx, fy, 4.5, 0, Math.PI * 2);
-    c.fill();
-    c.restore();
+    const btn = { x: Math.round(W / 2 - 80), y: H - 56, w: 160, h: 36 };
+    button(c, btn, { label: '시작하기', color: COL.cyan, selected: true });
+    this.hit('tutorial-any', { x: 0, y: 0, w: W, h: H }, () => this.dismiss());
+    this.hit('tutorial-ok', btn, () => this.dismiss());
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Settings (wraps SettingsScreen, which the title screen also uses)
+
+export class SettingsModal extends Modal {
+  readonly screen: SettingsScreen;
+
+  constructor(ui: LevelUI, tab: SettingsTab = 'control') {
+    super(ui);
+    this.screen = new SettingsScreen(ui.game, () => ui.closeTop(this), tab);
+  }
+
+  update(dt: number): void {
+    super.update(dt);
+    this.screen.update(dt);
+  }
+
+  key(k: ModalKey): void {
+    this.screen.key(k);
+  }
+
+  cancel(): void {
+    this.screen.key('cancel');
+  }
+
+  draw(c: CanvasRenderingContext2D, W: number, H: number): void {
+    this.screen.draw(c, W, H);
   }
 }

@@ -56,8 +56,10 @@ export type GestureAction =
   | { t: 'press'; btn: Btn }
   | { t: 'release'; btn: Btn }
   | { t: 'tap'; btn: Btn }
-  | { t: 'roll'; dir: -1 | 1 }
-  | { t: 'axis'; x: number; y: number }
+  /** dir 0 = the held direction, else the facing (virtual roll button) */
+  | { t: 'roll'; dir: -1 | 0 | 1 }
+  /** `src` = Input axis source (default 'touch' = the floating stick) */
+  | { t: 'axis'; x: number; y: number; src?: string }
   | { t: 'ui'; phase: 'tap' | 'release' | 'drag'; region: TapRegion; dx?: number; dy?: number };
 
 /** Visual state of the touch layer, drawn faintly by LevelUI. */
@@ -83,7 +85,8 @@ export interface TouchView {
 
 interface Finger {
   id: number;
-  kind: 'joy' | 'gesture' | 'ui';
+  /** 'none' = a gameplay finger while gestures are off (buttons / gamepad mode): ignored */
+  kind: 'joy' | 'gesture' | 'ui' | 'none';
   sx: number;
   sy: number;
   st: number;
@@ -123,6 +126,8 @@ export interface RecognizerOpts {
   viewW: () => number;
   /** UI hit test (game.taps.hit) */
   hitTest?: (x: number, y: number) => TapRegion | null;
+  /** gameplay gestures (stick, tap, swipes) enabled? false = only UI taps are recognised (default true) */
+  gestures?: () => boolean;
   config?: Partial<GestureConfig>;
 }
 
@@ -137,11 +142,13 @@ export class GestureRecognizer {
   private pendingJumpRelease: number | null = null;
   private viewW: () => number;
   private hitTest: (x: number, y: number) => TapRegion | null;
+  private gesturesOn: () => boolean;
 
   constructor(o: RecognizerOpts) {
     this.cfg = { ...GESTURE, ...o.config };
     this.viewW = o.viewW;
     this.hitTest = o.hitTest ?? (() => null);
+    this.gesturesOn = o.gestures ?? (() => true);
   }
 
   /** number of fingers currently tracked */
@@ -168,6 +175,8 @@ export class GestureRecognizer {
       f.kind = 'ui';
       f.region = region;
       if (region.mode === 'down') out.push({ t: 'ui', phase: 'tap', region });
+    } else if (!this.gesturesOn()) {
+      f.kind = 'none';
     } else if (x < this.viewW() / 2 && this.joyId === null) {
       f.kind = 'joy';
       this.joyId = id;
@@ -197,7 +206,7 @@ export class GestureRecognizer {
       }
     } else if (f.kind === 'joy') {
       this.moveJoy(f, out);
-    } else {
+    } else if (f.kind === 'gesture') {
       this.gestureMove(f, t, out);
     }
     return out;
@@ -221,7 +230,7 @@ export class GestureRecognizer {
       }
     } else if (f.kind === 'joy') {
       this.endJoy(out);
-    } else {
+    } else if (f.kind === 'gesture') {
       if (f.hold) {
         out.push({ t: 'release', btn: 'attack2' });
       } else if (!f.swiped && f.maxD < this.cfg.tapSlop && t - f.st < Math.max(this.cfg.tapTime, this.cfg.longPress)) {
@@ -394,7 +403,7 @@ export function applyGestureActions(game: Pick<Game, 'input'>, acts: GestureActi
         input.rollDir = a.dir;
         input.tap('roll');
         break;
-      case 'axis': input.setAxis('touch', a.x, a.y); break;
+      case 'axis': input.setAxis(a.src ?? 'touch', a.x, a.y); break;
       case 'ui':
         if (a.phase === 'tap') a.region.onTap();
         else if (a.phase === 'release') a.region.onRelease?.();
@@ -409,16 +418,31 @@ export let touchView: TouchView = { joy: null, holds: [], marks: [], now: 0 };
 
 const nowSecs = () => performance.now() / 1000;
 
-/** Wire Pointer Events (touch, pen and mouse) on the game canvas to the recogniser. */
-export function attachTouch(game: Game): void {
+/** What attachTouch hands back to the game. */
+export interface TouchController {
+  /** drop every finger (control mode changed, settings opened): releases whatever they held */
+  cancelAll(): void;
+}
+
+/**
+ * Wire Pointer Events (touch, pen and mouse) on the game canvas. A pointer belongs to one handler for its whole life:
+ *  - the virtual buttons ("buttons" mode) when it starts on one (and not on a UI tap region),
+ *  - otherwise the gesture recogniser (UI taps always; stick / swipes only in "gesture" mode).
+ */
+export function attachTouch(game: Game): TouchController {
   const canvas = game.display.canvas;
   // phones/tablets: show touch hints from the first frame (keyboard presses switch it back)
   if (typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches) game.input.device = 'touch';
+  const mode = () => game.save.settings.controlMode;
   const rec = new GestureRecognizer({
     viewW: () => game.display.W,
     hitTest: (x, y) => game.taps.hit(x, y),
+    gestures: () => mode() === 'gesture',
   });
   touchView = rec.view;
+  const vb = game.vb;
+  /** which handler owns a pointer */
+  const owner = new Map<number, 'vb' | 'rec'>();
   const apply = (acts: GestureAction[]) => {
     if (acts.length) applyGestureActions(game, acts);
   };
@@ -435,22 +459,45 @@ export function attachTouch(game: Game): void {
       /* synthetic events may not be capturable */
     }
     const p = game.display.toVirtual(e.clientX, e.clientY);
+    if (mode() === 'buttons' && vb.layout && !game.taps.hit(p.x, p.y)) {
+      apply(vb.ctl.down(e.pointerId, p.x, p.y, vb.layout));
+      if (vb.ctl.owns(e.pointerId)) {
+        owner.set(e.pointerId, 'vb');
+        return;
+      }
+    }
+    owner.set(e.pointerId, 'rec');
     apply(rec.down(e.pointerId, p.x, p.y, nowSecs()));
   }, { passive: false });
 
   canvas.addEventListener('pointermove', (e) => {
     const p = game.display.toVirtual(e.clientX, e.clientY);
+    if (owner.get(e.pointerId) === 'vb') {
+      if (vb.layout) apply(vb.ctl.move(e.pointerId, p.x, p.y, vb.layout));
+      return;
+    }
     apply(rec.move(e.pointerId, p.x, p.y, nowSecs()));
   });
 
   const end = (e: PointerEvent) => {
     game.audio.unlock(); // iOS only honours resume() inside the gesture's end event
+    if (owner.get(e.pointerId) === 'vb') {
+      owner.delete(e.pointerId);
+      apply(vb.ctl.up(e.pointerId));
+      return;
+    }
+    owner.delete(e.pointerId);
     const p = game.display.toVirtual(e.clientX, e.clientY);
     apply(rec.up(e.pointerId, p.x, p.y, nowSecs()));
   };
+  const lost = (e: PointerEvent) => {
+    if (owner.get(e.pointerId) === 'vb') apply(vb.ctl.cancel(e.pointerId));
+    owner.delete(e.pointerId);
+    apply(rec.cancel(e.pointerId, nowSecs()));
+  };
   canvas.addEventListener('pointerup', end);
-  canvas.addEventListener('pointercancel', (e) => apply(rec.cancel(e.pointerId, nowSecs())));
-  canvas.addEventListener('lostpointercapture', (e) => apply(rec.cancel(e.pointerId, nowSecs())));
+  canvas.addEventListener('pointercancel', lost);
+  canvas.addEventListener('lostpointercapture', lost);
 
   // no browser gestures: scrolling, pinch zoom, double-tap zoom, long-press menus, selection
   const stop = (e: Event) => e.preventDefault();
@@ -460,7 +507,11 @@ export function attachTouch(game: Game): void {
   document.addEventListener('gesturestart', stop as EventListener, { passive: false } as AddEventListenerOptions);
   document.addEventListener('touchmove', (e) => { if ((e as TouchEvent).touches.length > 1) e.preventDefault(); }, { passive: false });
 
-  const dropAll = () => apply(rec.cancelAll(nowSecs()));
+  const dropAll = () => {
+    apply(vb.ctl.cancelAll());
+    apply(rec.cancelAll(nowSecs()));
+    owner.clear();
+  };
   window.addEventListener('blur', dropAll);
   document.addEventListener('visibilitychange', () => { if (document.hidden) dropAll(); });
 
@@ -471,7 +522,13 @@ export function attachTouch(game: Game): void {
     apply(rec.update(nowSecs()));
     // scene changes reset game.input (axes included): keep the stick alive while the thumb is down
     if (rec.view.joy) game.input.setAxis('touch', rec.axis.x, rec.axis.y);
+    if (vb.ctl.active) {
+      // a modal / another scene took over (no layout any more) or the mode changed: let go of every button
+      if (mode() !== 'buttons' || !vb.layout) apply(vb.ctl.cancelAll());
+      else game.input.setAxis('vbtn', vb.ctl.axis.x, vb.ctl.axis.y);
+    }
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
+  return { cancelAll: dropAll };
 }

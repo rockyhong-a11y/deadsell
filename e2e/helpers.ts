@@ -13,6 +13,10 @@ export class Fingers {
     this.pts.set(id, { x, y });
     await this.cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: this.points() });
   }
+  async move(id: number, x: number, y: number) {
+    this.pts.set(id, { x, y });
+    await this.cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: this.points() });
+  }
   async upAll() {
     this.pts.clear();
     await this.cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });

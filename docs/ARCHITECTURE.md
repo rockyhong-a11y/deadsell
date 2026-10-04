@@ -8,9 +8,16 @@ no runtime dependencies. `npm run dev` (Vite), `npm run typecheck`, `npm test` (
 * Fixed step 1/60 s (`Game.step`). Pixels; y down. Tile = 24 px.
 * Entity position (x, y) = **centre-bottom** of its box = the sprite anchor.
   `bounds` = `{x: x - w/2, y: y - h, w, h}`. `facing` 1 = right, -1 = left (sprites mirror).
-* World drawing happens in the low-res buffer `display.wctx` with the camera
-  translation applied (`LevelScene.render`). UI is drawn on `display.ui` in the same
-  virtual coordinates (W × 360) but at device resolution (crisp text, `FONT` = Galmuri11).
+* Two spaces. **World**: the low-res buffer `display.wctx`, `display.worldW × worldH` (height = the 해상도 setting
+  288 / 360 / 432, width follows the screen aspect, limits scale with the height), camera translation applied
+  (`LevelScene.render`). **UI**: `display.ui` in a fixed virtual space `display.W × display.H` (W = 480..800, H = 360 always)
+  at device resolution (crisp text, `FONT` = Galmuri11), so the HUD has the same size at every world resolution.
+  HUD code that follows a world object converts with `display.uiPerWorld` (see `Hud.drawPrompt`). Code that sizes
+  the camera / lighting / world-buffer backdrops uses `worldW/worldH`; everything that lays out UI uses `W/H`.
+* Layers: world buffer -> `display.screen` canvas (behind; nearest or bilinear blit, CRT/LCD overlay baked in
+  `engine/filters.ts`, colour filters = CSS `filter` on this element only) -> `display.canvas` = the transparent UI
+  canvas on top (takes the pointer events). `Display.present()` does the blit and clears the UI canvas.
+  `computeLayout` (pure) fits the picture: 'fill' or 'integer' (k x k device pixels per world pixel + letterbox).
 * Tap targets: every frame, UI code registers rectangles in `game.taps` (cleared each frame);
   the touch layer routes touches that start inside one to it instead of gameplay gestures.
 
@@ -18,9 +25,11 @@ no runtime dependencies. `npm run dev` (Vite), `npm run typecheck`, `npm test` (
 ```
 src/main.ts                     boot, loading bar                                   [core]
 src/engine/config.ts            constants + DEBUG url flags                          [core]
-src/engine/display.ts           world buffer + UI canvas, resize, toVirtual          [core]
+src/engine/display.ts           world buffer + screen layer + UI canvas, resize, toVirtual, applyGfx [core]
+src/engine/filters.ts           graphics options (filter / resolution / fit / quality), computeLayout, CRT/LCD overlays [core]
+src/engine/gamepad.ts           Gamepad API: pure mapPad (map + deadzone + edges + menu nav), remap helpers, GamepadManager [core]
 src/engine/assets.ts            loader, SpriteSheet, AnimPlayer (play/playFor/playPhased) [core]
-src/engine/input.ts             action Input (press/release/tap, pressedWithin, axes) + keyboard [core]
+src/engine/input.ts             action Input (press/release/tap, pressedWithin, axes per source: kb, touch, vbtn, pad) + keyboard [core]
 src/engine/camera.ts            follow, bounds, shake, override (cinematics)         [core]
 src/engine/math.ts, rng.ts      helpers, seeded Rng, hash2                           [core]
 src/engine/audio.ts             WebAudio synth SFX + music (API: play, music, unlock) [fx]
@@ -39,7 +48,7 @@ src/game/enemies/*              enemy AI, enemy projectiles, createEnemy, pools 
 src/game/boss/*                 The Iron Matron, boss projectiles/hazards             [enemies]
 src/game/level/*                templates, generator, populate, LevelRenderer         [level]
 src/game/props/*                interactables & decor (doors, chests, altars, NPCs, shop, fountain, torches, gates) [level]
-src/game/ui/*                   touch gestures, HUD, overlays, minimap, menus         [ui]
+src/game/ui/*                   touch gestures, virtual buttons (vbuttons.ts), HUD, overlays, minimap, menus, settings screen (settings.ts) [ui]
 src/game/scenes/{title,death,victory}Scene.ts                                         [ui]
 src/game/meta/*                 save, Alchemist upgrades                              [ui]
 src/game/fx/*                   particles, fx (numbers, slashes, rings, flash), lighting [fx]
@@ -69,6 +78,23 @@ note the dependency in your report; do not edit the other module.
 * Level: `buildLevel(spec, seed, save)`, `populateLevel(world, level)`, `LevelRenderer`.
 * UI: `LevelUI` (`modal`, `toast`, `openChoice`, `openAlchemist`, `openMap`, `openPause`, `boss`).
 
+## Settings, control modes, graphics
+`save.settings` (validated field by field in `loadSave`, old saves load with defaults): `controlMode`
+('gesture' | 'buttons' | 'gamepad'), `btnSize`, `btnOpacity`, `gamepadMap` (action -> physical button), `filter`,
+`resolution`, `fit`, `quality`, plus the old `sfx/music/hints/muted`. `Game.settingsChanged()` applies and saves
+(display, audio, control mode); the settings screen (`ui/settings.ts`, one class used by the title scene and, wrapped in
+`SettingsModal`, by the pause menu) calls it after every change.
+* Keyboard input is always active. Gamepad input is polled every `Game.step` whatever the mode.
+* **gesture**: `GestureRecognizer` unchanged. **buttons**: the HUD builds `vbLayout` every frame into `game.vb.layout`
+  (null while a modal is open), `attachTouch` routes a pointer that starts on a virtual button (and not on a UI tap
+  region) to `VButtonController` for its whole life; the recogniser still handles UI taps but no gestures
+  (`gestures()` option). **gamepad**: neither touch layer drives gameplay; UI taps still work.
+* Gamepad: `mapPad` (pure) -> `Game.stepPad`: gameplay edges + the 'pad' axis go to Input (unless the scene
+  `captures()` the pad: a modal / the settings screen is open), menu keys (`NavKey`: direction edges with auto-repeat,
+  A = confirm, B = cancel, Start = pause, Back = map) go to `scene.nav()`. Menus always use the physical A/B. While the
+  remap UI waits (`pad.capture`), the next button press is delivered to it and nothing else.
+* Scenes may implement `nav(k)` and `captures()`; `LevelUI.nav` feeds the top modal exactly like the keyboard.
+
 ## Testing & verification
 * Unit tests per area in `tests/<area>.test.ts` (vitest, node env: no DOM at import time).
 * Visual/e2e: run a dev server on your own port (`npx vite --port <p> --strictPort`) and
@@ -85,3 +111,5 @@ note the dependency in your report; do not edit the other module.
   * `e2e/bot.ts` - `botWalk`, an in-page navigation bot: plans with `level/nav.ts` (the generator's own movement graph) and
     drives the real player through `Input` + real physics, stepping with `__ds.step`. Use it to prove an exit is reachable.
   * `e2e/helpers.ts` - boot, touch fingers, `tapRegion(id)` (taps a registered `game.taps` rectangle), event capture.
+  * `e2e/settings.spec.ts` - settings by touch, virtual buttons with real multi-touch, a mocked `navigator.getGamepads`
+    (stick, buttons, remap, menus), every filter / resolution / fit applied live (screenshots `e2e-shots/settings_*.png`).

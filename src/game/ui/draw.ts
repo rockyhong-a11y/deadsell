@@ -215,3 +215,24 @@ export function dim(c: CanvasRenderingContext2D, W: number, H: number, alpha: nu
   c.fillRect(-10, -10, W + 20, H + 20);
   c.globalAlpha = prev;
 }
+
+/** A small gear (설정) icon drawn with paths, so it never depends on a font glyph. */
+export function gear(c: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string = COL.text): void {
+  const teeth = 8;
+  c.save();
+  c.fillStyle = color;
+  c.beginPath();
+  for (let i = 0; i < teeth * 2; i++) {
+    const a = (i / (teeth * 2)) * Math.PI * 2;
+    const rr = i % 2 === 0 ? r : r * 0.72;
+    const a0 = a - Math.PI / (teeth * 4);
+    const a1 = a + Math.PI / (teeth * 4);
+    c.lineTo(cx + Math.cos(a0) * rr, cy + Math.sin(a0) * rr);
+    c.lineTo(cx + Math.cos(a1) * rr, cy + Math.sin(a1) * rr);
+  }
+  c.closePath();
+  c.moveTo(cx + r * 0.32, cy);
+  c.arc(cx, cy, r * 0.32, 0, Math.PI * 2);
+  c.fill('evenodd');
+  c.restore();
+}

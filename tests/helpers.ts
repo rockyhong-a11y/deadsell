@@ -32,7 +32,7 @@ export function flatMap(w = 60, h = 18): TileMap {
 export function makeTestWorld(map: TileMap = flatMap(), seed = 1) {
   const input = new Input();
   const game: any = {
-    display: { W: 640, H: 360 },
+    display: { W: 640, H: 360, worldW: 640, worldH: 360 },
     input,
     audio: new Audio(),
     assets: { sheet: (n: string) => fakeSheet(n), image: () => undefined, json: new Map() },

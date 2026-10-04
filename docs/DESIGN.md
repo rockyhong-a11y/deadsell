@@ -14,9 +14,10 @@ agent). If you need to deviate from it, update this file in the same change.
 
 * Web (HTML5 Canvas 2D), TypeScript, Vite. Playable in a mobile browser in landscape;
   keyboard also works on desktop (for development and automated tests).
-* Internal world resolution: height **360 px**, width = 360 × screen aspect,
-  clamped to [480, 800]. Nearest-neighbour upscale to the device. UI text is
-  drawn on a separate full-resolution canvas so it stays crisp.
+* Internal world resolution: height **360 px** by default (settings: 288 / 360 / 432), width = height × screen
+  aspect, clamped to [480, 800] × (height / 360). Nearest-neighbour upscale to the device (or bilinear / CRT / LCD /
+  colour filters, see Settings). UI text and HUD are drawn on a separate full-resolution canvas in a fixed 360-tall
+  virtual space (width 480..800), so they stay crisp and keep their size at every world resolution.
 * Fixed simulation step 1/60 s. Units are pixels, y points **down**.
 * Tile size **24 px**.
 * Korean UI text, font **Galmuri11** (OFL, bundled from the `galmuri` npm package).
@@ -60,7 +61,12 @@ Elite enemies are the normal sprite drawn 1.3× with a coloured aura (code side)
 ---------------------------------------------------------------------------
 ## 4. Controls (touch first, minimal UI)
 
-The screen is split in two invisible zones. No on-screen d-pad, no attack buttons.
+The default mode ("터치 제스처") splits the screen in two invisible zones. No on-screen d-pad, no attack buttons.
+Settings (title screen / pause menu) offer two more control modes, the keyboard always works:
+* **가상 버튼**: d-pad (← → ↓) bottom-left; 공격 / 점프 / 구르기 / 보조 and the equipped skills bottom-right; true multi-touch,
+  size and opacity options, gesture recognition off.
+* **게임패드**: Gamepad API, standard layout, remappable (default A jump, B roll, X attack, Y secondary, LB heal,
+  RB interact, LT/RT skills, Back map, Start pause; stick/D-pad move, A/B confirm/back in every menu).
 
 | Zone / gesture | Action |
 |---|---|

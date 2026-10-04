@@ -2,6 +2,7 @@ import type { Game, Scene } from '../game';
 import type { RunState } from '../run';
 import { COL, SZ, formatTime, pulse, text, wrap } from '../ui/draw';
 import { Embers, gradientBg, statRow, vignette } from '../ui/backdrop';
+import type { NavKey } from '../../engine/gamepad';
 
 export const EPILOGUE = [
   '종탑의 마지막 종이 울리고, 사슬이 재처럼 부서져 내렸다.',
@@ -17,6 +18,8 @@ export class VictoryScene implements Scene {
   private t = 0;
   private leaving = false;
   private skipped = false;
+  /** a pad A / B press this step (merged with the Input presses so one press is one tap) */
+  private navTap = false;
   private embers = new Embers(60, ['#ffd27a', '#ffb347', '#fff2c8'], 11);
   private total = EPILOGUE.join('').length;
 
@@ -42,31 +45,38 @@ export class VictoryScene implements Scene {
     this.game.showTitle();
   }
 
+  /** gamepad: A / B = continue (the first press finishes the epilogue) */
+  nav(k: NavKey): void {
+    if (k === 'confirm' || k === 'cancel') this.navTap = true;
+  }
+
   update(dt: number): void {
     this.t += dt;
     const d = this.game.display;
-    this.embers.update(dt, d.W, d.H);
+    this.embers.update(dt, d.worldW, d.worldH);
     const i = this.game.input;
-    if (i.pressed('confirm') || i.pressed('attack1') || i.pressed('jump')) this.tap();
+    if (this.navTap || i.pressed('confirm') || i.pressed('attack1') || i.pressed('jump')) this.tap();
+    this.navTap = false;
   }
 
   render(): void {
     const g = this.game;
     const d = g.display;
     const { W, H } = d;
+    const { worldW, worldH } = d;
     const t = this.t;
     const w = d.wctx;
     w.setTransform(1, 0, 0, 1, 0, 0);
     w.globalAlpha = 1;
     w.globalCompositeOperation = 'source-over';
-    gradientBg(w, W, H, [[0, '#0a0c24'], [0.5, '#2a1a3c'], [0.82, '#8a4a3a'], [1, '#e0a050']]);
+    gradientBg(w, worldW, worldH, [[0, '#0a0c24'], [0.5, '#2a1a3c'], [0.82, '#8a4a3a'], [1, '#e0a050']]);
     // dawn glow on the horizon
-    const glow = w.createRadialGradient(W / 2, H + 20, 10, W / 2, H + 20, H * 0.9);
+    const glow = w.createRadialGradient(worldW / 2, worldH + 20, 10, worldW / 2, worldH + 20, worldH * 0.9);
     glow.addColorStop(0, `rgba(255,214,140,${0.55 + 0.1 * Math.sin(t)})`);
     glow.addColorStop(1, 'rgba(255,214,140,0)');
     w.fillStyle = glow;
-    w.fillRect(0, 0, W, H);
-    vignette(w, W, H, 0.5, '6,4,14');
+    w.fillRect(0, 0, worldW, worldH);
+    vignette(w, worldW, worldH, 0.5, '6,4,14');
     this.embers.draw(w);
     d.present();
 

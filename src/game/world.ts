@@ -78,7 +78,8 @@ export class World {
     this.level = level;
     this.map = level.map;
     this.rng = new Rng(level.seed ^ 0x51ed);
-    this.camera = new Camera(game.display.W, game.display.H);
+    // the camera frames the WORLD buffer (its size is a graphics setting), not the UI space
+    this.camera = new Camera(game.display.worldW ?? game.display.W, game.display.worldH ?? game.display.H);
     this.camera.setBounds(this.map.pxW, this.map.pxH);
   }
 

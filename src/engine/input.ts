@@ -17,7 +17,7 @@ export class Input {
   /** direction requested by the last roll gesture (-1/1), 0 = use facing */
   rollDir = 0;
   /** last input device used, so UI can show the right hints */
-  device: 'touch' | 'keyboard' = 'keyboard';
+  device: 'touch' | 'keyboard' | 'gamepad' = 'keyboard';
 
   private held = new Set<Btn>();
   private pressedSet = new Set<Btn>();

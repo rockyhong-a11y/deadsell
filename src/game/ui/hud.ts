@@ -7,6 +7,7 @@ import type { ItemInstance } from '../items/types';
 import { ITEMS, itemName, itemLines } from '../items/items';
 import { COLOR_HEX } from '../combat';
 import { touchView } from './touch';
+import { drawVButtons, vbLayout, type VSkillView } from './vbuttons';
 import { MapView } from './mapview';
 import { COL, SZ, atLeast, icon, panel, pie, pulse, text, textWidth, wrap } from './draw';
 
@@ -208,6 +209,7 @@ export class Hud {
     this.drawMinimapAndPause(c, L, interactive);
     this.drawWeapons(c, L);
     this.drawSkills(c, L, interactive);
+    this.drawVButtons(c, W, H, interactive);
     if (interactive && !p.dying) this.drawPrompt(c, W, H);
     this.drawBoss(c, L, W, H);
     this.drawToasts(c, W, H);
@@ -283,13 +285,20 @@ export class Hud {
     }
   }
 
+  /** UI virtual px per world px (the world buffer height is a graphics setting; the UI space is always 360 tall). */
+  private uiPerWorld(): number {
+    const d = this.ui.game.display;
+    return d?.worldH ? d.H / d.worldH : 1;
+  }
+
   private drawBowCharge(c: CanvasRenderingContext2D, W: number): void {
     const p = this.ui.world.player as unknown as { bowCharge?: number; x: number; y: number; h: number };
     const q = clamp(p.bowCharge ?? 0, 0, 1);
     if (q <= 0.02) return;
     const cam = this.ui.world.camera;
-    const x = Math.round(p.x - cam.viewX);
-    const y = Math.round(p.y - p.h - cam.viewY - 10);
+    const k = this.uiPerWorld();
+    const x = Math.round((p.x - cam.viewX) * k);
+    const y = Math.round((p.y - p.h - cam.viewY) * k - 10);
     if (x < -20 || x > W + 20) return;
     c.fillStyle = '#07060b';
     c.fillRect(x - 15, y - 1, 30, 5);
@@ -407,6 +416,7 @@ export class Hud {
     const p = this.ui.world.player;
     const run = this.ui.world.run;
     const game = this.ui.game;
+    if (game.save.settings.controlMode === 'buttons') return; // the virtual buttons draw (and tap) the skills
     run.skills.forEach((sk, i) => {
       if (!sk) return;
       const s = L.skills[i];
@@ -443,6 +453,25 @@ export class Hud {
     });
   }
 
+  /** "가상 버튼" mode: d-pad + action buttons. Publishes the layout for the touch layer (null while a modal is open). */
+  private drawVButtons(c: CanvasRenderingContext2D, W: number, H: number, interactive: boolean): void {
+    const game = this.ui.game;
+    const s = game.save.settings;
+    if (s.controlMode !== 'buttons' || !game.vb || !interactive) return;
+    const world = this.ui.world;
+    const p = world.player;
+    const skills = world.run.skills;
+    const L = vbLayout(W, H, s.btnSize, [!!skills[0], !!skills[1]]);
+    game.vb.layout = L;
+    const view = (i: number): VSkillView | null => {
+      const sk = skills[i];
+      if (!sk) return null;
+      const def = ITEMS[sk.id];
+      return { icon: def.icon, color: COLOR_HEX[def.color], cd: p.skillCooldown?.[i] ?? 0, cdMax: Math.max(0.001, p.skillCooldownMax?.[i] ?? 1), flash: this.ready[i] / 0.5 };
+    };
+    drawVButtons(c, L, { opacity: s.btnOpacity, isDown: (id) => game.vb.ctl.isDown(id), skills: [view(0), view(1)], assets: game.assets });
+  }
+
   /** Bubble above the nearest interactable (+ item card for item drops). */
   private drawPrompt(c: CanvasRenderingContext2D, W: number, H: number): void {
     const world = this.ui.world;
@@ -456,8 +485,9 @@ export class Hud {
     const bob = Math.round(Math.sin(this.time * 4) * 1.5);
     const bw = Math.max(72, textWidth(c, label, SZ.s, true) + 28, sub ? textWidth(c, sub, SZ.s) + 24 : 0);
     const bh = sub ? 38 : 26;
-    const sx = e.x - cam.viewX;
-    const anchorY = e.y - Math.max(e.h, 28) - 12 - cam.viewY + bob;
+    const k = this.uiPerWorld();
+    const sx = (e.x - cam.viewX) * k;
+    const anchorY = (e.y - Math.max(e.h, 28) - cam.viewY) * k - 12 + bob;
     const bx = clamp(Math.round(sx - bw / 2), 4, W - 4 - bw);
     const by = clamp(Math.round(anchorY - bh), 82, H - 60);
     const rect = { x: bx, y: by, w: bw, h: bh };

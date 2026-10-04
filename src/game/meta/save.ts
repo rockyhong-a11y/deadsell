@@ -1,4 +1,28 @@
 import { ITEM_IDS, STARTER_UNLOCKS, type ItemId } from '../items/types';
+import { DEFAULT_GFX, sanitizeGfx, type GfxSettings } from '../../engine/filters';
+import { DEFAULT_PAD_MAP, sanitizePadMap, type PadMap } from '../../engine/gamepad';
+
+/** 터치 제스처 / 가상 버튼 / 게임패드 (the keyboard always works in every mode) */
+export type ControlMode = 'gesture' | 'buttons' | 'gamepad';
+export const CONTROL_MODES: readonly ControlMode[] = ['gesture', 'buttons', 'gamepad'];
+export type ButtonSize = 'small' | 'medium' | 'large';
+export const BUTTON_SIZES: readonly ButtonSize[] = ['small', 'medium', 'large'];
+/** the three opacity steps offered for the virtual buttons (stored as a number, any 0.2..1 value is accepted) */
+export const BUTTON_OPACITY_STEPS = [0.35, 0.6, 0.85] as const;
+
+export interface Settings extends GfxSettings {
+  sfx: number;
+  music: number;
+  hints: boolean;
+  muted: boolean;
+  controlMode: ControlMode;
+  /** virtual button size */
+  btnSize: ButtonSize;
+  /** virtual button opacity, 0.2..1 */
+  btnOpacity: number;
+  /** physical gamepad button index per action */
+  gamepadMap: PadMap;
+}
 
 /** Meta progression persisted across runs (localStorage). */
 export interface SaveData {
@@ -10,7 +34,7 @@ export interface SaveData {
   wins: number;
   bestTime: number | null;
   totalKills: number;
-  settings: { sfx: number; music: number; hints: boolean; muted: boolean };
+  settings: Settings;
 }
 
 const KEY = 'deadsell.save.v1';
@@ -24,7 +48,11 @@ export function defaultSave(): SaveData {
     wins: 0,
     bestTime: null,
     totalKills: 0,
-    settings: { sfx: 0.8, music: 0.5, hints: true, muted: false },
+    settings: {
+      sfx: 0.8, music: 0.5, hints: true, muted: false,
+      controlMode: 'gesture', btnSize: 'medium', btnOpacity: 0.6, gamepadMap: { ...DEFAULT_PAD_MAP },
+      ...DEFAULT_GFX,
+    },
   };
 }
 
@@ -55,6 +83,11 @@ export function loadSave(): SaveData {
         music: Math.min(1, num(st.music, base.settings.music)),
         hints: typeof st.hints === 'boolean' ? st.hints : base.settings.hints,
         muted: typeof st.muted === 'boolean' ? st.muted : base.settings.muted,
+        controlMode: (CONTROL_MODES as readonly unknown[]).includes(st.controlMode) ? st.controlMode : base.settings.controlMode,
+        btnSize: (BUTTON_SIZES as readonly unknown[]).includes(st.btnSize) ? st.btnSize : base.settings.btnSize,
+        btnOpacity: typeof st.btnOpacity === 'number' && Number.isFinite(st.btnOpacity) ? Math.min(1, Math.max(0.2, st.btnOpacity)) : base.settings.btnOpacity,
+        gamepadMap: sanitizePadMap(st.gamepadMap),
+        ...sanitizeGfx(st),
       },
     };
   } catch {

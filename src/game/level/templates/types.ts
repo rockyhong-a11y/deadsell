@@ -8,7 +8,7 @@ export type TemplateTag =
   | 'start' | 'exit'
   | 'combat' | 'corridor' | 'shaft' | 'hall' | 'hub' | 'loop' | 'trap'
   | 'treasure' | 'pedestal' | 'altar' | 'shop' | 'secret'
-  | 'deadend' | 'passage' | 'boss';
+  | 'deadend' | 'passage' | 'boss' | 'miniboss';
 
 export interface TemplateDef {
   id: string;

@@ -5,7 +5,7 @@ import type { Marker, ParsedTemplate, Side, Site, TemplateDef } from './types';
 /** Characters that are tiles (not markers). */
 const TILE_CHARS: Record<string, number> = { '#': T.Solid, '=': T.Platform, '^': T.Spikes, x: T.Breakable, '.': T.Empty, ',': T.Empty };
 /** Marker characters (replaced by Empty in the tile grid; collected as spawns). */
-export const MARKER_CHARS = 'EFTSIMAPXBLD$H';
+export const MARKER_CHARS = 'EFTSIMAPXBLD$HN';
 
 export function isSolidChar(ch: string): boolean {
   return ch === '#' || ch === 'x';

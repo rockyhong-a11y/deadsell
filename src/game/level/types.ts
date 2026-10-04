@@ -15,7 +15,7 @@ export interface LevelData {
 }
 
 export type SpawnType =
-  | 'enemy' | 'flyer' | 'chest' | 'altar' | 'pedestal' | 'merchant' | 'alchemist' | 'exit' | 'boss'
+  | 'enemy' | 'flyer' | 'chest' | 'altar' | 'pedestal' | 'merchant' | 'alchemist' | 'exit' | 'boss' | 'miniboss'
   | 'torch' | 'deco' | 'shop' | 'fountain' | 'gate';
 
 export interface Spawn {

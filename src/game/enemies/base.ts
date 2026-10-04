@@ -1,13 +1,14 @@
 import { TILE } from '../../engine/config';
 import { approach, clamp, sign } from '../../engine/math';
 import { Actor } from '../entity';
-import type { DamageInfo } from '../combat';
+import type { DamageInfo, DamageResult } from '../combat';
 import type { Player } from '../player/player';
 import { dropLoot, spawnItemDrop } from '../items/pickups';
 import { rollItem } from '../items/items';
 import { warnBang } from './telegraph';
+import type { BaseKind, EnemyDef, EnemyKind } from './variants';
 
-export type EnemyKind = 'ghoul' | 'jailer' | 'archer' | 'bomber' | 'harpy' | 'lancer';
+export type { BaseKind, EnemyKind } from './variants';
 
 export interface EnemyOpts {
   /** 1 = prison, 2 = ramparts (scales hp/damage) */
@@ -32,12 +33,18 @@ export type EnemyState = 'patrol' | 'alert' | 'chase' | 'windup' | 'active' | 'r
 export const AGGRO_RANGE = 260;
 export const ALERT_TIME = 0.4;
 export const DEATH_TIME = 0.7;
-export const ELITE_SCALE = 1.3;
+/** Elites keep the stat boost and the aura but are NOT bigger (they are not mid-bosses). */
+export const ELITE_SCALE = 1;
 
 export interface AttackPlan {
   w: number;
   a: number;
   r: number;
+}
+
+/** A follow-up swing of a combo (see `queue`). */
+export interface AttackStep extends AttackPlan {
+  anim?: string;
 }
 
 /**
@@ -46,7 +53,14 @@ export interface AttackPlan {
  * hit-stun interruption, knockback, death, loot and the telegraph rendering.
  */
 export abstract class Enemy extends Actor {
+  /** type id (a base kind or a variant id); also the sheet name */
   readonly kind: EnemyKind;
+  /** the base AI / fallback sheet */
+  readonly base: BaseKind;
+  /** variant table row, null for the six base types */
+  readonly variant: EnemyDef | null;
+  /** variant ability tag ('' for bases) */
+  readonly ab: string;
   readonly tier: number;
   readonly elite: boolean;
   readonly spec: EnemySpec;
@@ -54,7 +68,7 @@ export abstract class Enemy extends Actor {
   readonly dmgMult: number;
   /** speed multiplier (elites are a bit faster) */
   readonly speedMult: number;
-  /** draw scale (elite 1.3) */
+  /** draw scale (always 1: elites are not bigger) */
   readonly scale: number;
 
   state: EnemyState = 'patrol';
@@ -74,20 +88,36 @@ export abstract class Enemy extends Actor {
   protected time = 0;
   /** distance within which the player is noticed */
   aggroRange = AGGRO_RANGE;
+  /** follow-up swings of the current attack (combos); `endActive` starts the next one */
+  protected queue: AttackStep[] = [];
+  /** frontal guard: 'shield' blocks like the jailer's, 'parry' deflects the first hit after each attack */
+  protected guard: 'shield' | 'parry' | null = null;
+  protected parryReady = false;
+  protected blockT = 0;
+  protected textCd = 0;
+  /** hits never push it (but they still interrupt) */
+  protected kbImmune = false;
+  /** self-destructed: no rewards */
+  protected noLoot = false;
+  /** outline colour while a variant runs on its base sheet (own sheet not built yet) */
+  protected fallbackOutline: string | undefined;
 
-  constructor(kind: EnemyKind, x: number, y: number, opts: Partial<EnemyOpts>, spec: EnemySpec) {
+  constructor(kind: BaseKind, x: number, y: number, opts: Partial<EnemyOpts>, spec: EnemySpec, variant: EnemyDef | null = null) {
     super(x, y);
-    this.kind = kind;
+    this.base = kind;
+    this.variant = variant;
+    this.kind = variant ? variant.id : kind;
+    this.ab = variant?.ability ?? '';
     this.spec = spec;
     this.tier = opts.tier ?? 1;
     this.elite = !!opts.elite;
     this.scale = this.elite ? ELITE_SCALE : 1;
     this.w = Math.round(spec.w * this.scale);
     this.h = Math.round(spec.h * this.scale);
-    const hpMul = (this.tier >= 2 ? 1.6 : 1) * (this.elite ? 3 : 1);
+    const hpMul = (this.tier >= 2 ? 1.6 : 1) * (this.elite ? 3 : 1) * (variant?.hp ?? 1);
     this.maxHp = this.hp = Math.round(spec.hp * hpMul);
-    this.dmgMult = (this.tier >= 2 ? 1.4 : 1) * (this.elite ? 1.25 : 1);
-    this.speedMult = this.elite ? 1.15 : 1;
+    this.dmgMult = (this.tier >= 2 ? 1.4 : 1) * (this.elite ? 1.25 : 1) * (variant?.dmg ?? 1);
+    this.speedMult = (this.elite ? 1.15 : 1) * (variant?.speed ?? 1);
     this.knockbackTaken = this.elite ? 0.5 : 1;
     if (spec.blood) this.bloodColor = spec.blood;
     this.homeX = x;
@@ -97,13 +127,25 @@ export abstract class Enemy extends Actor {
   }
 
   init(): void {
-    this.setSheet(this.world.assets.sheet(this.kind));
+    const assets = this.world.assets;
+    let sheet = assets.sheet(this.kind);
+    if (this.variant && sheet.placeholder) {
+      // own sheet not built yet: the base sheet with a hue-shifted outline, so it still reads differently
+      sheet = assets.sheet(this.base);
+      this.fallbackOutline = `hsl(${this.variant.hue}, 85%, 58%)`;
+    }
+    this.setSheet(sheet);
     this.homeX = this.x;
     this.patrolTimer = this.world.rng.range(2, 5);
     this.anim?.play('idle');
   }
 
   // ------------------------------------------------------------ helpers
+
+  /** Ability parameter from the variant table (`def` when the enemy is a base type). */
+  protected pr(key: string, def = 0): number {
+    return this.variant?.p[key] ?? def;
+  }
 
   protected dmg(base: number): number {
     return Math.max(1, Math.round(base * this.dmgMult));
@@ -112,10 +154,6 @@ export abstract class Enemy extends Actor {
   protected setState(s: EnemyState): void {
     this.state = s;
     this.stateT = 0;
-  }
-
-  protected play(name: string): void {
-    this.anim?.play(name);
   }
 
   protected get player(): Player {
@@ -176,6 +214,8 @@ export abstract class Enemy extends Actor {
   // ------------------------------------------------------------ update
 
   update(dt: number): void {
+    if (this.textCd > 0) this.textCd -= dt;
+    if (this.blockT > 0) this.blockT -= dt;
     this.updateStatus(dt);
     this.stateT += dt;
     this.time += dt;
@@ -356,6 +396,13 @@ export abstract class Enemy extends Actor {
 
   protected endActive(): void {
     if (!this.atk) return;
+    const next = this.queue.shift();
+    if (next) {
+      // combo: straight into the next swing's windup
+      this.beginAttack(next.w, next.a, next.r, next.anim);
+      this.onChainStep();
+      return;
+    }
     this.setState('recover');
     this.onRecoverStart();
   }
@@ -363,10 +410,40 @@ export abstract class Enemy extends Actor {
   protected finishAttack(): void {
     this.atk = null;
     this.setState('cooldown');
+    if (this.guard === 'parry') this.parryReady = true;
+    this.onAttackDone();
   }
 
   protected cancelAttack(): void {
     this.atk = null;
+    this.queue.length = 0;
+  }
+
+  /** A follow-up swing of a combo just entered its windup. */
+  protected onChainStep(): void {}
+  /** The whole attack (all swings and the recovery) is over. */
+  protected onAttackDone(): void {}
+
+  /**
+   * Teleport to column `tx` if there is room and floor there (within a step of the current level).
+   * Returns whether it blinked. Used by the wraith ghoul and the shadow archer.
+   */
+  protected blinkTo(tx: number, color = '#9fe9ff'): boolean {
+    const map = this.world.map;
+    const fy = map.floorBelow(tx, this.y - TILE, TILE * 2.5);
+    if (fy === null || fy < this.y - TILE || fy > this.y + TILE) return false;
+    if (map.boxSolid({ x: tx - this.w / 2, y: fy - this.h, w: this.w, h: this.h - 1 })) return false;
+    const w = this.world;
+    w.particles.emit('magic', this.x, this.cy, { count: 8, color });
+    w.fx.ring(this.x, this.cy, { radius: 16, color, life: 0.22 });
+    this.x = tx;
+    this.y = fy;
+    this.vx = 0;
+    this.vy = 0;
+    w.particles.emit('magic', this.x, this.cy, { count: 8, color });
+    w.fx.ring(this.x, this.cy, { radius: 20, color, life: 0.28 });
+    w.audio.play('roll', { vol: 0.5, pitch: 1.5 });
+    return true;
   }
 
   protected onWindup(_dt: number, _p: Player): void {
@@ -388,6 +465,8 @@ export abstract class Enemy extends Actor {
   // ---- damage
 
   protected onHurt(_info: DamageInfo, _amount: number): void {
+    // knockback-immune types (wraith) are not pushed, but a hit still staggers them briefly
+    if (this.kbImmune && _info.kind !== 'dot') this.hitstun = Math.max(this.hitstun, Math.min(0.25, _info.hitstun ?? 0.18));
     // elites have super armour while the attack is live
     if (this.elite && this.state === 'active' && this.status.stun <= 0 && this.status.freeze <= 0) {
       this.hitstun = 0;
@@ -413,6 +492,51 @@ export abstract class Enemy extends Actor {
 
   protected onFlinch(): void {}
 
+  // ---- frontal guard (jailer / paladin shield, duelist parry)
+
+  /** Is the guard up (able to block) right now? */
+  get shieldUp(): boolean {
+    if (!this.guard || this.dying || this.incapacitated) return false;
+    if (this.guard === 'parry') return this.parryReady && this.state !== 'windup' && this.state !== 'active' && this.state !== 'recover';
+    return this.state !== 'active' && this.state !== 'recover' && this.state !== 'hurt';
+  }
+
+  protected attackerInFront(info: DamageInfo): boolean {
+    if (info.dir) return info.dir === -this.facing;
+    if (info.source) return (info.source.x - this.x) * this.facing > 0;
+    return false;
+  }
+
+  protected intercept(info: DamageInfo): DamageResult | null {
+    if (!this.guard || !this.shieldUp || info.unblockable) return null;
+    if (info.kind === 'dot' || info.kind === 'explosion' || info.kind === 'trap' || info.kind === 'hazard') return null;
+    if (!this.attackerInFront(info)) return null;
+    const w = this.world;
+    const parry = this.guard === 'parry';
+    this.blockT = 0.22;
+    this.flash = 0;
+    const sx = this.x + this.facing * (this.w / 2 + 3);
+    const sy = this.y - this.h * 0.55;
+    w.particles.emit(parry ? 'parry' : 'spark', sx, sy, { dir: this.facing, count: 7 });
+    w.audio.play(parry ? 'parry' : 'block');
+    if (this.textCd <= 0) {
+      w.fx.text(this.x, this.headY, parry ? '쳐냄' : '막힘', parry ? '#ffe9a8' : '#c9d6e8');
+      this.textCd = 0.3;
+    }
+    if (parry) this.parryReady = false;
+    else if (this.state !== 'windup' && this.anim?.sheet.has('block')) this.anim.playFor('block', 0.22);
+    // pushback: the guard slides back a little, the attacker is nudged away
+    if (this.onGround) this.vx = -this.facing * (parry ? 40 : 70);
+    if (info.source && info.source !== this) info.source.vx = this.facing * 130;
+    return { applied: false, amount: 0, killed: false, blocked: true };
+  }
+
+  protected play(name: string): void {
+    // keep the block pose for its short duration instead of snapping back to walk/idle
+    if (this.blockT > 0 && this.anim?.name === 'block' && (name === 'idle' || name === 'walk')) return;
+    this.anim?.play(name);
+  }
+
   die(info: DamageInfo): void {
     super.die(info);
     this.cancelAttack();
@@ -426,6 +550,7 @@ export abstract class Enemy extends Actor {
   }
 
   protected dropRewards(): void {
+    if (this.noLoot) return;
     const w = this.world;
     const mult = this.elite ? 4 : 1;
     dropLoot(w, this.x, this.y - this.h / 2, { cells: w.rng.int(1, 2) * mult, gold: w.rng.int(2, 6) * mult });
@@ -457,7 +582,7 @@ export abstract class Enemy extends Actor {
       flash = 0.18 + 0.4 * (0.5 + 0.5 * Math.sin(this.time * (14 + 10 * tele)));
       flashColor = '#ff3b30';
     }
-    const outline = tele >= 0 ? '#ff3b30' : this.elite ? this.spec.aura : undefined;
+    const outline = tele >= 0 ? '#ff3b30' : this.elite ? this.spec.aura : this.fallbackOutline;
     let alpha = 1;
     if (this.dying) alpha = clamp((DEATH_TIME - this.stateT) / 0.3, 0, 1);
     this.anim.draw(ctx, this.x, this.y, this.facing < 0, { flash, flashColor, scale: this.scale, outline, alpha });

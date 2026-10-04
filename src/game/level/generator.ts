@@ -9,7 +9,7 @@ import type { LevelData, RoomInfo, Spawn, SpawnType } from './types';
 /**
  * Procedural level generator: a macro grid of 32 x 18 chunks filled with hand-made templates.
  *  1. a main path start -> exit of 9..12 chunks (randomised DFS with backtracking, always through
- *     door sites the templates really offer),
+ *     door sites the templates really offer) with exactly one mid-boss arena (tag 'miniboss') in between,
  *  2. side branches (shop, secret, altars, pedestals, chest room) hung on free door sites,
  *  3. a few loops (adjacent rooms whose facing door sites are both open get connected),
  *  4. every door site that is not connected is sealed with solid tiles.
@@ -57,6 +57,8 @@ interface Pools {
   starts: ParsedTemplate[];
   exits: ParsedTemplate[];
   connectors: ParsedTemplate[];
+  /** mid-boss arenas: exactly one lies on the main path */
+  minibosses: ParsedTemplate[];
   roles: Record<Role, ParsedTemplate[]>;
 }
 
@@ -67,11 +69,12 @@ function pools(biome: BiomeId): Pools {
   if (p) return p;
   const all = templatePool(biome);
   const hasTag = (t: ParsedTemplate, tag: string) => (t.tags as string[]).includes(tag);
-  const special = ['start', 'exit', 'deadend', 'passage', 'boss', ...ROLE_TAGS];
+  const special = ['start', 'exit', 'deadend', 'passage', 'boss', 'miniboss', ...ROLE_TAGS];
   p = {
     starts: all.filter((t) => hasTag(t, 'start')),
     exits: all.filter((t) => hasTag(t, 'exit')),
     connectors: all.filter((t) => t.sites.length >= 2 && !special.some((s) => hasTag(t, s))),
+    minibosses: all.filter((t) => hasTag(t, 'miniboss') && t.sites.length >= 2),
     roles: {
       shop: all.filter((t) => hasTag(t, 'shop')),
       secret: all.filter((t) => hasTag(t, 'secret')),
@@ -85,6 +88,7 @@ function pools(biome: BiomeId): Pools {
 }
 
 const baseId = (t: ParsedTemplate) => t.id.replace('~m', '');
+const isMiniboss = (t: ParsedTemplate) => (t.tags as string[]).includes('miniboss');
 
 class Layout {
   occ: (Placement | null)[] = new Array(GRID_W * GRID_H).fill(null);
@@ -145,6 +149,8 @@ interface Ctx {
   P: Pools;
   usage: Map<string, number>;
   budget: number;
+  /** the main path already holds its mid-boss arena (the exit may only follow after it) */
+  mbDone: boolean;
 }
 
 /** Weighted random order (Efraimidis-Spirakis). */
@@ -188,8 +194,8 @@ function growMain(ctx: Ctx, cur: Placement, inKey: string | null, chunks: number
   const outs = cur.tpl.sites.filter((s) => siteKey(s) !== inKey && !cur.conn.has(siteKey(s)) && (() => { const c = targetCell(cur, s); return L.free(c[0], c[1]); })());
   const ordered = orderBy(rng, outs, (s) => SIDE_PREF[s.side]);
   for (const s of ordered) {
-    // try the exit
-    if (chunks >= 8) {
+    // try the exit (only after the mid-boss arena, so the arena always lies between start and exit)
+    if (chunks >= 8 && ctx.mbDone) {
       for (const c of orderBy(rng, candidates(ctx, cur, s, P.exits), (c) => c.tpl.weight)) {
         const total = chunks + c.tpl.w * c.tpl.h;
         if (total < 9 || total > 12) continue;
@@ -199,15 +205,22 @@ function growMain(ctx: Ctx, cur: Placement, inKey: string | null, chunks: number
       }
     }
     if (chunks >= 11) continue;
-    const cs = candidates(ctx, cur, s, P.connectors).filter((c) => chunks + c.tpl.w * c.tpl.h <= 11);
+    const pool = candidates(ctx, cur, s, P.connectors);
+    // the mid-boss arena: once, not right behind the start, and strongly preferred while it is still missing
+    if (!ctx.mbDone && chunks >= 3) pool.push(...candidates(ctx, cur, s, P.minibosses));
+    const cs = pool.filter((c) => chunks + c.tpl.w * c.tpl.h <= 11);
+    const boost = chunks >= 6 ? 40 : 6;
     // limit branching: only a handful of tries per site
-    const tries = orderBy(rng, cs, (c) => tplWeight(ctx, c.tpl)).slice(0, 5);
+    const tries = orderBy(rng, cs, (c) => (isMiniboss(c.tpl) ? c.tpl.weight * boost : tplWeight(ctx, c.tpl))).slice(0, 5);
     for (const c of tries) {
       const p = L.add(c.tpl, c.gx, c.gy, false, 0);
       connect(cur, siteKey(s), p, siteKey(c.site));
       const key = baseId(c.tpl);
+      const mb = isMiniboss(c.tpl);
       ctx.usage.set(key, (ctx.usage.get(key) ?? 0) + 1);
+      if (mb) ctx.mbDone = true;
       if (growMain(ctx, p, siteKey(c.site), chunks + c.tpl.w * c.tpl.h, depth + 1)) return true;
+      if (mb) ctx.mbDone = false;
       ctx.usage.set(key, (ctx.usage.get(key) ?? 1) - 1);
       L.removeLast(p);
       cur.conn.delete(siteKey(s));
@@ -241,7 +254,7 @@ function planRoles(rng: Rng): Plan {
 function tryLayout(rng: Rng, biome: BiomeId): { L: Layout; stats: Omit<GenStats, 'attempts' | 'relaxed'> } | null {
   const P = pools(biome);
   const L = new Layout();
-  const ctx: Ctx = { rng, L, P, usage: new Map(), budget: 3000 };
+  const ctx: Ctx = { rng, L, P, usage: new Map(), budget: 3000, mbDone: false };
   // --- start
   const st = rng.pick(P.starts);
   const sg = [rng.int(0, 1), rng.int(0, GRID_H - st.h)] as const;
@@ -350,7 +363,7 @@ function tryLayout(rng: Rng, biome: BiomeId): { L: Layout; stats: Omit<GenStats,
   return { L, stats: { mainChunks, branches: roots, loops } };
 }
 
-const isLoopable = (p: Placement) => !p.tpl.tags.some((t) => ['start', 'exit', 'shop', 'secret', 'altar', 'pedestal', 'treasure'].includes(t)) || false;
+const isLoopable = (p: Placement) => !p.tpl.tags.some((t) => ['start', 'exit', 'miniboss', 'shop', 'secret', 'altar', 'pedestal', 'treasure'].includes(t)) || false;
 
 /** key of a's site on `side` that borders the chunk cell `bc` (b's neighbouring cell inside a). */
 function siteKeyAt(a: Placement, bc: [number, number], side: string): string {
@@ -370,7 +383,7 @@ export function verifyLayout(L: Layout): boolean {
 }
 
 export const MARKER_SPAWN: Record<string, SpawnType> = {
-  E: 'enemy', F: 'flyer', T: 'chest', S: 'altar', I: 'pedestal', M: 'merchant', A: 'alchemist', X: 'exit', B: 'boss',
+  E: 'enemy', F: 'flyer', T: 'chest', S: 'altar', I: 'pedestal', M: 'merchant', A: 'alchemist', X: 'exit', B: 'boss', N: 'miniboss',
   L: 'torch', D: 'deco', $: 'shop', H: 'fountain',
 };
 
@@ -455,7 +468,8 @@ function fallbackLayout(rng: Rng, biome: BiomeId): { L: Layout; stats: Omit<GenS
   const exits = P.exits.filter((t) => t.h === 1 && t.sites.some((s) => s.side === 'L'));
   const L = new Layout();
   let x = 0;
-  const chain: ParsedTemplate[] = [starts[0]];
+  const mbs = P.minibosses.filter((t) => t.h === 1 && t.sites.some((s) => s.side === 'L') && t.sites.some((s) => s.side === 'R'));
+  const chain: ParsedTemplate[] = [starts[0], rng.pick(flat), rng.pick(mbs)];
   while (chain.reduce((n, t) => n + t.w, 0) < 8) chain.push(rng.pick(flat));
   chain.push(exits[0]);
   let prev: Placement | null = null;

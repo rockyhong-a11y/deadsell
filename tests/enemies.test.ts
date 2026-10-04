@@ -9,7 +9,7 @@ vi.mock('../src/game/items/pickups', async (orig) => ({
 import { makeTestWorld, steps, flatMap } from './helpers';
 import { T } from '../src/game/tilemap';
 import { Player } from '../src/game/player/player';
-import { createEnemy, ENEMY_POOLS, FLYERS, type EnemyKind } from '../src/game/enemies/factory';
+import { createEnemy, ENEMY_POOLS, FLYERS, type BaseKind, type EnemyKind } from '../src/game/enemies/factory';
 import type { Enemy } from '../src/game/enemies/base';
 import { Jailer } from '../src/game/enemies/jailer';
 import { Archer } from '../src/game/enemies/archer';
@@ -18,7 +18,7 @@ import { dropLoot } from '../src/game/items/pickups';
 import type { TileMap } from '../src/game/tilemap';
 
 const FLOOR = 16 * 24;
-const KINDS: EnemyKind[] = ['ghoul', 'jailer', 'archer', 'bomber', 'harpy', 'lancer'];
+const KINDS: BaseKind[] = ['ghoul', 'jailer', 'archer', 'bomber', 'harpy', 'lancer'];
 
 function setup(kind: EnemyKind, ex: number, px: number, opts: { tier?: number; elite?: boolean } = {}, map?: TileMap, ey = FLOOR) {
   const { world } = makeTestWorld(map);
@@ -48,8 +48,10 @@ describe('enemy factory', () => {
     expect(t2.maxHp).toBe(64);
     const el = setup('ghoul', 300, 100, { elite: true }).e;
     expect(el.maxHp).toBe(120);
-    expect(el.scale).toBe(1.3);
-    expect(el.w).toBeGreaterThan(18);
+    // elites keep the stat boost and the aura but are not bigger (they are not mid-bosses)
+    expect(el.scale).toBe(1);
+    expect(el.w).toBe(18);
+    expect(el.h).toBe(42);
   });
 });
 

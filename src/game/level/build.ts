@@ -5,7 +5,7 @@ import type { ItemInstance } from '../items/types';
 import type { LevelData, Spawn } from './types';
 import { generateBiome } from './generator';
 import { buildPassage, buildBossArena } from './special';
-import { ENEMY_POOLS, FLYERS, createEnemy } from '../enemies/factory';
+import { ENEMY_POOLS, FLYERS, createEnemy, pickEnemy } from '../enemies/factory';
 import { createBoss } from '../boss/matron';
 import { rollItem } from '../items/items';
 import { Alchemist, Altar, BossGate, Chest, Deco, ExitDoor, Fountain, Merchant, Pedestal, RoomTracker, ShopItem, Torch, pickDeco, type DecoKind } from '../props';
@@ -41,8 +41,9 @@ export function populateLevel(world: World, level: LevelData): void {
     if (room?.tags.includes('start') || room?.tags.includes('passage')) return;
     const pool = flyer ? FLYERS[biome] : ENEMY_POOLS[biome];
     if (!pool.length) return;
-    const kind = flyer ? rng.pick(FLYERS[biome]) : rng.weighted(ENEMY_POOLS[biome], (e) => e.weight).kind;
     const prog = room?.progress ?? 0;
+    // base types early, variants (and the late ones) as the level progresses; ramparts lean on variants
+    const kind = pickEnemy(rng, biome, prog, flyer);
     const eliteChance = Math.max(0, Math.min(0.3, (prog - 0.35) * 0.45)) * (flyer ? 0.5 : 1) + (tier > 1 ? 0.03 : 0);
     const elite = prog > 0.3 && rng.chance(eliteChance);
     // flyers hover: spawn them a little above the marker's floor

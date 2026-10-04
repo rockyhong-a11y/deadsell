@@ -4,6 +4,7 @@ import type { ParsedTemplate, TemplateDef } from './types';
 import { PRISON_TEMPLATES } from './prison';
 import { RAMPARTS_TEMPLATES } from './ramparts';
 import { SPECIAL_TEMPLATES } from './special';
+import { MINIBOSS_TEMPLATES } from './miniboss';
 
 export type { ParsedTemplate, TemplateDef, TemplateTag, Site, Side } from './types';
 export { siteKey, oppositeSide } from './types';
@@ -20,7 +21,10 @@ function parsed(def: TemplateDef): ParsedTemplate {
   return p;
 }
 
-const DEFS: Record<'prison' | 'ramparts', TemplateDef[]> = { prison: PRISON_TEMPLATES, ramparts: RAMPARTS_TEMPLATES };
+const DEFS: Record<'prison' | 'ramparts', TemplateDef[]> = {
+  prison: [...PRISON_TEMPLATES, ...MINIBOSS_TEMPLATES.filter((t) => t.biome === 'prison')],
+  ramparts: [...RAMPARTS_TEMPLATES, ...MINIBOSS_TEMPLATES.filter((t) => t.biome === 'ramparts')],
+};
 
 /** The hand-authored templates of a biome (no mirrored copies). */
 export function authoredTemplates(biome: BiomeId): ParsedTemplate[] {

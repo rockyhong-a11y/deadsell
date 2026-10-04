@@ -63,6 +63,31 @@ describe('template library', () => {
     }
   }
 
+  it('has at least two mid-boss arenas per biome: flat 2x1 hall, doorways on both sides, one N marker', () => {
+    for (const biome of BIOMES) {
+      const mbs = authoredTemplates(biome).filter((t) => (t.tags as string[]).includes('miniboss'));
+      expect(mbs.length, biome).toBeGreaterThanOrEqual(2);
+      for (const t of mbs) {
+        expect(t.problems, t.id).toEqual([]);
+        expect(t.counts.N, t.id).toBe(1);
+        expect([t.w, t.h], t.id).toEqual([2, 1]);
+        expect(t.sites.map(siteKey).sort(), t.id).toEqual(['L0', 'R0']);
+        // no ordinary enemies, a flat floor under the boss
+        expect((t.counts.E ?? 0) + (t.counts.F ?? 0), t.id).toBe(0);
+        const n = t.markers.find((m) => m.ch === 'N')!;
+        expect(t.tiles[(n.ty + 1) * t.tw + n.tx], t.id).toBe(T.Solid);
+        // roomy: 56 free tiles in a row on the floor line
+        let run = 0, best = 0;
+        for (let x = 0; x < t.tw; x++) {
+          const free = t.tiles[15 * t.tw + x] !== T.Solid && t.tiles[16 * t.tw + x] === T.Solid;
+          run = free ? run + 1 : 0;
+          best = Math.max(best, run);
+        }
+        expect(best, t.id).toBeGreaterThanOrEqual(56);
+      }
+    }
+  });
+
   it('template ids are unique', () => {
     const ids = BIOMES.flatMap((b) => authoredTemplates(b).map((t) => t.id));
     expect(new Set(ids).size).toBe(ids.length);
@@ -179,6 +204,18 @@ describe.each(BIOMES)('generator (%s)', (biome) => {
       const enemies = (c.enemy ?? 0) + (c.flyer ?? 0);
       expect(enemies, ctx).toBeGreaterThanOrEqual(12);
       expect(enemies, ctx).toBeLessThanOrEqual(80);
+      // exactly one mid-boss room, on the main path between start and exit, with exactly one N spawn
+      const mbRooms = l.rooms.filter((r) => r.tags.includes('miniboss'));
+      expect(mbRooms, ctx).toHaveLength(1);
+      expect(mbRooms[0].tags, ctx).toContain('main');
+      expect(c.miniboss, ctx).toBe(1);
+      expect(l.spawns.find((s) => s.type === 'miniboss')!.roomId, ctx).toBe(mbRooms[0].id);
+      const order = g.layout.placements.filter((p) => !p.branch).sort((a, b) => a.order - b.order);
+      const mbAt = order.findIndex((p) => p.tpl.tags.includes('miniboss'));
+      expect(mbAt, ctx).toBeGreaterThan(0);
+      expect(mbAt, ctx).toBeLessThan(order.length - 1);
+      expect(order[0].tpl.tags, ctx).toContain('start');
+      expect(order[order.length - 1].tpl.tags, ctx).toContain('exit');
       // layout graph: start -> exit connected, every room reachable
       expect(verifyLayout(g.layout), ctx).toBe(true);
       // player start + every spawn sits in free space; ground things have a floor
@@ -244,6 +281,24 @@ describe.each(BIOMES)('generator (%s)', (biome) => {
       const exit = l.spawns.find((s) => s.type === 'exit')!;
       const r = reach(grid, [sc.ty * grid.w + sc.tx], false, exit.ty * grid.w + exit.tx);
       expect(r.visited[exit.ty * grid.w + exit.tx], `seed ${seed}: exit unreachable`).toBe(1);
+    }
+  }, 120000);
+
+  it(`movement graph: the mid-boss spot is reachable from the start and the exit stays reachable on ${NAV_SEEDS} seeds`, () => {
+    for (let seed = 1; seed <= NAV_SEEDS; seed++) {
+      const l = generateBiome(biome, seed * 6007).level;
+      const grid: NavGrid = { w: l.map.w, h: l.map.h, tiles: l.map.tiles };
+      const sc = cell(l, l.playerStart.x, l.playerStart.y);
+      const mb = l.spawns.find((s) => s.type === 'miniboss')!;
+      const exit = l.spawns.find((s) => s.type === 'exit')!;
+      const r = reach(grid, [sc.ty * grid.w + sc.tx]);
+      expect(r.visited[mb.ty * grid.w + mb.tx], `seed ${seed}: mid-boss unreachable`).toBe(1);
+      expect(r.visited[exit.ty * grid.w + exit.tx], `seed ${seed}: exit unreachable`).toBe(1);
+      // the room's two doorways connect to each other (the arena is a walkable passage)
+      const room = l.rooms.find((x) => x.tags.includes('miniboss'))!;
+      const a = r.visited[(room.y + 15) * grid.w + room.x + 1];
+      const b = r.visited[(room.y + 15) * grid.w + room.x + room.w - 2];
+      expect([a, b], `seed ${seed}: doorways`).toEqual([1, 1]);
     }
   }, 120000);
 

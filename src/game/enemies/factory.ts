@@ -1,37 +1,41 @@
 import type { Actor } from '../entity';
-import type { BiomeId } from '../run';
 import { Ghoul } from './ghoul';
 import { Jailer } from './jailer';
 import { Archer } from './archer';
 import { Bomber } from './bomber';
 import { Harpy } from './harpy';
 import { Lancer } from './lancer';
-import type { EnemyKind, EnemyOpts } from './base';
+import type { EnemyOpts } from './base';
+import { ENEMY_DEFS, ENEMY_POOLS, FLYERS, pickEnemy, type EnemyKind } from './variants';
 
-export type { EnemyKind, EnemyOpts } from './base';
+export type { EnemyKind, BaseKind, VariantId } from './variants';
+export type { EnemyOpts } from './base';
+/**
+ * Which enemies appear in which biome (weights; 'flyer' spawn markers use FLYERS). Derived from the
+ * variant table (variants.ts); level building uses the depth-aware `pickEnemy` instead.
+ */
+export { ENEMY_POOLS, FLYERS, pickEnemy };
 
-/** Which enemies appear in which biome (weights). 'flyer' spawn markers use FLYERS. */
-export const ENEMY_POOLS: Record<BiomeId, { kind: EnemyKind; weight: number }[]> = {
-  prison: [{ kind: 'ghoul', weight: 5 }, { kind: 'jailer', weight: 2 }, { kind: 'archer', weight: 2 }, { kind: 'bomber', weight: 1.5 }],
-  ramparts: [{ kind: 'lancer', weight: 3 }, { kind: 'archer', weight: 2 }, { kind: 'bomber', weight: 2 }, { kind: 'jailer', weight: 1.5 }, { kind: 'ghoul', weight: 1 }],
-  tower: [],
-};
-export const FLYERS: Record<BiomeId, EnemyKind[]> = { prison: ['harpy'], ramparts: ['harpy'], tower: [] };
-
-/** Create an enemy of the given kind. `tier` 2 = ×1.6 hp, ×1.4 damage; `elite` = ×3 hp, 1.3× scale, aura. */
+/**
+ * Create an enemy of the given kind - one of the six bases or any of the 24 variants (variants.ts).
+ * `tier` 2 = ×1.6 hp, ×1.4 damage; `elite` = ×3 hp, aura (no size change).
+ */
 export function createEnemy(kind: EnemyKind, x: number, y: number, opts: Partial<EnemyOpts> = {}): Actor {
-  switch (kind) {
+  const def = ENEMY_DEFS[kind];
+  if (!def) throw new Error(`unknown enemy kind: ${kind}`);
+  const v = def.variant ? def : null;
+  switch (def.base) {
     case 'ghoul':
-      return new Ghoul(x, y, opts);
+      return new Ghoul(x, y, opts, v);
     case 'jailer':
-      return new Jailer(x, y, opts);
+      return new Jailer(x, y, opts, v);
     case 'archer':
-      return new Archer(x, y, opts);
+      return new Archer(x, y, opts, v);
     case 'bomber':
-      return new Bomber(x, y, opts);
+      return new Bomber(x, y, opts, v);
     case 'harpy':
-      return new Harpy(x, y, opts);
+      return new Harpy(x, y, opts, v);
     case 'lancer':
-      return new Lancer(x, y, opts);
+      return new Lancer(x, y, opts, v);
   }
 }

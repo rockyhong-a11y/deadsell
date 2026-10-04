@@ -207,6 +207,15 @@ function phaseCounts(d: AnimDef): [number, number, number] {
 export const SHEETS = [
   'heroine', 'ghoul', 'jailer', 'archer', 'bomber', 'harpy', 'lancer', 'matron',
   'alchemist', 'merchant', 'projectiles', 'pickups', 'props', 'icons',
+  // enemy variants (docs/CONTENT2.md §1): a missing sheet falls back to the base sheet + hue outline
+  'ghoul_plague', 'ghoul_frenzy', 'ghoul_shackled', 'ghoul_wraith',
+  'jailer_warden', 'jailer_torch', 'jailer_spear', 'jailer_chain',
+  'archer_fire', 'archer_volley', 'archer_crossbow', 'archer_shadow',
+  'bomber_frost', 'bomber_cluster', 'bomber_kamikaze', 'bomber_alchemist',
+  'harpy_storm', 'harpy_raven', 'harpy_siren', 'harpy_ember',
+  'lancer_halberd', 'lancer_paladin', 'lancer_duelist', 'lancer_dragoon',
+  // mid-bosses (docs/CONTENT2.md §2)
+  'mb_abbess', 'mb_arachne', 'mb_valkyrie', 'mb_witch',
 ] as const;
 export type SheetName = (typeof SHEETS)[number];
 export const BIOMES_ART = ['prison', 'ramparts', 'tower'] as const;

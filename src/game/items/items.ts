@@ -40,14 +40,24 @@ export function affixPool(id: ItemId): AffixId[] {
   return ['burn', 'bleed', 'dmg', 'speed', 'heal_on_kill'];
 }
 
-/** Roll a random item from the unlocked pool for the given tier. */
-export function rollItem(rng: Rng, tier: number, unlocked: readonly ItemId[], slot?: 'weapon' | 'skill'): ItemInstance {
+/**
+ * Roll a random item from the unlocked pool for the given tier.
+ * `opts.guaranteeAffix` (mid-boss drops) always rolls an affix; the rng call sequence of a normal roll is unchanged.
+ */
+export function rollItem(
+  rng: Rng,
+  tier: number,
+  unlocked: readonly ItemId[],
+  slot?: 'weapon' | 'skill',
+  opts: { guaranteeAffix?: boolean } = {},
+): ItemInstance {
   const known = unlocked.filter((id) => ITEMS[id]);
   const pool = known.filter((id) => !slot || ITEMS[id].slot === slot);
   const fallback: ItemId = slot === 'skill' ? 'fire_grenade' : 'rusty_sword';
   const id = rng.pick(pool.length ? pool : [fallback]);
   const affixes = affixPool(id);
-  const affix = rng.chance(Math.min(0.8, 0.3 + 0.15 * (tier - 1))) ? rng.pick(affixes) : null;
+  const roll = rng.chance(Math.min(0.8, 0.3 + 0.15 * (tier - 1)));
+  const affix = roll || opts.guaranteeAffix ? rng.pick(affixes) : null;
   return { id, tier, affix };
 }
 

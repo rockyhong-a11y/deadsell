@@ -1,23 +1,50 @@
 import { TILE } from '../../engine/config';
 import type { Player } from '../player/player';
 import { Enemy, type EnemyOpts } from './base';
-import { Arrow } from './projectiles';
+import { Arrow, Bolt } from './projectiles';
 import { warnLine } from './telegraph';
+import type { EnemyDef } from './variants';
 
 const SPEC = { hp: 30, w: 16, h: 42, patrol: 26, chase: 62, aura: '#7dff6a', blood: '#a03a4a' };
 const MIN_DIST = 120;
 const MAX_DIST = 220;
 const ARROW_SPEED = 330;
 
-/** 궁수: keeps 120–220 px away, backs off when approached, aims with a thin red line (0.8 s) and shoots. */
+/**
+ * 궁수: keeps 120–220 px away, backs off when approached, aims with a thin red line (0.8 s) and shoots.
+ * Variants: fire (burning arrows), volley (3-arrow spread), crossbow (1.2 s windup, piercing bolt),
+ * shadow (blinks away when the player gets close).
+ */
 export class Archer extends Enemy {
   private aimX = 0;
   private aimY = 0;
+  private blinkCd = 0;
 
-  constructor(x: number, y: number, opts: Partial<EnemyOpts> = {}) {
-    super('archer', x, y, opts, SPEC);
+  constructor(x: number, y: number, opts: Partial<EnemyOpts> = {}, variant: EnemyDef | null = null) {
+    super('archer', x, y, opts, SPEC, variant);
     this.cooldownPause = 0.2;
     this.aggroRange = 280;
+  }
+
+  update(dt: number): void {
+    if (this.blinkCd > 0) this.blinkCd -= dt;
+    super.update(dt);
+  }
+
+  /** Shadow archer: when the player closes in, blink away (up to 120 px) to a free spot with floor. */
+  private tryBlinkAway(p: Player): boolean {
+    if (this.ab !== 'shadow' || this.blinkCd > 0) return false;
+    const away = Math.sign(this.x - p.x) || -this.facing;
+    const max = this.pr('blinkRange', 120);
+    for (const k of [1, 0.75, 0.5]) {
+      if (this.blinkTo(this.x + away * max * k, '#b36bff')) {
+        this.blinkCd = this.pr('blinkCd', 3.2);
+        this.facePlayer(p);
+        return true;
+      }
+    }
+    this.blinkCd = 0.6;
+    return false;
   }
 
   private get origin(): { x: number; y: number } {
@@ -31,6 +58,10 @@ export class Archer extends Enemy {
     const dir = Math.sign(dx);
     const sp = this.speedMult;
     let moved = false;
+    if (d < this.pr('trigger', 0) && this.state !== 'windup' && this.tryBlinkAway(p)) {
+      this.play('idle');
+      return;
+    }
     if (d < MIN_DIST) moved = this.walk(-dir, 84 * sp, 4, false);
     else if (d > MAX_DIST || !this.sees(p)) moved = this.walk(dir, SPEC.chase * sp, TILE, true);
     else this.vx = 0;
@@ -54,8 +85,9 @@ export class Archer extends Enemy {
   protected startAttack(p: Player): void {
     this.facePlayer(p);
     this.updateAim(p);
-    this.beginAttack(0.8, 0.12, 0.55, 'shoot');
-    this.attackCd = 1.3;
+    const crossbow = this.ab === 'crossbow';
+    this.beginAttack(this.pr('windup', 0.8), 0.12, crossbow ? 0.8 : 0.55, 'shoot');
+    this.attackCd = crossbow ? 2.4 : 1.3;
   }
 
   private updateAim(p: Player): void {
@@ -80,8 +112,37 @@ export class Archer extends Enemy {
     dx /= len;
     dy /= len;
     if (Math.sign(dx) !== this.facing) dx = this.facing * 0.2; // never shoot backwards through ourselves
-    this.world.spawn(new Arrow(o.x, o.y, dx * ARROW_SPEED, dy * ARROW_SPEED, this.dmg(10), this));
-    this.world.audio.play('bow_shoot', { vol: 0.7 });
+    const w = this.world;
+    switch (this.ab) {
+      case 'crossbow': {
+        const sp = this.pr('boltSpeed', 520);
+        w.spawn(new Bolt(o.x, o.y, dx * sp, dy * sp, this.dmg(10), this));
+        w.audio.play('bow_shoot', { vol: 0.9, pitch: 0.7 });
+        w.particles.emit('spark', o.x + dx * 8, o.y + dy * 8, { dir: this.facing, count: 4 });
+        break;
+      }
+      case 'volley': {
+        const n = Math.max(1, Math.round(this.pr('arrows', 3)));
+        const spread = (this.pr('spread', 12) * Math.PI) / 180;
+        for (let i = 0; i < n; i++) {
+          const a = n === 1 ? 0 : (i / (n - 1) - 0.5) * 2 * spread;
+          const c = Math.cos(a);
+          const sn = Math.sin(a);
+          const vx = (dx * c - dy * sn) * ARROW_SPEED;
+          const vy = (dx * sn + dy * c) * ARROW_SPEED;
+          w.spawn(new Arrow(o.x, o.y, vx, vy, this.dmg(10), this));
+        }
+        w.audio.play('bow_shoot', { vol: 0.8, pitch: 1.1 });
+        break;
+      }
+      case 'fire':
+        w.spawn(new Arrow(o.x, o.y, dx * ARROW_SPEED, dy * ARROW_SPEED, this.dmg(10), this, { burn: this.pr('burn', 3), burnDps: this.pr('burnDps', 5), style: 'fire' }));
+        w.audio.play('bow_shoot', { vol: 0.7 });
+        break;
+      default:
+        w.spawn(new Arrow(o.x, o.y, dx * ARROW_SPEED, dy * ARROW_SPEED, this.dmg(10), this));
+        w.audio.play('bow_shoot', { vol: 0.7 });
+    }
   }
 
   /** Length of the aim ray until it hits a wall. */
@@ -101,7 +162,18 @@ export class Archer extends Enemy {
     const len = Math.hypot(dx, dy) || 1;
     const ux = dx / len;
     const uy = dy / len;
-    const l = this.rayLength(ux, uy, 300);
-    warnLine(ctx, o.x, o.y, o.x + ux * l, o.y + uy * l, 0.3 + 0.7 * p, p > 0.65 ? 2 : 1);
+    const crossbow = this.ab === 'crossbow';
+    const l = this.rayLength(ux, uy, crossbow ? 380 : 300);
+    warnLine(ctx, o.x, o.y, o.x + ux * l, o.y + uy * l, 0.3 + 0.7 * p, p > 0.65 || crossbow ? 2 : 1);
+    if (this.ab === 'volley') {
+      // the two outer arrows of the spread
+      const sp = (this.pr('spread', 12) * Math.PI) / 180;
+      for (const a of [-sp, sp]) {
+        const vx = ux * Math.cos(a) - uy * Math.sin(a);
+        const vy = ux * Math.sin(a) + uy * Math.cos(a);
+        const ll = this.rayLength(vx, vy, 260);
+        warnLine(ctx, o.x, o.y, o.x + vx * ll, o.y + vy * ll, 0.2 + 0.5 * p, 1);
+      }
+    }
   }
 }

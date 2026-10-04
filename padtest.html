@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DEADSELL 게임패드 진단</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 16px; background: #0b0d16; color: #dfe8ff; font: 15px/1.45 -apple-system, system-ui, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+  .chip { padding: 3px 8px; border-radius: 6px; background: #1b2236; }
+  .ok { color: #7dffa0; } .bad { color: #ff7a7a; } .warn { color: #ffcc66; }
+  pre { background: #121729; padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; min-height: 3em; }
+  .big { font-size: 22px; font-weight: 700; }
+</style>
+</head>
+<body>
+<h1>게임패드 진단 페이지</h1>
+<div>컨트롤러를 연결한 상태에서 <b>A 버튼을 여러 번</b> 누르고 스틱을 움직여 보세요. 이 화면을 캡처해 주시면 원인을 확인할 수 있습니다.</div>
+<div class="row" id="env"></div>
+<div class="big" id="summary">입력 대기 중…</div>
+<h1>실시간 상태 (navigator.getGamepads)</h1>
+<pre id="live"></pre>
+<h1>이벤트 기록</h1>
+<pre id="log"></pre>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const log = [];
+  const add = (s) => { log.unshift(new Date().toLocaleTimeString() + '  ' + s); log.length = Math.min(log.length, 14); $('log').textContent = log.join('\n'); };
+  const chip = (label, val, cls) => `<span class="chip">${label}: <b class="${cls}">${val}</b></span>`;
+  let policy = 'n/a';
+  try { const p = document.permissionsPolicy || document.featurePolicy; if (p && p.allowsFeature) policy = p.allowsFeature('gamepad') ? '허용' : '차단'; } catch (e) { policy = '오류'; }
+  let embedded = false; try { embedded = window.self !== window.top; } catch (e) { embedded = true; }
+  $('env').innerHTML = [
+    chip('Gamepad API', typeof navigator.getGamepads === 'function' ? '있음' : '없음', typeof navigator.getGamepads === 'function' ? 'ok' : 'bad'),
+    chip('보안 연결', window.isSecureContext ? '예' : '아니오', window.isSecureContext ? 'ok' : 'bad'),
+    chip('정책', policy, policy === '차단' ? 'bad' : 'ok'),
+    chip('임베드', embedded ? '예' : '아니오', embedded ? 'warn' : 'ok'),
+    chip('브라우저', navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 120), ''),
+  ].join('');
+  let events = 0, keys = 0, seen = false;
+  addEventListener('gamepadconnected', (e) => { events++; add(`gamepadconnected #${e.gamepad.index} "${e.gamepad.id}" mapping=${e.gamepad.mapping || '(없음)'}`); });
+  addEventListener('gamepaddisconnected', (e) => { add(`gamepaddisconnected #${e.gamepad.index} "${e.gamepad.id}"`); });
+  addEventListener('keydown', (e) => { keys++; add(`keydown key=${e.key} code=${e.code}`); });
+  addEventListener('pointerdown', () => { try { navigator.getGamepads(); } catch (e) {} });
+  function frame() {
+    let out = '';
+    try {
+      const list = navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
+      out += `슬롯 수: ${list.length}\n`;
+      list.forEach((g, i) => {
+        if (!g) { out += `#${i}: (비어 있음)\n`; return; }
+        seen = true;
+        const pressed = g.buttons.map((b, j) => (b.pressed || b.value > 0.5) ? j : -1).filter((j) => j >= 0);
+        out += `#${i}: ${g.id}\n   mapping=${g.mapping || '(없음)'} connected=${g.connected} 버튼 ${g.buttons.length}개 축 ${g.axes.length}개\n   눌림: [${pressed.join(', ')}]  축: [${g.axes.map((a) => a.toFixed(2)).join(', ')}]\n`;
+      });
+    } catch (e) { out += '오류: ' + e.name + ' ' + e.message; }
+    $('live').textContent = out;
+    $('summary').innerHTML = seen ? '<span class="ok">컨트롤러 인식됨 ✔</span>'
+      : events ? '<span class="warn">연결 이벤트는 왔지만 목록에 없음</span>'
+      : keys ? '<span class="warn">게임패드가 아닌 키보드 입력으로 들어옴</span>'
+      : '<span class="bad">아직 컨트롤러가 보이지 않음 (버튼을 눌러 보세요)</span>';
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>

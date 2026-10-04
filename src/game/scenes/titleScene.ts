@@ -2,7 +2,7 @@ import type { Game, Scene } from '../game';
 import { COL, SZ, book, button, formatTime, gear, panel, pulse, text } from '../ui/draw';
 import { SettingsScreen } from '../ui/settings';
 import { CodexScreen } from '../ui/codex';
-import type { NavKey } from '../../engine/gamepad';
+import type { NavKey, ScrollKey } from '../../engine/gamepad';
 import { Embers, drawBiomeBg, gradientBg, vignette } from '../ui/backdrop';
 import { unlockedCount } from '../meta/progression';
 
@@ -10,6 +10,9 @@ const NAV_KEYS: Record<string, 'left' | 'right' | 'up' | 'down' | 'confirm'> = {
   ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyA: 'left', KeyD: 'right', KeyW: 'up', KeyS: 'down',
   Enter: 'confirm', KeyJ: 'confirm', Space: 'confirm', NumpadEnter: 'confirm',
 };
+
+/** codex only: scrolls the detail text (Shift + up / down by lines) */
+const SCROLL_KEYS: Record<string, ScrollKey> = { PageUp: 'pageUp', PageDown: 'pageDown', Home: 'scrollTop', End: 'scrollEnd' };
 
 /** Title: animated prison backdrop, key art, logo, "touch to start" and meta stats. */
 export class TitleScene implements Scene {
@@ -105,14 +108,16 @@ export class TitleScene implements Scene {
   private onKey(e: KeyboardEvent): void {
     const c = e.code;
     // held arrows keep scrolling the codex list
-    const repeatOk = !!this.codex && (c === 'ArrowUp' || c === 'ArrowDown' || c === 'KeyW' || c === 'KeyS');
+    const repeatOk = !!this.codex && (c === 'ArrowUp' || c === 'ArrowDown' || c === 'KeyW' || c === 'KeyS' || c === 'PageUp' || c === 'PageDown');
     if ((e.repeat && !repeatOk) || e.ctrlKey || e.altKey || e.metaKey || this.started) return;
     if (this.codex) {
       const k = NAV_KEYS[c];
       if (c === 'Escape') this.codex.key('cancel');
       else if (c === 'KeyQ') this.codex.key('tabL');
       else if (c === 'KeyE') this.codex.key('tabR');
+      else if (k && e.shiftKey && (k === 'up' || k === 'down')) this.codex.key(k === 'up' ? 'scrollUp' : 'scrollDown');
       else if (k) this.codex.key(k);
+      else if (SCROLL_KEYS[c]) this.codex.key(SCROLL_KEYS[c]);
       return;
     }
     if (this.settings) {

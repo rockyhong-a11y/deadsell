@@ -3,7 +3,7 @@ import type { World } from '../world';
 import type { Actor } from '../entity';
 import { Hud } from './hud';
 import { Modal, ChoiceModal, AlchemistModal, CodexModal, MapModal, PauseModal, SettingsModal, TutorialModal, type ModalKey } from './modals';
-import type { NavKey } from '../../engine/gamepad';
+import type { NavKey, ScrollKey } from '../../engine/gamepad';
 
 export interface ChoiceOption {
   label: string;
@@ -20,6 +20,9 @@ const KEYS: Record<string, ModalKey> = {
   KeyA: 'left', KeyD: 'right', KeyW: 'up', KeyS: 'down',
   Enter: 'confirm', KeyJ: 'confirm', Space: 'confirm', NumpadEnter: 'confirm',
 };
+
+/** keys that scroll a long text panel (the codex detail); Shift + up / down scrolls it by lines */
+const SCROLL_KEYS: Record<string, ScrollKey> = { PageUp: 'pageUp', PageDown: 'pageDown', Home: 'scrollTop', End: 'scrollEnd' };
 
 /**
  * In-level UI: HUD (hud.ts), prompts, modal overlays (choices, alchemist shop, map, pause,
@@ -172,6 +175,7 @@ export class LevelUI {
       if (this.top instanceof MapModal) this.top.key('cancel');
       else if (!this.top && !this.world.player.dying) this.openMap();
     } else if (k === 'tabL' || k === 'tabR') this.top?.tab(k === 'tabL' ? -1 : 1);
+    else if (k === 'scrollUp' || k === 'scrollDown' || k === 'pageUp' || k === 'pageDown' || k === 'scrollTop' || k === 'scrollEnd') this.top?.scroll(k);
     else if (this.top) this.top.key(k);
   }
 
@@ -190,7 +194,9 @@ export class LevelUI {
       else if (!this.top && !this.world.player.dying) this.openMap();
     } else if (this.top) {
       const k = KEYS[e.code];
-      if (k) this.top.key(k);
+      if (k && e.shiftKey && (k === 'up' || k === 'down') && this.top instanceof CodexModal) this.top.scroll(k === 'up' ? 'scrollUp' : 'scrollDown');
+      else if (k) this.top.key(k);
+      else if (SCROLL_KEYS[e.code]) this.top.scroll(SCROLL_KEYS[e.code]);
       else if (e.code === 'KeyQ') this.top.tab(-1);
       else if (e.code === 'KeyE') this.top.tab(1);
     }

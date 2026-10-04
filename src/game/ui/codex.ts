@@ -1,7 +1,7 @@
 import type { Game } from '../game';
 import type { AABB } from '../../engine/math';
 import { clamp } from '../../engine/math';
-import type { NavKey } from '../../engine/gamepad';
+import type { NavKey, ScrollKey } from '../../engine/gamepad';
 import type { AnimDef, SpriteSheet } from '../../engine/assets';
 import { ENEMY_DEFS } from '../enemies/variants';
 import { COL, SZ, button, dim, panel, rrect, text, textWidth, wrap } from './draw';
@@ -12,7 +12,8 @@ import { CODEX_TABS, codexEntries, type CodexEntry, type CodexPreview, type Code
  * list on the left, the selected entry on the right: a preview plate with its animations, then its numbers.
  * One class for the title screen (a modal over the title) and the pause menu (wrapped in `CodexModal`).
  * Touch (tap tabs / entries / the preview, drag or flick to scroll), keyboard (←→ or Q/E tabs, ↑↓ entries, Enter next
- * animation, Esc back) and gamepad (D-pad / stick, LB / RB tabs, A next animation, B back).
+ * animation, PageUp / PageDown / Home / End or Shift+↑↓ scroll the description, Esc back) and gamepad (D-pad / stick,
+ * LB / RB tabs, A next animation, right stick scrolls the description, B back).
  * The entry data comes from codexData.ts; nothing here knows a game number.
  */
 
@@ -25,6 +26,8 @@ const ROW_H = 36;
 const GROUP_H = 20;
 const LINE_H = 14;
 const LABEL_W = 44;
+/** one `scrollUp` / `scrollDown` step (right stick, Shift+↑↓) = two text lines */
+const SCROLL_STEP = LINE_H * 2;
 /** taps are ignored for this long after the screen opens (the finger that opened it is still lifting) */
 const LOCKOUT = 0.2;
 /** a detail panel at least this wide puts the preview left of the name / description */
@@ -288,6 +291,11 @@ export class CodexScreen {
     return this.bodyScroll;
   }
 
+  /** how far the detail text can scroll (0 = it fits) */
+  get bodyMax(): number {
+    return this.maxScroll('body');
+  }
+
   /** index of the animation step the preview is showing */
   get animIndex(): number {
     const { slots } = this.slotsOf(this.current);
@@ -352,6 +360,16 @@ export class CodexScreen {
     else if (k === 'up') this.select(this.sel[this.tabIdx] - 1);
     else if (k === 'down') this.select(this.sel[this.tabIdx] + 1);
     else if (k === 'confirm') this.nextAnim();
+    else if (k === 'scrollUp' || k === 'scrollDown' || k === 'pageUp' || k === 'pageDown' || k === 'scrollTop' || k === 'scrollEnd') this.scrollDetail(k);
+  }
+
+  /** Keyboard / pad scrolling of the detail text (what a drag or the wheel does by touch / mouse). */
+  private scrollDetail(k: ScrollKey): void {
+    this.fling = null;
+    const page = Math.max(LINE_H, (this.lastLayout?.body.h ?? 0) - 2 * LINE_H);
+    if (k === 'scrollTop') this.bodyScroll = 0;
+    else if (k === 'scrollEnd') this.bodyScroll = this.maxScroll('body');
+    else this.scrollBy('body', k === 'scrollUp' ? -SCROLL_STEP : k === 'scrollDown' ? SCROLL_STEP : k === 'pageUp' ? -page : page);
   }
 
   // ---- scrolling ---------------------------------------------------------------------------------------------------
@@ -499,12 +517,21 @@ export class CodexScreen {
     this.drawList(c, L);
     this.drawDetail(c, L);
 
-    const dev = g.input?.device ?? 'keyboard';
-    const hint = dev === 'gamepad' ? 'LB/RB 탭   ↕ 선택   A 동작 전환   B 닫기'
-      : dev === 'keyboard' ? '←→·Q/E 탭   ↑↓ 선택   Enter 동작 전환   Esc 닫기'
-        : '목록·설명은 드래그로 스크롤 · 미리보기를 탭하면 다음 동작';
-    text(c, hint, W - CODEX_PAD, L.hint.y + L.hint.h / 2, { align: 'right', color: COL.dim });
+    text(c, this.hintText(c, L), W - CODEX_PAD, L.hint.y + L.hint.h / 2, { align: 'right', color: COL.dim });
     c.globalAlpha = 1;
+  }
+
+  /** The bottom hint for the current input device; when the description overflows it also names the scroll keys
+   * (the longest wording that still fits the row, the shortest one if none does). */
+  private hintText(c: CanvasRenderingContext2D, L: CodexLayout): string {
+    const dev = this.game.input?.device ?? 'keyboard';
+    if (dev !== 'gamepad' && dev !== 'keyboard') return '목록·설명은 드래그로 스크롤 · 미리보기를 탭하면 다음 동작';
+    const pad = dev === 'gamepad';
+    if (this.maxScroll('body') <= 0) return pad ? 'LB/RB 탭   ↕ 선택   A 동작 전환   B 닫기' : '←→·Q/E 탭   ↑↓ 선택   Enter 동작 전환   Esc 닫기';
+    const variants = pad
+      ? ['LB/RB 탭   ↕ 선택   R스틱 ↕ 설명 스크롤   A 동작 전환   B 닫기', 'LB/RB 탭   ↕ 선택   R스틱 ↕ 설명   A 동작 전환   B 닫기', 'LB/RB 탭  ↕ 선택  R스틱 설명  A 동작  B 닫기', '↕ 선택  R스틱 설명  B 닫기']
+      : ['←→·Q/E 탭   ↑↓ 선택   PgUp/PgDn 설명 스크롤   Enter 동작 전환   Esc 닫기', '←→·Q/E 탭   ↑↓ 선택   PgUp/PgDn 설명   Enter 동작 전환   Esc 닫기', '←→ 탭  ↑↓ 선택  PgUp/PgDn 설명  Enter 동작  Esc 닫기', '↑↓ 선택  PgUp/PgDn 설명  Esc 닫기'];
+    return variants.find((v) => textWidth(c, v, SZ.s) <= L.hint.w) ?? variants[variants.length - 1];
   }
 
   // ---- list --------------------------------------------------------------------------------------------------------
@@ -585,7 +612,8 @@ export class CodexScreen {
       rows.push({ label: row.label, color: row.color, lines, y });
       y += lines.length * LINE_H + 3;
     }
-    t = { descLines, headH, rows, rowsH: y };
+    // no gap after the last row: the scroll range ends exactly at its last line
+    t = { descLines, headH, rows, rowsH: rows.length ? y - 3 : 0 };
     if (this.textCache.size > 80) this.textCache.clear();
     this.textCache.set(key, t);
     return t;
@@ -626,9 +654,23 @@ export class CodexScreen {
     c.restore();
     const contentH = headH + tl.rowsH;
     this.drawScrollbar(c, { x: B.x + B.w - 3, y: B.y, w: 3, h: B.h }, contentH, B.h, scroll);
-    if (contentH > B.h + 1 && scroll < contentH - B.h - 1) {
-      // more below: a small chevron
-      text(c, '▼', B.x + B.w - 12, B.y + B.h - 6, { size: SZ.s, color: COL.cyan, alpha: 0.7 });
+    if (contentH > B.h + 1) {
+      // text runs under an edge: fade it out there and point which way there is more
+      const fade = (y: number, h: number, up: boolean): void => {
+        const gr = c.createLinearGradient(0, y, 0, y + h);
+        gr.addColorStop(0, up ? 'rgba(11,15,27,0.96)' : 'rgba(11,15,27,0)');
+        gr.addColorStop(1, up ? 'rgba(11,15,27,0)' : 'rgba(11,15,27,0.96)');
+        c.fillStyle = gr;
+        c.fillRect(B.x, y, B.w, h);
+      };
+      if (scroll > 1) {
+        fade(B.y, 12, true);
+        text(c, '▲', B.x + B.w - 12, B.y + 6, { size: SZ.s, color: COL.cyan, alpha: 0.8 });
+      }
+      if (scroll < contentH - B.h - 1) {
+        fade(B.y + B.h - 16, 16, false);
+        text(c, '▼', B.x + B.w - 12, B.y + B.h - 6, { size: SZ.s, color: COL.cyan, alpha: 0.8 });
+      }
     }
   }
 

@@ -102,6 +102,9 @@ note the dependency in your report; do not edit the other module.
 * Scenes may implement `nav(k)` and `captures()`; `LevelUI.nav` feeds the top modal exactly like the keyboard.
   `NavKey` also has `tabL` / `tabR` (the physical LB / RB, whatever the gameplay map says): tabbed screens switch tabs with them
   (`Modal.tab(dir)`, Q / E on the keyboard).
+  `NavKey` also has the `ScrollKey`s (`scrollUp` / `scrollDown` = 2 lines, `pageUp` / `pageDown`, `scrollTop` / `scrollEnd`) for long text
+  panels (`Modal.scroll(k)`): the right stick makes `scrollUp` / `scrollDown` with its own auto-repeat (`PadState.scroll`; ignored on a pad
+  whose `Gamepad.mapping` is not 'standard'), the keyboard PageUp / PageDown / Home / End and Shift+arrows (codex only).
 
 ## Codex (도감)
 `ui/codex.ts` (`CodexScreen`, one class like the settings screen: the title scene shows it as a modal over the title, the pause menu
@@ -112,6 +115,8 @@ Only the Korean flavour text and the animation lists (an art contract) are writt
 the real `public/assets/sprites/*.json` and against real enemy / boss instances. Previews are a timeline of `PreviewStep`s on one sheet
 (+ an optional prop sprite: grenade arc, turret, trap, arrow), framed from the opaque pixel bounds of their frames and drawn at a whole
 number of device pixels per sprite pixel (`fitScale`); `codexLayout(W, H)` is the pure geometry (tests check it at W = 480..800).
+The detail text of a page that does not fit (final boss on a narrow view: up to ~100 px too tall) scrolls by drag / wheel **and** by the
+`ScrollKey`s (`CodexScreen.key`, `bodyMax` = how far it can go); `tests/codex.test.ts` walks every page at W = 480..800 to its last line.
 
 ## Testing & verification
 * Unit tests per area in `tests/<area>.test.ts` (vitest, node env: no DOM at import time).

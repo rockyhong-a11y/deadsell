@@ -16,7 +16,7 @@ const codex = (page: Page) =>
     const g = (window as any).__ds.game;
     const c = g.scene.codex ?? g.scene.ui?.top?.screen;
     return c
-      ? { tab: c.tab as string, sel: c.sel[c.tabIdx] as number, id: c.current.id as string, anim: c.animIndex as number, list: c.listOffset as number, body: c.bodyOffset as number, n: c.entries().length as number }
+      ? { tab: c.tab as string, sel: c.sel[c.tabIdx] as number, id: c.current.id as string, anim: c.animIndex as number, list: c.listOffset as number, body: c.bodyOffset as number, max: c.bodyMax as number, n: c.entries().length as number }
       : null;
   });
 const entryIds = (page: Page) =>
@@ -44,10 +44,11 @@ async function mockPad(page: Page) {
     });
   });
 }
-const padSet = (page: Page, o: { buttons?: number[]; present?: boolean }) =>
+const padSet = (page: Page, o: { buttons?: number[]; present?: boolean; axes?: number[] }) =>
   page.evaluate((s) => {
     const p = (window as any).__pad;
     if (s.present !== undefined) p.present = s.present;
+    if (s.axes) s.axes.forEach((v, i) => { p.pad.axes[i] = v; });
     if (s.buttons) p.pad.buttons.forEach((b: any, i: number) => { b.pressed = s.buttons!.includes(i); b.value = b.pressed ? 1 : 0; });
   }, o);
 async function padTap(page: Page, btn: number, holdMs = 140) {
@@ -248,6 +249,108 @@ test.describe('codex (도감)', () => {
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => (window as any).__ds.world.time as number)).toBeGreaterThan(t0);
     expect(await sceneName(page)).toBe('LevelScene');
+    expect(c.errors).toEqual([]);
+  });
+
+  test('a page taller than its panel scrolls with the keyboard and the right stick (final boss at 667x375 = 640x360)', async ({ page }) => {
+    await mockPad(page);
+    await page.setViewportSize({ width: 667, height: 375 });
+    const c = await boot(page);
+    await page.waitForTimeout(700);
+    expect(await page.evaluate(() => (window as any).__ds.game.display.H as number)).toBe(360);
+    await page.keyboard.press('ArrowLeft'); // start -> 도감
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => !!(window as any).__ds.game.scene.codex);
+    await page.waitForTimeout(300);
+    await page.evaluate(() => { const s = (window as any).__ds.game.scene.codex; s.setTab(3); s.select(4); }); // 강철 여교도관
+    await page.waitForTimeout(400);
+    const start = (await codex(page))!;
+    expect(start.id).toBe('matron');
+    expect(start.body).toBe(0);
+    expect(start.max, 'the page does not fit, so it must be scrollable').toBeGreaterThan(20);
+    await shot(page, 'boss_matron_top');
+
+    // the keyboard (these did nothing before): PageDown, End, Home, Shift+arrows; Space is still "next animation"
+    await page.keyboard.press('PageDown');
+    expect((await codex(page))!.body).toBeGreaterThan(0);
+    await page.keyboard.press('End');
+    expect((await codex(page))!.body).toBe(start.max);
+    await page.waitForTimeout(150);
+    await shot(page, 'boss_matron_end'); // the last row (보상) is fully visible
+    await page.keyboard.press('PageUp');
+    expect((await codex(page))!.body).toBeLessThan(start.max);
+    await page.keyboard.press('Home');
+    expect((await codex(page))!.body).toBe(0);
+    await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.press('Shift+ArrowDown');
+    const two = await codex(page);
+    expect(two!.body).toBe(Math.min(start.max, 56));
+    expect(two!.sel, 'Shift+arrows scroll the text, they do not pick another entry').toBe(4);
+    await page.keyboard.press('Shift+ArrowUp');
+    await page.keyboard.press('Shift+ArrowUp');
+    expect((await codex(page))!.body).toBe(0);
+    await page.keyboard.press('Space');
+    expect((await codex(page))!.anim).toBe(1);
+    expect((await codex(page))!.body).toBe(0);
+    await page.keyboard.press('ArrowUp'); // a plain arrow still picks the previous entry (and starts it at the top)
+    expect((await codex(page))!.sel).toBe(3);
+    await page.keyboard.press('ArrowDown');
+    expect((await codex(page))!.sel).toBe(4);
+
+    // the right stick: held down it scrolls to the end, held up it comes back; it never leaks into the title
+    await padSet(page, { present: true });
+    await page.waitForTimeout(150);
+    await padSet(page, { axes: [0, 0, 0, 1] });
+    await expect.poll(async () => (await codex(page))!.body, { timeout: 4000 }).toBe(start.max);
+    await padSet(page, { axes: [0, 0, 0, 0] });
+    await padSet(page, { axes: [0, 0, 0, -1] });
+    await expect.poll(async () => (await codex(page))!.body, { timeout: 4000 }).toBe(0);
+    await padSet(page, { axes: [0, 0, 0, 0] });
+    await page.waitForTimeout(150);
+    expect((await codex(page))!.sel).toBe(4);
+    expect(await sceneName(page)).toBe('TitleScene');
+
+    // touch still works: a drag scrolls the same offset
+    const body = (await regionCentre(c.page, 'codex-body'))!;
+    await c.fingers.down(1, body.x, body.y + 40);
+    await c.fingers.drag(1, [body.x, body.y + 40], [body.x, body.y - 10], 5, 12);
+    await c.fingers.upAll();
+    await page.waitForTimeout(700);
+    expect((await codex(page))!.body).toBeGreaterThan(0);
+    expect((await codex(page))!.body).toBeLessThanOrEqual(start.max);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !(window as any).__ds.game.scene.codex);
+    expect(c.errors).toEqual([]);
+  });
+
+  test('pause menu: PageDown and the right stick scroll the detail of the open codex', async ({ page }) => {
+    await mockPad(page);
+    await page.setViewportSize({ width: 667, height: 375 });
+    const c = await boot(page);
+    await startRun(page);
+    await tapRegion(c, 'hud-pause');
+    await page.waitForFunction(() => (window as any).__ds.game.scene.ui.modal);
+    await page.waitForTimeout(400);
+    await tapRegion(c, 'pause4');
+    await page.waitForFunction(() => (window as any).__ds.game.scene.ui.top?.constructor?.name === 'CodexModal');
+    await page.waitForTimeout(400);
+    await page.evaluate(() => { const s = (window as any).__ds.game.scene.ui.top.screen; s.setTab(3); s.select(4); });
+    await page.waitForTimeout(300);
+    const start = (await codex(page))!;
+    expect(start.max).toBeGreaterThan(20);
+    await page.keyboard.press('PageDown');
+    expect((await codex(page))!.body).toBeGreaterThan(0);
+    await page.keyboard.press('End');
+    expect((await codex(page))!.body).toBe(start.max);
+    await page.keyboard.press('Home');
+    expect((await codex(page))!.body).toBe(0);
+    await padSet(page, { present: true });
+    await page.waitForTimeout(150);
+    await padSet(page, { axes: [0, 0, 0, 1] });
+    await expect.poll(async () => (await codex(page))!.body, { timeout: 4000 }).toBe(start.max);
+    await padSet(page, { axes: [0, 0, 0, 0] });
+    await shot(page, 'pause_boss_end');
+    expect(await page.evaluate(() => (window as any).__ds.game.scene.ui.top?.constructor?.name)).toBe('CodexModal');
     expect(c.errors).toEqual([]);
   });
 });

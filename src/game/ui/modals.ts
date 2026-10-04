@@ -1,5 +1,6 @@
 import type { AABB } from '../../engine/math';
 import { clamp } from '../../engine/math';
+import type { ScrollKey } from '../../engine/gamepad';
 import type { LevelUI, ChoiceOption } from './levelUI';
 import { META_UPGRADES, buyBlock, buyUpgrade, type MetaUpgrade } from '../meta/progression';
 import { COL, SZ, button, dim, formatTime, icon, panel, pulse, text, textWidth, wrap } from './draw';
@@ -35,6 +36,9 @@ export abstract class Modal {
 
   /** tabbed screens: Q / E, LB / RB (dir -1 / +1) */
   tab(_dir: number): void {}
+
+  /** screens with a long text panel: PageUp / PageDown / Home / End, Shift+arrows, the right stick */
+  scroll(_k: ScrollKey): void {}
 
   /** does a held key (auto-repeat) keep acting? (list screens: arrows) */
   repeatKey(_code: string): boolean {
@@ -587,8 +591,12 @@ export class CodexModal extends Modal {
     this.screen.cycleTab(dir);
   }
 
+  scroll(k: ScrollKey): void {
+    this.screen.key(k);
+  }
+
   repeatKey(code: string): boolean {
-    return code === 'ArrowUp' || code === 'ArrowDown' || code === 'KeyW' || code === 'KeyS';
+    return code === 'ArrowUp' || code === 'ArrowDown' || code === 'KeyW' || code === 'KeyS' || code === 'PageUp' || code === 'PageDown';
   }
 
   cancel(): void {

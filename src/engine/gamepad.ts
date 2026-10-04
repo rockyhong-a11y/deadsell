@@ -35,9 +35,19 @@ export const PAD_REPEAT_RATE = 0.13;
 export const DPAD_BUTTONS = { up: 12, down: 13, left: 14, right: 15 } as const;
 const MAX_BUTTON = 31;
 
+/**
+ * Keys that scroll a text panel (the codex detail): `scrollUp` / `scrollDown` = a couple of lines (right stick, Shift+arrows),
+ * `pageUp` / `pageDown` = one panel (PageUp / PageDown), `scrollTop` / `scrollEnd` = jump to the start / end (Home / End).
+ */
+export type ScrollKey = 'scrollUp' | 'scrollDown' | 'pageUp' | 'pageDown' | 'scrollTop' | 'scrollEnd';
+
 /** Menu / UI navigation keys (ModalKey + the two global menu buttons). */
 /** (`tabL` / `tabR` = the shoulder buttons LB / RB: switch tabs in tabbed screens such as the codex) */
-export type NavKey = 'left' | 'right' | 'up' | 'down' | 'confirm' | 'cancel' | 'pause' | 'map' | 'tabL' | 'tabR';
+export type NavKey = 'left' | 'right' | 'up' | 'down' | 'confirm' | 'cancel' | 'pause' | 'map' | 'tabL' | 'tabR' | ScrollKey;
+
+/** The right stick (axes 2 / 3) scrolls text panels: first step at once, then after this delay every PAD_SCROLL_RATE s */
+export const PAD_SCROLL_DELAY = 0.3;
+export const PAD_SCROLL_RATE = 0.07;
 
 const BUTTON_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', '뒤로', '시작', 'L3', 'R3', '↑', '↓', '←', '→', '홈'];
 
@@ -51,6 +61,9 @@ export interface PadSnapshot {
   axes: ArrayLike<number>;
   /** pressed flags, indexed like Gamepad.buttons */
   buttons: ArrayLike<boolean>;
+  /** false = the browser does not know this pad's layout (Gamepad.mapping !== 'standard'): axes 2 / 3 may be anything, so
+   * the right stick is ignored. Absent = standard. */
+  standard?: boolean;
 }
 
 export interface PadState {
@@ -59,6 +72,8 @@ export interface PadState {
   down: boolean;
   dirs: { left: boolean; right: boolean; up: boolean; down: boolean };
   repeat: { dir: 'left' | 'right' | 'up' | 'down' | null; t: number; next: number };
+  /** the right stick's vertical push (-1 up / 1 down / 0) and its own auto-repeat clock */
+  scroll: { dir: -1 | 0 | 1; t: number; next: number };
 }
 
 export const newPadState = (): PadState => ({
@@ -66,6 +81,7 @@ export const newPadState = (): PadState => ({
   down: false,
   dirs: { left: false, right: false, up: false, down: false },
   repeat: { dir: null, t: 0, next: PAD_REPEAT_DELAY },
+  scroll: { dir: 0, t: 0, next: PAD_SCROLL_DELAY },
 });
 
 export interface PadFrame {
@@ -152,14 +168,32 @@ export function mapPad(snap: PadSnapshot | null, map: PadMap, prev: PadState, dt
       rep.next += PAD_REPEAT_RATE;
     }
   }
+  // right stick up / down: scrolls text panels (the codex detail); an edge, then auto-repeat while held
+  const ry = snap && snap.standard !== false ? stickToAxis(finite(snap.axes[2]), finite(snap.axes[3])).y : 0;
+  const sdir: -1 | 0 | 1 = ry > PAD_NAV_THRESHOLD ? 1 : ry < -PAD_NAV_THRESHOLD ? -1 : 0;
+  const scr = { ...(prev.scroll ?? newPadState().scroll) };
+  if (sdir === 0) {
+    scr.dir = 0;
+  } else if (sdir !== scr.dir) {
+    scr.dir = sdir;
+    scr.t = 0;
+    scr.next = PAD_SCROLL_DELAY;
+    nav.push(sdir < 0 ? 'scrollUp' : 'scrollDown');
+  } else {
+    scr.t += dt;
+    while (scr.t >= scr.next) {
+      nav.push(sdir < 0 ? 'scrollUp' : 'scrollDown');
+      scr.next += PAD_SCROLL_RATE;
+    }
+  }
   if (raw.includes(0)) nav.push('confirm');
   if (raw.includes(1)) nav.push('cancel');
   if (raw.includes(4)) nav.push('tabL');
   if (raw.includes(5)) nav.push('tabR');
 
   return {
-    frame: { x, y, press, release, nav, raw, active: raw.length > 0 || x !== 0 || y !== 0 },
-    next: { held, down, dirs, repeat: rep },
+    frame: { x, y, press, release, nav, raw, active: raw.length > 0 || x !== 0 || y !== 0 || sdir !== 0 },
+    next: { held, down, dirs, repeat: rep, scroll: scr },
   };
 }
 
@@ -210,7 +244,7 @@ function snapshotOf(gp: Gamepad): PadSnapshot {
     const b = gp.buttons[i];
     buttons.push(!!b && (b.pressed || b.value > 0.5));
   }
-  return { id: gp.id, axes: gp.axes, buttons };
+  return { id: gp.id, axes: gp.axes, buttons, standard: gp.mapping === 'standard' };
 }
 
 /** Polls navigator.getGamepads and tracks connection. All state lives in `state` (see mapPad). */

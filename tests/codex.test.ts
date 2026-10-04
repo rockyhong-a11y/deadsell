@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SpriteSheet, SHEETS, type SheetManifest } from '../src/engine/assets';
-import { DEFAULT_PAD_MAP, mapPad, newPadState } from '../src/engine/gamepad';
+import { DEFAULT_PAD_MAP, PAD_SCROLL_DELAY, mapPad, newPadState } from '../src/engine/gamepad';
 import { ITEMS, AFFIX_NAMES } from '../src/game/items/items';
 import { ITEM_IDS } from '../src/game/items/types';
 import { ALL_ENEMY_KINDS, BASE_KINDS, ENEMY_DEFS } from '../src/game/enemies/variants';
@@ -46,13 +46,14 @@ const byId = (tab?: CodexTabId) => new Map((tab ? codexEntries(tab) : buildCodex
 // ---------------------------------------------------------------------------
 // a 2D context that accepts everything (draw code runs in node)
 
-function fakeCtx(): CanvasRenderingContext2D {
+function fakeCtx(log?: string[]): CanvasRenderingContext2D {
   const grad = { addColorStop() {} };
   const target: Record<string, unknown> = { font: '11px x' };
   return new Proxy(target, {
     get(t, k: string) {
       if (k === 'measureText') return (s: string) => ({ width: [...s].length * (parseInt(String(t.font).match(/(\d+)px/)?.[1] ?? '11', 10) * 0.9) });
       if (k === 'createRadialGradient' || k === 'createLinearGradient') return () => grad;
+      if (k === 'fillText' && log) return (s: string) => { log.push(s); };
       if (k in t) return t[k];
       return () => {};
     },
@@ -75,11 +76,11 @@ function makeGame(device: 'keyboard' | 'gamepad' | 'touch' = 'keyboard') {
 }
 
 /** a screen that has been open for a while (taps unlocked) and drawn once */
-function open(W = 640, tab: CodexTabId = 'weapon', device: 'keyboard' | 'gamepad' | 'touch' = 'keyboard') {
+function open(W = 640, tab: CodexTabId = 'weapon', device: 'keyboard' | 'gamepad' | 'touch' = 'keyboard', log?: string[]) {
   const game = makeGame(device);
   const onClose = vi.fn();
   const sc = new CodexScreen(game, onClose, tab);
-  const ctx = fakeCtx();
+  const ctx = fakeCtx(log);
   const frame = (dt = 1 / 60) => {
     game.taps.clear();
     sc.update(dt);
@@ -450,6 +451,137 @@ describe('CodexScreen navigation', () => {
     // remapping the shoulder buttons in the settings does not change the menu
     expect(mapPad(snap([5]), { ...DEFAULT_PAD_MAP, heal: 5, interact: 4 }, newPadState()).frame.nav).toContain('tabR');
   });
+
+  it('right stick up / down makes scroll keys: one at once, then auto-repeat while held; the left stick and a pad of unknown layout do not', () => {
+    const snap = (axes: number[], standard?: boolean) => ({ id: 'pad', axes, buttons: Array.from({ length: 17 }, () => false), standard });
+    let r = mapPad(snap([0, 0, 0, 1]), DEFAULT_PAD_MAP, newPadState());
+    expect(r.frame.nav).toEqual(['scrollDown']);
+    expect(r.frame.active).toBe(true);
+    let st = r.next;
+    const seen: number[] = [];
+    let t = 0;
+    for (let i = 0; i < 90; i++) {
+      r = mapPad(snap([0, 0, 0, 1]), DEFAULT_PAD_MAP, st, 1 / 60);
+      st = r.next;
+      t += 1 / 60;
+      if (r.frame.nav.includes('scrollDown')) seen.push(t);
+      expect(r.frame.nav).not.toContain('down'); // the right stick is not the D-pad
+    }
+    expect(seen.length).toBeGreaterThanOrEqual(10);
+    expect(seen[0]).toBeGreaterThanOrEqual(PAD_SCROLL_DELAY - 0.02);
+    expect(seen[1] - seen[0]).toBeLessThan(0.1);
+    // letting go and pushing up: an edge again, the other way
+    st = mapPad(snap([0, 0, 0, 0]), DEFAULT_PAD_MAP, st).next;
+    expect(mapPad(snap([0, 0, 0, -1]), DEFAULT_PAD_MAP, st).frame.nav).toEqual(['scrollUp']);
+    // dead-zone, left stick, sideways push, and a pad whose layout the browser does not know: nothing
+    expect(mapPad(snap([0, 0, 0, 0.2]), DEFAULT_PAD_MAP, newPadState()).frame.nav).toEqual([]);
+    expect(mapPad(snap([0, 1, 0, 0]), DEFAULT_PAD_MAP, newPadState()).frame.nav).toEqual(['down']);
+    expect(mapPad(snap([0, 0, 1, 0]), DEFAULT_PAD_MAP, newPadState()).frame.nav).toEqual([]);
+    expect(mapPad(snap([0, 0, 0, 1], false), DEFAULT_PAD_MAP, newPadState()).frame.nav).toEqual([]);
+  });
+});
+
+describe('CodexScreen detail scrolling with keys and the pad (a page that does not fit)', () => {
+  const DOWN = ['scrollDown', 'pageDown'] as const;
+
+  it('the final boss page at the narrow width overflows and every key reaches both ends of it', () => {
+    const { sc, frame } = open(480, 'boss');
+    sc.select(4); // Matron: the longest page
+    frame();
+    const max = sc.bodyMax;
+    expect(max).toBeGreaterThan(0);
+    expect(sc.bodyOffset).toBe(0);
+    sc.key('scrollDown');
+    expect(sc.bodyOffset).toBe(Math.min(max, 28)); // two lines
+    sc.key('scrollUp');
+    expect(sc.bodyOffset).toBe(0);
+    sc.key('scrollUp'); // clamped at the top
+    expect(sc.bodyOffset).toBe(0);
+    sc.key('pageDown');
+    expect(sc.bodyOffset).toBeGreaterThan(28);
+    sc.key('scrollEnd');
+    expect(sc.bodyOffset).toBe(max);
+    sc.key('scrollDown'); // clamped at the end
+    sc.key('pageDown');
+    expect(sc.bodyOffset).toBe(max);
+    sc.key('pageUp');
+    expect(sc.bodyOffset).toBeLessThan(max);
+    sc.key('scrollTop');
+    expect(sc.bodyOffset).toBe(0);
+    // the list and the selection are not touched by it
+    expect(sc.current.id).toBe(codexEntries('boss')[4].id);
+    expect(sc.listOffset).toBe(0);
+  });
+
+  for (const W of [480, 560, 640, 740, 800]) {
+    it(`every page of every tab can be read to its last line with PageDown / Shift+arrows (W=${W})`, () => {
+      const { sc, frame } = open(W);
+      let overflowing = 0;
+      for (let ti = 0; ti < CODEX_TABS.length; ti++) {
+        sc.setTab(ti);
+        for (let i = 0; i < sc.entries().length; i++) {
+          sc.select(i);
+          frame();
+          const max = sc.bodyMax;
+          expect(sc.bodyOffset).toBe(0); // a new page starts at the top
+          if (max > 0) overflowing++;
+          for (const k of DOWN) {
+            sc.key('scrollTop');
+            let guard = 0;
+            let last = -1;
+            while (sc.bodyOffset !== last && guard++ < 60) {
+              last = sc.bodyOffset;
+              sc.key(k);
+              frame();
+            }
+            expect(sc.bodyOffset, `${W} ${sc.current.id} ${k}`).toBe(max);
+          }
+          sc.key('scrollEnd');
+          expect(sc.bodyOffset).toBe(max);
+        }
+      }
+      if (W <= 640) expect(overflowing).toBeGreaterThan(0); // the narrow layouts do have pages that do not fit
+    });
+  }
+
+  it('a page that fits does not scroll and shows no scroll key in the hint', () => {
+    const log: string[] = [];
+    const { sc, frame } = open(800, 'item', 'keyboard', log);
+    frame();
+    expect(sc.bodyMax).toBe(0);
+    sc.key('pageDown');
+    sc.key('scrollEnd');
+    expect(sc.bodyOffset).toBe(0);
+    expect(log.some((t) => t.includes('PgUp/PgDn'))).toBe(false);
+  });
+
+  it('the hint names the scroll keys of the device only while the page overflows', () => {
+    for (const [device, word] of [['keyboard', 'PgUp/PgDn'], ['gamepad', 'R스틱']] as const) {
+      const log: string[] = [];
+      const { sc, frame } = open(480, 'boss', device, log);
+      sc.select(4);
+      log.length = 0;
+      frame();
+      expect(sc.bodyMax).toBeGreaterThan(0);
+      const hint = log.find((t) => t.includes('선택'));
+      expect(hint, device).toBeDefined();
+      expect(hint!.includes(word), `${device}: ${hint}`).toBe(true);
+    }
+    // touch users already read "드래그로 스크롤"
+    const log: string[] = [];
+    const { frame } = open(480, 'boss', 'touch', log);
+    log.length = 0;
+    frame();
+    expect(log.some((t) => t.includes('드래그로 스크롤'))).toBe(true);
+  });
+
+  it('the scroll keys are ignored for the list and before anything was drawn', () => {
+    const game = makeGame();
+    const sc = new CodexScreen(game, vi.fn(), 'boss');
+    sc.key('pageDown'); // never drawn: nothing to measure, nothing breaks
+    sc.key('scrollEnd');
+    expect(sc.bodyOffset).toBe(0);
+  });
 });
 
 describe('CodexScreen drawing and touch', () => {
@@ -598,6 +730,58 @@ describe('도감 in the pause menu', () => {
     frame();
     expect(game.taps.byId('pause5')).not.toBeNull();
     expect(game.playerDied).not.toHaveBeenCalled();
+  });
+
+  it('in the pause menu PageUp / PageDown / Home / End, Shift+arrows and the right stick scroll the detail text', () => {
+    const { ui, game, frame } = pauseUI();
+    game.display.W = 480;
+    ui.openPause();
+    for (let i = 0; i < 20; i++) frame();
+    game.taps.byId('pause4').onTap();
+    for (let i = 0; i < 20; i++) frame();
+    const codex = (ui.top as CodexModal).screen;
+    codex.setTab(3);
+    codex.select(4);
+    frame();
+    const max = codex.bodyMax;
+    expect(max).toBeGreaterThan(0);
+    const key = (code: string, shift = false) => (ui as any).onKeyDown({ code, shiftKey: shift, repeat: false, ctrlKey: false, altKey: false, metaKey: false });
+    key('PageDown');
+    expect(codex.bodyOffset).toBeGreaterThan(0);
+    key('End');
+    expect(codex.bodyOffset).toBe(max);
+    key('PageUp');
+    expect(codex.bodyOffset).toBeLessThan(max);
+    key('Home');
+    expect(codex.bodyOffset).toBe(0);
+    key('ArrowDown', true); // Shift+down = two lines, the selection stays
+    expect(codex.bodyOffset).toBe(Math.min(max, 28));
+    expect(codex.current.id).toBe(codexEntries('boss')[4].id);
+    key('ArrowUp', true);
+    expect(codex.bodyOffset).toBe(0);
+    key('ArrowUp'); // plain arrows still pick the entry
+    expect(codex.current.id).toBe(codexEntries('boss')[3].id);
+    codex.select(4);
+    ui.nav('scrollDown'); // right stick
+    expect(codex.bodyOffset).toBeGreaterThan(0);
+    ui.nav('scrollUp');
+    expect(codex.bodyOffset).toBe(0);
+    ui.nav('pageDown');
+    ui.nav('scrollEnd');
+    expect(codex.bodyOffset).toBe(max);
+    expect(ui.top).toBeInstanceOf(CodexModal); // none of them closes or changes anything else
+  });
+
+  it('Shift + arrows still move the selection in the other menus', () => {
+    const { ui, game, frame } = pauseUI();
+    ui.openPause();
+    for (let i = 0; i < 20; i++) frame();
+    const top = ui.top as any;
+    const before = top.sel ?? top.focus;
+    (ui as any).onKeyDown({ code: 'ArrowDown', shiftKey: true, repeat: false, ctrlKey: false, altKey: false, metaKey: false });
+    expect(game.taps.byId('pause4')).not.toBeNull();
+    expect(ui.top).toBeInstanceOf(PauseModal);
+    expect(top.sel ?? top.focus).not.toBe(before);
   });
 
   it('the close button and the Start button close the codex but not the pause menu', () => {

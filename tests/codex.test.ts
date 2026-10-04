@@ -11,7 +11,7 @@ import { MATRON, createBoss } from '../src/game/boss/matron';
 import { META_UPGRADES } from '../src/game/meta/progression';
 import { SCROLL_COLORS } from '../src/game/items/pickups';
 import { COLOR_HEX } from '../src/game/combat';
-import { FOODS, TIER2, ELITE } from '../src/game/rules';
+import { CORPSE, ELITE, FOODS, GOLEM, LOOP, TIER2, golemCost } from '../src/game/rules';
 import { WEAPONS } from '../src/game/player/weapons';
 import { TapRegistry } from '../src/game/ui/taps';
 import { LevelUI } from '../src/game/ui/levelUI';
@@ -27,7 +27,31 @@ import { makeTestWorld } from './helpers';
 
 const files = import.meta.glob('../public/assets/sprites/*.json', { eager: true, import: 'default' }) as Record<string, SheetManifest>;
 const manifests = new Map<string, SheetManifest>(Object.entries(files).map(([path, m]) => [path.replace(/^.*\/|\.json$/g, ''), m]));
-const manifest = (name: string): SheetManifest | null => manifests.get(name) ?? null;
+const onDisk = (name: string): SheetManifest | null => manifests.get(name) ?? null;
+
+/**
+ * The art of docs/CONTENT3.md §6 (corpse pieces, Selma, the golem and the new icons). The art lane may not have delivered it yet:
+ * until a sheet / icon exists on disk the spec's animation names stand in for it, so the codex pages that use it are still checked
+ * against the contract. Once the files exist, the real manifests are used.
+ */
+const NEW_SHEETS: Record<string, string[]> = {
+  corpse: ['piece', 'piece_big'],
+  seamstress: ['idle', 'talk', 'sew'],
+  golem: ['idle', 'walk', 'attack', 'hurt', 'jump', 'death', 'assemble', 'pile'],
+};
+const NEW_ICONS = ['corpse_piece', 'golem'];
+const standIn = (frameW: number, frameH: number, anchor: [number, number], names: string[]): SheetManifest => ({
+  image: '', frameW, frameH, anchor, animations: Object.fromEntries(names.map((n, row) => [n, { row, frames: 1, fps: 1, loop: true }])),
+});
+const manifest = (name: string): SheetManifest | null => {
+  const m = onDisk(name);
+  if (name in NEW_SHEETS) return m ?? standIn(name === 'corpse' ? 24 : 128, name === 'corpse' ? 24 : 128, name === 'corpse' ? [12, 22] : [64, 124], NEW_SHEETS[name]);
+  if (name === 'icons' && m) {
+    const missing = NEW_ICONS.filter((n) => !(n in m.animations));
+    return missing.length ? { ...m, animations: { ...m.animations, ...standIn(32, 32, [16, 16], missing).animations } } : m;
+  }
+  return m;
+};
 const sheets = new Map<string, SpriteSheet>();
 function realSheet(name: string): SpriteSheet {
   let s = sheets.get(name);
@@ -147,6 +171,31 @@ describe('codex entries cover the whole game', () => {
     for (const a of Object.keys(AFFIX_NAMES)) expect(ids.has(`affix_${a}`), a).toBe(true);
   });
 
+  it('has 시체 조각 and 누더기 골렘 with their numbers taken from the tables', () => {
+    const items = byId('item');
+    const piece = items.get('corpse_piece')!;
+    const text = piece.rows.map((r) => r.text).join(' | ');
+    expect(piece.name).toBe('시체 조각');
+    expect(text).toContain(`일반 적 ${CORPSE.drop.enemy} · 정예 ${CORPSE.drop.elite} · 중간 보스 ${CORPSE.drop.miniboss} · 강철 여교도관 ${CORPSE.drop.matron}`);
+    expect(text).toContain(`${CORPSE.body}/${CORPSE.body}`);
+    expect(text).toContain('셀마');
+    expect(text).toContain('시체 상점');
+    expect(text).toContain(`적 체력 +${Math.round(LOOP.hp * 100)}%`);
+    expect(text).toContain(`정예 확률 +${Math.round(LOOP.elite * 100)}%p`);
+    expect(piece.preview.sheet).toBe('corpse');
+    const golem = items.get('rag_golem')!;
+    const g = golem.rows.map((r) => r.text).join(' | ');
+    expect(g).toContain(`시체 조각 ${golemCost(1)}개`);
+    expect(g).toContain(`최대 ${golemCost(LOOP.cap)}개`);
+    expect(g).toContain(`${GOLEM.hp}`);
+    expect(g).toContain(`피해 ${GOLEM.damage}`);
+    expect(g).toContain(`예비동작 ${GOLEM.slam.windup}초`);
+    expect(g).toContain(`${GOLEM.follow.near}–${GOLEM.follow.far}px`);
+    expect(golem.preview.sheet).toBe('golem');
+    // 통로 is called 쉼터 everywhere the player reads it
+    for (const e of all) for (const t of [e.name, e.desc, ...e.rows.map((r) => r.text)]) expect(t, e.id).not.toContain('통로');
+  });
+
   it('every entry has a Korean name and description, rows with text, and nothing is hidden behind ???', () => {
     for (const e of all) {
       expect(e.name.length, e.id).toBeGreaterThan(0);
@@ -169,7 +218,16 @@ describe('codex previews point at real sheets and animations (public/assets/spri
   const all = buildCodex();
 
   it('the sprite manifests of the game are all readable', () => {
-    for (const name of SHEETS) expect(manifest(name), name).not.toBeNull();
+    for (const name of SHEETS) if (!(name in NEW_SHEETS)) expect(onDisk(name), name).not.toBeNull();
+  });
+
+  it('the CONTENT3 art, once it exists, has the animations the codex and the props use', () => {
+    for (const [name, anims] of Object.entries(NEW_SHEETS)) {
+      const m = onDisk(name);
+      if (m) for (const a of anims) expect(Object.keys(m.animations), `${name}/${a}`).toContain(a);
+    }
+    const icons = onDisk('icons');
+    if (icons) for (const n of NEW_ICONS) if (n in icons.animations) expect(icons.animations[n].frames).toBeGreaterThanOrEqual(1);
   });
 
   it('every preview, prop and thumbnail uses an existing sheet and animation', () => {

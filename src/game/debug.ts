@@ -3,10 +3,14 @@ import type { Game } from './game';
 import type { LevelScene } from './scenes/levelScene';
 import { LEVEL_SEQUENCE } from './run';
 import type { ItemId } from './items/types';
+import { ITEMS } from './items/items';
 import { Actor } from './entity';
 import { createEnemy } from './enemies/factory';
 import { ENEMY_DEFS, type EnemyKind } from './enemies/variants';
 import { isMiniBoss } from './miniboss';
+import { Golem, newGolemState } from './allies/golem';
+import { MAX_LOOP } from './meta/save';
+import { CORPSE } from './rules';
 
 /**
  * Debug / test hooks exposed as `window.__ds` (used by e2e tests and manual QA).
@@ -62,7 +66,23 @@ export function installDebug(game: Game): void {
     give(id: ItemId, slot = 0) {
       const run = game.run; if (!run) return;
       const inst = { id, tier: run.tier, affix: null };
-      if (['fire_grenade', 'ice_grenade', 'turret', 'wolf_trap'].includes(id)) run.skills[slot] = inst; else run.weapons[slot] = inst;
+      if (ITEMS[id].slot === 'skill') run.skills[slot] = inst; else run.weapons[slot] = inst;
+    },
+    /** carried 시체 조각 of the current run */
+    pieces(n: number) { if (game.run) game.run.pieces = Math.max(0, Math.floor(n)); },
+    /** pieces sewn into the body (0..99, saved) */
+    body(n: number) { game.save.body = Math.max(0, Math.min(CORPSE.body - 1, Math.floor(n))); game.persist(); },
+    /** the loop (회차, saved; also applied to the run in progress, so enemies spawned from now on are scaled) */
+    loop(n: number) { const l = Math.max(1, Math.min(MAX_LOOP, Math.floor(n))); game.save.loop = l; if (game.run) game.run.loop = l; game.persist(); },
+    /** spawn a rag golem for the current run next to the player (replaces the one that stands). Returns it. */
+    golem() {
+      const w = level()?.world, run = game.run;
+      if (!w || !run) return null;
+      for (const e of w.entities) if (e instanceof Golem) e.dead = true;
+      const p = w.player;
+      const g = new Golem(p.x - 40, p.y, newGolemState(run));
+      w.spawn(g);
+      return g;
     },
     info() {
       const w = level()?.world;

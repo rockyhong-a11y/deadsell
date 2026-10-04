@@ -2,6 +2,8 @@ import { Actor } from '../entity';
 import { hitArea, type DamageInfo } from '../combat';
 import { approach, overlaps, sign } from '../../engine/math';
 import type { RunState } from '../run';
+import type { World } from '../world';
+import type { Player } from '../player/player';
 import { GOLEM, TIER_DMG, golemStatMul } from '../rules';
 
 /** hp and damage of the golem in a loop (docs/CONTENT3.md §4): its own base times the loop factor (damage also times the item tier) */
@@ -12,6 +14,19 @@ export const golemDamage = (loop: number, tier: number): number => Math.round(GO
 export function newGolemState(run: Pick<RunState, 'loop' | 'golem'>): { hp: number; maxHp: number } {
   const max = golemMaxHp(run.loop);
   return (run.golem = { hp: max, maxHp: max });
+}
+
+/**
+ * The golem the run carries into a level (if any), beside the heroine: restored from `run.golem`, healed to full in every
+ * 쉼터 (`passage` levels). Returns it, or null when the run has none.
+ */
+export function spawnRunGolem(world: World, player: Player, levelKind: 'biome' | 'passage' | 'boss'): Golem | null {
+  const slot = world.run.golem;
+  if (!slot) return null;
+  if (levelKind === 'passage') slot.hp = slot.maxHp;
+  const g = new Golem(player.x - 40, player.y, slot);
+  g.facing = player.facing;
+  return world.spawn(g);
 }
 
 /** where the heroine is */
@@ -133,7 +148,7 @@ export class Golem extends Actor {
       }
       // close in until the slam reaches
       const gap = Math.abs(t.x - this.x) - (this.w / 2 + GOLEM.slam.w * 0.6);
-      this.run(gap > 0 ? sign(t.x - this.x) : 0, t.y < this.y - 20, dt);
+      this.run(gap > 0 ? sign(t.x - this.x) : 0, t.y < this.y - 8, t.y < this.y - 30, dt);
       return;
     }
     const dx = p.x - this.x;
@@ -142,7 +157,7 @@ export class Golem extends Actor {
     // keep within the band behind her: far = come closer, close = stand still; a platform she stands on up to
     // 80 px above is jumped to, one she is far above / below is walked toward (then the leash takes over)
     const level = Math.abs(dy) <= 80;
-    this.run(d > F.far || (!level && d > 6) ? sign(dx) : 0, dy < -30 && level && d < F.far * 1.6, dt);
+    this.run(d > F.far || (!level && d > 6) ? sign(dx) : 0, dy < -8, dy < -30 && level && d < F.far * 1.6, dt);
     // she is lower and we stand on a one-way platform: drop through it
     if (this.onPlatform && dy > 30 && this.dropT <= 0) {
       this.dropThrough = true;
@@ -155,14 +170,17 @@ export class Golem extends Actor {
     }
   }
 
-  /** walk in `dir` (0 = stand), jumping when a wall blocks the way or a platform above is meant to be reached */
-  private run(dir: number, higher: boolean, dt: number): void {
+  /**
+   * Walk in `dir` (0 = stand still). A wall in the way is jumped when the goal is higher (`wallUp`); `hopUp` = a platform
+   * above that is meant to be reached: jump from right below it.
+   */
+  private run(dir: number, wallUp: boolean, hopUp: boolean, dt: number): void {
     const F = GOLEM.follow;
     if (dir !== 0) {
       this.faceX(this.x + dir);
       this.vx = dir * F.speed;
     } else this.vx = approach(this.vx, 0, 900 * dt);
-    if (this.onGround && this.jumpCd <= 0 && higher && (this.hitWallX === dir || dir === 0 || Math.abs(this.vx) < 1)) {
+    if (this.onGround && this.jumpCd <= 0 && ((dir !== 0 && wallUp && this.hitWallX === dir) || (dir === 0 && hopUp))) {
       this.vy = -F.jump;
       this.onGround = false;
       this.jumpCd = 0.6;

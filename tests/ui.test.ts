@@ -89,6 +89,7 @@ describe('HUD layout and tap targets', () => {
         }
       // counters stay left of the pause button
       expect(L.cells.x + 50).toBeLessThan(L.pause.x);
+      expect(L.pieces.x + 60).toBeLessThan(L.pause.x);
     });
   }
 

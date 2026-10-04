@@ -4,7 +4,7 @@
 바이옴 → 통로 → 바이옴 → 보스)를 모바일 웹으로 재현한 2D 로그라이트입니다.
 메커니즘은 원작을 충실히 따르고, **이름·캐릭터·아트는 전부 오리지널**이며 **등장인물은 모두 여성**입니다.
 
-- **플레이 (공개)**: https://rockyhong-a11y.github.io/deadsell/
+- **플레이 (공개)**: https://rockyhong-a11y.github.io/deadsell-play/
 - 휴대폰 브라우저 가로 화면 권장. PC에서는 키보드로도 플레이 가능.
 
 ## 게임 구성
@@ -91,7 +91,7 @@ npm run dev          # http://localhost:5173
 npm test             # 단위 테스트 (Vitest)
 npx playwright test  # e2e: 실제 터치 입력 + 타이틀→2바이옴→보스→승리 전체 플레이
 npm run build
-tools/deploy_pages.sh   # GitHub Pages(gh-pages 브랜치)로 배포
+tools/deploy_pages.sh   # 공개 플레이 저장소(deadsell-play)의 gh-pages로 배포
 ```
 
 ## 아트 파이프라인 (Blender)

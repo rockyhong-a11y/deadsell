@@ -48,13 +48,15 @@ src/game/enemies/*              enemy AI, enemy projectiles, createEnemy, pools 
 src/game/boss/*                 The Iron Matron, boss projectiles/hazards             [enemies]
 src/game/enemies/variants.ts    30 enemy types: 6 bases + 24 variants (table, spawn picker)  [enemies]
 src/game/miniboss/*             4 mid-bosses (abbess, arachne, valkyrie, witch), hazards  [enemies]
+src/game/allies/golem.ts        누더기 골렘: player-team Actor that follows / slams / leashes; spawnRunGolem, newGolemState  [economy]
 src/game/level/*                templates, generator, populate, LevelRenderer         [level]
 src/game/props/*                interactables & decor (doors, chests, altars, NPCs, shop, fountain, torches, gates) [level]
+                                + the 쉼터 of docs/CONTENT3.md: seamstress.ts (Selma), corpseShop.ts (시체 상점 pedestal + stock), golemPile.ts  [economy]
 src/game/ui/*                   touch gestures, virtual buttons (vbuttons.ts), HUD, overlays, minimap, menus, settings screen (settings.ts),
                                 codex screen (codex.ts) + its entry list (codexData.ts)  [ui]
-src/game/rules.ts               shared tuning numbers (crit, affixes, scroll/flask/food, tier/elite scaling, loot) read by gameplay AND the codex [core]
-src/game/scenes/{title,death,victory}Scene.ts                                         [ui]
-src/game/meta/*                 save, Alchemist upgrades                              [ui]
+src/game/rules.ts               shared tuning numbers (crit, affixes, scroll/flask/food, tier/elite scaling, loot, and CORPSE / LOOP / GOLEM) read by gameplay AND the codex [core]
+src/game/scenes/{title,death,victory,loopClear}Scene.ts                               [ui]
+src/game/meta/*                 save (loop / body / loopRuns), Alchemist upgrades, body.ts (sew the carried pieces, complete a loop)  [ui]
 src/game/fx/*                   particles, fx (numbers, slashes, rings, flash), lighting [fx]
 ```
 Only edit files your role owns. If you need something from another module that does not
@@ -83,6 +85,27 @@ note the dependency in your report; do not edit the other module.
   (docs/CONTENT2.md).
 * Level: `buildLevel(spec, seed, save)`, `populateLevel(world, level)`, `LevelRenderer`.
 * UI: `LevelUI` (`modal`, `toast`, `openChoice`, `openAlchemist`, `openMap`, `openPause`, `boss`).
+
+## 시체 조각, 쉼터, 골렘, 회차 (docs/CONTENT3.md)
+* **State.** `save.loop` (1..99), `save.body` (0..99 pieces sewn in this loop), `save.loopRuns`; `run.loop` (copied from the save by `applyRunStart`),
+  `run.pieces` (carried, lost on death like cells), `run.piecesSewn`, `run.golem` (`{hp, maxHp}` | null). Every number is in `rules.ts`:
+  `CORPSE` (body 100, drops 1 / 3 / 8 / 12), `LOOP` (+30 % hp, +20 % damage, +5 points elite chance, +50 % shop prices, golem cost 30 + 15 per
+  step, steps = min(loop, 5) - 1: `loopK`, `loopHpMul`, `loopDmgMul`, `loopEliteBonus`, `loopPriceMul`, `golemCost`, `golemStatMul`), `GOLEM`.
+* **Drops.** `dropLoot(world, x, y, { cells, gold, pieces })` scatters `Coin` pickups of kind `'piece'` (the `corpse` sheet, `piece_big` from `CORPSE.big`);
+  they home in on the heroine like cells and emit `pickup` events with `what: 'pieces'` (the HUD adds a counter and a `+N 조각` toast).
+  `Enemy` / `MiniBoss` / `Matron` call it from `dropRewards` / `die`.
+* **Loops.** Enemies, mid-bosses and the Matron read `world.run.loop` in `init()` (hp x `loopHpMul`, damage x `loopDmgMul`); `populateLevel` adds
+  `loopEliteBonus` to the elite chance. `enemyHpMul` / `enemyDmgMul` take the loop as an optional last argument (the codex shows loop 1).
+* **Sewing.** `meta/body.ts`: `sewPlan` (what a sew does), `sewPieces(run, save)` (carried -> body, capped at what the body needs; a body made whole
+  runs `completeLoop`: loop + 1, body 0, loopRuns 0, the surplus is lost; returns the `LoopInfo` of the cleared loop), `bodyNeed`. `Seamstress`
+  (Selma) calls it, persists the save at once, then after a 0.6 s slow-motion `game.loopClear(info)` -> `LoopClearScene` (-> title).
+  `Game.victory()` sews the carried pieces on the spot and hands the `SewResult` to `VictoryScene`; a completed body sends its tap to the loop-clear scene.
+* **쉼터 (the `passage` level).** The template is 64 x 18 with markers `Z` (seamstress), `C` (corpse-shop pedestal, 3x) and `G` (golem pile)
+  (`MARKER_SPAWN`, spawn types `seamstress` / `corpse_shop` / `golem_pile`). `populateLevel` stocks the pedestals with `corpseShopStock(rng, 3)`:
+  distinct ids from `UNIQUE_IDS` (items/types.ts; none yet = three empty "품절" pedestals); the price is `uniquePrice(id, loop)` (items.ts).
+* **Golem.** `allies/golem.ts`: a `team: 'player'` Actor (enemy melee / area attacks hit it through `hitArea`, enemy AI keeps targeting the heroine).
+  It writes its hp into `run.golem` every step, so `LevelScene` can bring it to the next level with `spawnRunGolem(world, player, level.kind)`
+  (healed in every 쉼터). `GolemPile` pays `golemCost(loop)` pieces, plays `assemble` and spawns the `Golem`; `newGolemState(run)` creates the slot.
 
 ## Settings, control modes, graphics
 `save.settings` (validated field by field in `loadSave`, old saves load with defaults): `controlMode`
@@ -123,7 +146,8 @@ The detail text of a page that does not fit (final boss on a narrow view: up to 
 * Visual/e2e: run a dev server on your own port (`npx vite --port <p> --strictPort`) and
   drive it with Playwright (`node_modules/playwright`, Chromium is pre-installed):
   `window.__ds` offers `start(seed)`, `gotoLevel('boss')`, `god()`, `teleport(x,y)`,
-  `killAll()`, `give(itemId, slot)`, `step(n)`, `info()`, `spawn(enemyId, dx)`, `gotoMiniboss()`. URL flags: `?seed=1&debug=2&god=1&level=boss&mute=1`.
+  `killAll()`, `give(itemId, slot)` (the slot comes from `ITEMS[id].slot`), `step(n)`, `info()`, `spawn(enemyId, dx)`, `gotoMiniboss()`,
+  and for docs/CONTENT3.md `pieces(n)` (carried), `body(n)` (sewn, saved), `loop(n)` (saved + the run), `golem()` (spawns one for the run). URL flags: `?seed=1&debug=2&god=1&level=boss&mute=1`.
   Screenshot and look at the result (Read tool) — do not assume it looks right.
 * End-to-end (Playwright, `npx playwright test`, 844x390 mobile-landscape Chromium against the Vite dev server):
   * `e2e/smoke.spec.ts` - real touch gestures (CDP touch events) on the title / HUD / death screens.
@@ -134,6 +158,9 @@ The detail text of a page that does not fit (final boss on a narrow view: up to 
   * `e2e/bot.ts` - `botWalk`, an in-page navigation bot: plans with `level/nav.ts` (the generator's own movement graph) and
     drives the real player through `Input` + real physics, stepping with `__ds.step`. Use it to prove an exit is reachable.
   * `e2e/helpers.ts` - boot, touch fingers, `tapRegion(id)` (taps a registered `game.taps` rectangle), event capture.
+  * `e2e/corpse.spec.ts` - docs/CONTENT3.md: kills -> pieces -> HUD counter, Selma sews (body saved), the 시체 상점 pays in pieces, the golem pile builds a
+    golem that follows into the next level, body 99 + 1 -> loop-clear scene -> title `2회차`, victory auto-sew, death loses carried pieces, the HUD
+    counters in all three control modes at 480 / 800 UI widths (screenshots `e2e/__shots__/`, git-ignored; text is read by recording `fillText`).
   * `e2e/codex.spec.ts` - the codex from the title (touch, keyboard, mocked pad) and from the pause menu; one screenshot per tab
     (`e2e-shots/codex_*.png`).
   * `e2e/settings.spec.ts` - settings by touch, virtual buttons with real multi-touch, a mocked `navigator.getGamepads`

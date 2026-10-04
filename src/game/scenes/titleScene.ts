@@ -259,7 +259,9 @@ export class TitleScene implements Scene {
     const s = g.save;
     const unl = unlockedCount(s);
     const parts = [`도전 ${s.runs}회`, `승리 ${s.wins}회`, `최고 기록 ${s.bestTime === null ? '--:--' : formatTime(s.bestTime)}`, `처치 ${s.totalKills}`, `해금 ${unl.have}/${unl.total}`];
-    text(c, parts.join('  ·  '), lx, H - 18, { align: 'center', color: COL.dim });
+    const statsLine = parts.join('  ·  ');
+    // (on a narrow view the line is wider than the space left of the key art: keep it on screen)
+    text(c, statsLine, Math.max(lx, textWidth(c, statsLine, SZ.s) / 2 + 8), H - 18, { align: 'center', color: COL.dim });
     this.drawBody(c, lx, H);
     c.globalAlpha = 1;
     g.taps.add({ id: 'start', rect: { x: 0, y: 0, w: W, h: H }, mode: 'up', onTap: () => this.start() });

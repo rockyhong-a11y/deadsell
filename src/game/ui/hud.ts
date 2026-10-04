@@ -59,8 +59,8 @@ export function hudLayout(W: number, H: number, maxFlasks = 1): HudLayout {
     flaskIcon: { x: 22, y: 46 },
     pips: { x: 38, y: 38 },
     gold: { x: gx, y: 46 },
-    cells: { x: gx + 56, y: 46 },
-    pieces: { x: gx + 112, y: 46 },
+    cells: { x: gx + 60, y: 46 },
+    pieces: { x: gx + 120, y: 46 },
     minimap,
     pause: atLeast(pauseBtn, MIN_TAP, MIN_TAP),
     pauseBtn,
@@ -680,7 +680,10 @@ export class Hud {
     }
     // below the counters row (gold / cells / pieces), and below the mid-boss name card while it is up
     let y = 70 + (this.miniCardActive ? 42 : 0);
+    const bannerY = Math.round(H * 0.27);
     for (const t of this.toasts) {
+      // never on top of the level banner
+      if (this.banner && y > bannerY - 26 && y < bannerY + 24) y = bannerY + 24;
       const a = clamp(t.t / 0.4, 0, 1) * clamp((t.life - t.t) / 0.15, 0, 1);
       const rise = (1 - clamp(t.t / 0.4, 0, 1)) * -6;
       c.globalAlpha = a;

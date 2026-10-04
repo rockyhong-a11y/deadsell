@@ -27,18 +27,26 @@ agent). If you need to deviate from it, update this file in the same change.
 
 ```
 Title ─tap─▶ Biome 1 "Sunken Prison" (가라앉은 감옥, procedural)
-             └─exit door─▶ Passage (통로: Alchemist + flask refill + cell spending)
+             └─exit door─▶ 쉼터 (rest stop = the passage level: Alchemist + flask refill + cell spending,
+                           │        Selma: sew pieces into the body / 시체 상점 / golem pile)
                            └─▶ Biome 2 "Moonlit Ramparts" (달빛 성벽, procedural)
-                               └─exit door─▶ Passage
+                               └─exit door─▶ 쉼터
                                              └─▶ Boss arena "Bell of Chains" (사슬의 종탑)
                                                  └─ boss dies ─▶ Victory screen ─▶ Title
-Death anywhere ─▶ Death screen (stats, cells lost) ─▶ new run from Biome 1 (new seed)
+                                                    (carried pieces are sewn; body 100 ─▶ Loop-clear scene ─▶ Title)
+Death anywhere ─▶ Death screen (stats, cells and pieces lost) ─▶ new run from Biome 1 (new seed)
+Body made whole at Selma's (100/100) ─▶ Loop-clear scene ─▶ Title, the next 회차 (loop) starts harder
 ```
 
+Corpse pieces (시체 조각, docs/CONTENT3.md): every kill drops pieces (1 / elite 3 / mid-boss 8 / the Matron 12; ≈ 100 for a full loop of
+the stages). Selma, the corpse seamstress waiting in each 쉼터, sews the carried pieces into Cinder's body (permanent, `save.body` 0..99),
+sells unique relics (시체 상점) and stitches a rag golem (누더기 골렘) that fights beside Cinder for the run. A body of 100 pieces clears the
+loop; each loop above the first has stronger enemies (+30 % hp, +20 % damage, more elites, pricier golem / shop, ceiling at loop 5).
+
 Run state that persists across the levels of one run: HP, max HP, flask charges,
-equipment (2 weapons + 2 skills), stat levels, gold, carried cells, kills, time.
+equipment (2 weapons + 2 skills), stat levels, gold, carried cells, carried corpse pieces, the golem, kills, time.
 Meta state that persists across runs (localStorage): unlocked items, upgrades
-bought from the Alchemist, best time, runs won.
+bought from the Alchemist, best time, runs won, the loop (회차) and the pieces sewn into the body.
 
 ---------------------------------------------------------------------------
 ## 3. Characters (all female)
@@ -55,6 +63,8 @@ bought from the Alchemist, best time, runs won.
 | `matron` | 강철 여교도관 (The Iron Matron) | Boss | Giant (≈2.4× player height) armored jailer-queen: spiked iron crown/helm, long braid, massive pauldrons, chain wrapped around the body, a huge iron bell-flail (a bell on a chain) as weapon, glowing ember eyes, tattered dark cape. |
 | `alchemist` | 연금술사 모르웬 (Morwen) | Meta NPC (Collector role) | Tall hooded alchemist woman with a bird-beak plague mask pushed up on her head, many glowing blue vials on her coat, a huge backpack with a tank of cells. |
 | `merchant` | 상인 펠 (Pell) | Shop NPC | Cheerful merchant woman with a big backpack of goods, wide hat, scarf, lantern. |
+| `seamstress` | 재봉사 셀마 (Selma) | 쉼터 NPC (docs/CONTENT3.md) | Tall gaunt corpse seamstress: bone-white skin with stitch lines, black hair in a bun pierced with needles, monocle, patchwork dress, measuring-tape scarf, thread spools, huge shears on her back. Sews the body, runs the 시체 상점. |
+| `golem` | 누더기 골렘 (Rag Golem) | Player's ally | Big (≈ 1.6× the heroine) female rag-doll giant of burlap and corpse-pale patches, dark-red yarn braids, two cyan button eyes (Cinder's ember), stitched smile, bandaged fists. Built at the golem pile in the 쉼터. |
 
 Elite enemies are the normal sprite at 1.0× scale with a stat boost and a coloured aura (code side; see docs/CONTENT2.md — elites are not mid-bosses).
 
@@ -153,6 +163,7 @@ E  ground enemy     F  flying enemy         T  treasure chest   S  scroll altar
 I  item pedestal    M  merchant             A  alchemist        P  player start
 X  exit door        B  boss                 L  torch/light      D  random decoration
 $  shop item slot   H  health fountain
+Z  seamstress (Selma, 쉼터)   C  corpse-shop pedestal (3 per 쉼터)   G  golem pile
 ```
 
 ---------------------------------------------------------------------------

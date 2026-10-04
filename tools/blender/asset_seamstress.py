@@ -108,9 +108,9 @@ for s, y in (("n", -0.085), ("f", 0.085)):
 
 # face: pale narrow head with sunken sockets, hollow cheeks, a stitched cheek line
 npc.face(body_mats)
-E("head", "sock_n", (0.05, 0.08, 0.092), M["socket"], (0.103, -0.072, 1.595))
-E("head", "sock_f", (0.05, 0.08, 0.092), M["socket"], (0.103, 0.072, 1.595))
-E("head", "cheek_n", (0.07, 0.035, 0.08), M["skin_sh"], (0.082, -0.104, 1.535))
+E("head", "sock_n", (0.055, 0.1, 0.115), M["socket"], (0.104, -0.074, 1.592))
+E("head", "sock_f", (0.055, 0.1, 0.115), M["socket"], (0.104, 0.074, 1.592))
+E("head", "cheek_n", (0.08, 0.04, 0.09), M["skin_sh"], (0.08, -0.103, 1.53))
 E("head", "cheek_f", (0.07, 0.035, 0.08), M["skin_sh"], (0.082, 0.104, 1.535))
 T("head", "cheek_stitch", [(0.118, -0.058, 1.532), (0.075, -0.094, 1.537), (0.03, -0.105, 1.545)],
   [0.0075] * 3, M["stitch"], sides=5)
@@ -126,9 +126,9 @@ T("head", "monocle_chain", [(0.13, -0.078, 1.538), (0.122, -0.104, 1.48), (0.1, 
 
 # ---------------------------------------------------------------------------
 # hair: cap + back + bangs + a long near lock, messy bun pierced with big needles
-E("head", "hair_cap", (0.27, 0.245, 0.22), M["hair"], (-0.03, 0, 1.685))
+E("head", "hair_cap", (0.27, 0.245, 0.22), M["hair"], (-0.05, 0, 1.69))
 E("head", "hair_back", (0.23, 0.23, 0.31), M["hair_d"], (-0.1, 0, 1.565))
-E("head", "bangs", (0.11, 0.21, 0.065), M["hair"], (0.085, 0, 1.7), (0, 28, 0))
+E("head", "bangs", (0.1, 0.2, 0.055), M["hair"], (0.075, 0, 1.715), (0, 28, 0))
 E("head", "lock_f", (0.055, 0.045, 0.19), M["hair_d"], (0.045, 0.103, 1.53), (0, -6, 0))
 J("lockn1", "head", (-0.09, -0.115, 1.58))
 J("lockn2", "lockn1", (-0.10, -0.125, 1.40))
@@ -379,7 +379,7 @@ def base_pose(t, mode, ik_n, ik_f, blink=0.0, w=1):
     sway(a, t, 1.0 if mode != "talk" else 1.5, w)
     hip = (0.0, -0.02 + 0.006 * br)
     a.update(npc.legs(hip_dx=hip[0], hip_dz=hip[1], xn=0.065, xf=-0.11))
-    sc = {"head": (1.14, 1.14, 1.14)}
+    sc = {"head": (1.2, 1.2, 1.2)}
     tw = {"head": tw_head, "neck": -4}
     return npc.frame(a, hip=hip, sc=sc, tw=tw, blink=blink, lift=1.0 / 32)
 

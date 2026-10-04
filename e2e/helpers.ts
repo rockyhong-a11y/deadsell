@@ -26,6 +26,13 @@ export class Fingers {
     await new Promise((r) => setTimeout(r, holdMs));
     await this.upAll();
   }
+  /** Drag one finger in small steps (like a real thumb); the finger stays down, call upAll() to lift it. */
+  async drag(id: number, from: [number, number], to: [number, number], steps = 5, stepMs = 12) {
+    for (let i = 1; i <= steps; i++) {
+      await this.move(id, from[0] + ((to[0] - from[0]) * i) / steps, from[1] + ((to[1] - from[1]) * i) / steps);
+      await new Promise((r) => setTimeout(r, stepMs));
+    }
+  }
 }
 
 export interface Ctx {

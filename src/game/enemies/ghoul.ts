@@ -5,9 +5,9 @@ import type { Player } from '../player/player';
 import { Enemy, type EnemyOpts } from './base';
 import { PoisonCloud } from './hazards';
 import { warnRect } from './telegraph';
-import type { EnemyDef } from './variants';
+import { ATTACK_DMG, BASE_STATS, type EnemyDef } from './variants';
 
-const SPEC = { hp: 40, w: 18, h: 42, patrol: 30, chase: 68, aura: '#ff9b2e', blood: '#5f8f4a' };
+const SPEC = { hp: BASE_STATS.ghoul.hp, w: 18, h: 42, patrol: 30, chase: 68, aura: BASE_STATS.ghoul.aura, blood: '#5f8f4a' };
 
 /**
  * 구울: shambles, speeds up while chasing, claw swipe with a short lunge.
@@ -118,7 +118,7 @@ export class Ghoul extends Enemy {
   protected onActive(): void {
     const f = this.facing;
     const r = this.reach;
-    const info: DamageInfo = { amount: this.dmg(9), dir: f, kind: 'melee', source: this, knockback: this.pr('knock', 190), hitstun: 0.25 };
+    const info: DamageInfo = { amount: this.dmg(ATTACK_DMG.ghoul), dir: f, kind: 'melee', source: this, knockback: this.pr('knock', 190), hitstun: 0.25 };
     hitArea(this.world, { x: f > 0 ? this.x - 4 : this.x - 42 * r, y: this.y - this.h, w: 46 * r, h: this.h }, 'enemy', info, this.hitSet);
   }
 

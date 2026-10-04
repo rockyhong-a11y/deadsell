@@ -12,6 +12,7 @@ import { weaponDef, type BowWeapon, type MeleeHit, type MeleeWeapon, type Shield
 import { SKILLS, type SkillDef } from './skills';
 import { Arrow, type Feel } from './projectiles';
 import { calcDamage } from './damage';
+import { AFFIX, CRIT_MULT, FLASK } from '../rules';
 
 /**
  * The heroine (Cinder). OWNER: player agent.
@@ -42,8 +43,8 @@ const SLAM_SPEED = 620;
 const SLAM_BASE_DAMAGE = 26;
 const DROP_TIME = 0.25;
 const HURT_INVULN = 0.6;
-const HEAL_TIME = 0.7;
-const HEAL_PCT = 0.6;
+const HEAL_TIME = FLASK.healTime;
+const HEAL_PCT = FLASK.healPct;
 const LEDGE_TIME = 0.38;
 const RALLY_TIME = 3;
 const RALLY_RESTORE = 0.3;
@@ -205,8 +206,8 @@ export class Player extends Actor {
       source: this,
       color: ITEMS[item.id].color,
     };
-    if (item.affix === 'burn') { info.burn = 3; info.burnDps = 6; }
-    else if (item.affix === 'bleed') info.bleed = 3;
+    if (item.affix === 'burn') { info.burn = AFFIX.burnSecs; info.burnDps = AFFIX.burnDps; }
+    else if (item.affix === 'bleed') info.bleed = AFFIX.bleedSecs;
     for (const k of Object.keys(extra) as (keyof DamageInfo)[]) {
       if (extra[k] !== undefined) (info as unknown as Record<string, unknown>)[k] = extra[k];
     }
@@ -224,7 +225,7 @@ export class Player extends Actor {
     w.shake(feel.shake + (crit ? 1 : 0), 0.12);
     w.audio.play(crit ? 'crit' : feel.sfx ?? 'hit');
     if (res.killed && item?.affix === 'heal_on_kill' && !this.dying) {
-      this.heal(Math.max(1, Math.round(this.maxHp * 0.05)));
+      this.heal(Math.max(1, Math.round(this.maxHp * AFFIX.healPct)));
       w.particles.emit('heal', this.x, this.y - 24, { count: 6 });
     }
   }
@@ -686,7 +687,7 @@ export class Player extends Actor {
 
   private startSwing(slot: number, item: ItemInstance, def: MeleeWeapon, idx: number, btn: Btn): void {
     const hit = def.hits[idx];
-    const k = item.affix === 'speed' ? 0.85 : 1;
+    const k = item.affix === 'speed' ? AFFIX.speedMul : 1;
     this.mode = 'attack';
     this.combo[slot] = idx;
     this.atk = { slot, item, def, idx, hit, t: 0, dur: [hit.windup * k, hit.active * k, hit.recover * k], fired: false, set: new Set(), queued: false, btn };
@@ -767,7 +768,7 @@ export class Player extends Actor {
     const reports = hitArea(this.world, box, 'player', (t) => {
       const crit = h.crit === 'always' || (h.crit === 'behind' && isBehind(this, t));
       const info = this.damageInfo(a.item, h.damage, { dir: this.facing, knockback: h.knockback, knockup: h.knockup, stun: h.stun, crit, kind: 'melee' });
-      if (crit) info.amount *= 2;
+      if (crit) info.amount *= CRIT_MULT;
       if (a.def.bleed) info.bleed = Math.max(info.bleed ?? 0, a.def.bleed);
       infos.set(t, info);
       return info;
@@ -780,7 +781,7 @@ export class Player extends Actor {
 
   // ---------------------------------------------------------------- bow
   private startBow(slot: number, item: ItemInstance, def: BowWeapon, btn: Btn): void {
-    const drawTime = def.drawTime * (item.affix === 'speed' ? 0.85 : 1);
+    const drawTime = def.drawTime * (item.affix === 'speed' ? AFFIX.speedMul : 1);
     this.mode = 'bow';
     this.bow = { slot, item, def, btn, t: 0, phase: 'draw', full: false, drawTime };
     this.bowCharge = 0;

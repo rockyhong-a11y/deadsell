@@ -7,6 +7,7 @@ import type { Player } from '../player/player';
 import { dropLoot, spawnItemDrop } from '../items/pickups';
 import { rollItem } from '../items/items';
 import { warnBang } from '../enemies/telegraph';
+import { TIER2 } from '../rules';
 
 export type MiniBossId = 'mb_abbess' | 'mb_arachne' | 'mb_valkyrie' | 'mb_witch';
 
@@ -104,10 +105,10 @@ export abstract class MiniBoss extends Actor {
     super(x, y);
     this.spec = spec;
     this.tier = tier;
-    this.dmgMult = tier >= 2 ? 1.4 : 1;
+    this.dmgMult = tier >= 2 ? TIER2.dmg : 1;
     this.w = spec.w;
     this.h = spec.h;
-    this.maxHp = this.hp = Math.round(spec.hp * (tier >= 2 ? 1.6 : 1));
+    this.maxHp = this.hp = Math.round(spec.hp * (tier >= 2 ? TIER2.hp : 1));
     this.knockbackTaken = 0;
     this.alwaysActive = true;
     this.z = 10;

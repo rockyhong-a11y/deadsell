@@ -1,5 +1,6 @@
 import type { ItemColor } from './combat';
 import type { ItemInstance } from './items/types';
+import { SCROLL } from './rules';
 
 export type BiomeId = 'prison' | 'ramparts' | 'tower';
 
@@ -55,12 +56,13 @@ export class RunState {
 
   get maxHp(): number {
     const s = this.stats;
-    return Math.round(this.baseMaxHp * (1 + 0.1 * (s.brutality + s.tactics) + 0.2 * s.survival));
+    const h = SCROLL.hpPerLevel;
+    return Math.round(this.baseMaxHp * (1 + h.brutality * s.brutality + h.tactics * s.tactics + h.survival * s.survival));
   }
 
   /** Damage multiplier for an item of the given colour. */
   damageMult(color: ItemColor): number {
-    return 1 + 0.15 * this.stats[color];
+    return 1 + SCROLL.dmgPerLevel * this.stats[color];
   }
 
   /** Apply a scroll of power: +1 level, HP grows and is healed by the gained amount. */

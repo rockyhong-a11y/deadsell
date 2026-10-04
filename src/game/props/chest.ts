@@ -2,6 +2,7 @@ import type { Interactable } from '../world';
 import type { ItemInstance } from '../items/types';
 import { rollItem } from '../items/items';
 import { dropLoot, spawnFood, spawnItemDrop } from '../items/pickups';
+import { FOODS, LOOT } from '../rules';
 import { Prop } from './common';
 
 /** A treasure chest: gold (+ cells) always, an item or food sometimes (secret chests always roll an item). */
@@ -47,14 +48,15 @@ export class Chest extends Prop implements Interactable {
     const w = this.world;
     const tier = w.run.tier;
     const rng = w.rng;
-    const gold = Math.round((rng.int(45, 90) + 15 * (tier - 1)) * (this.rich ? 1.5 : 1));
-    dropLoot(w, this.x, this.y - 18, { gold, cells: rng.int(2, 5) });
+    const C = LOOT.chest;
+    const gold = Math.round((rng.int(C.gold[0], C.gold[1]) + C.goldPerTier * (tier - 1)) * (this.rich ? C.richMult : 1));
+    dropLoot(w, this.x, this.y - 18, { gold, cells: rng.int(C.cells[0], C.cells[1]) });
     const r = rng.next();
-    if (this.rich || r < 0.45) {
+    if (this.rich || r < C.itemChance) {
       const inst: ItemInstance = rollItem(rng, tier, w.game.save.unlocked);
       spawnItemDrop(w, this.x, this.y - 22, inst);
-    } else if (r < 0.8) {
-      spawnFood(w, this.x, this.y - 18, 0.35);
+    } else if (r < C.itemChance + C.foodChance) {
+      spawnFood(w, this.x, this.y - 18, FOODS[1].healPct);
     }
     w.particles.emit('spark', this.x, this.y - 22, { count: 10 });
   }

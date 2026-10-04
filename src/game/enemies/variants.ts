@@ -19,6 +19,25 @@ export type EnemyKind = BaseKind | VariantId;
 
 export const BASE_KINDS: readonly BaseKind[] = ['ghoul', 'jailer', 'archer', 'bomber', 'harpy', 'lancer'];
 
+/** Hit points and elite-aura colour of each base type (hp before the tier / elite / variant multipliers). */
+export const BASE_STATS: Record<BaseKind, { hp: number; aura: string }> = {
+  ghoul: { hp: 40, aura: '#ff9b2e' },
+  jailer: { hp: 90, aura: '#ff5a5a' },
+  archer: { hp: 30, aura: '#7dff6a' },
+  bomber: { hp: 35, aura: '#ffd23f' },
+  harpy: { hp: 30, aura: '#c77dff' },
+  lancer: { hp: 70, aura: '#5ec8ff' },
+};
+
+/** Damage of the main attacks (before the tier / elite / variant multipliers); the enemy AIs read these. */
+export const ATTACK_DMG = {
+  ghoul: 9, jailer: 12, archer: 10, bomber: 14,
+  /** harpy dive / storm harpy feather */
+  harpy: 10, feather: 9,
+  /** lancer charge (and the dragoon's landing) / the short pokes of the halberd and the duelist */
+  charge: 14, poke: 11,
+} as const;
+
 /** Where / from which level progress (`depth` 0..1) an enemy may spawn, and how often. */
 export interface Placement {
   w: number;
@@ -35,6 +54,8 @@ export interface EnemyDef {
   sheet: string;
   /** false for the six bases */
   variant: boolean;
+  /** damage of its main attack before the multipliers (ATTACK_DMG) */
+  hit: number;
   /** hp / damage / speed multipliers on top of the base spec */
   hp: number;
   dmg: number;
@@ -49,17 +70,19 @@ export interface EnemyDef {
   spawn: Partial<Record<BiomeId, Placement>>;
 }
 
-const LATE = 0.4;
+/** From this level progress (`depth` 0..1) the "late" variants appear. */
+export const LATE_DEPTH = 0.4;
+const LATE = LATE_DEPTH;
 
 function def(
   id: EnemyKind,
   base: BaseKind,
   name: string,
-  o: { hp?: number; dmg?: number; speed?: number; ability?: string; p?: Record<string, number>; hue?: number; spawn: Partial<Record<BiomeId, Placement>> },
+  o: { hit?: number; hp?: number; dmg?: number; speed?: number; ability?: string; p?: Record<string, number>; hue?: number; spawn: Partial<Record<BiomeId, Placement>> },
 ): EnemyDef {
   return {
     id, base, name, sheet: id, variant: id !== base,
-    hp: o.hp ?? 1, dmg: o.dmg ?? 1, speed: o.speed ?? 1,
+    hit: o.hit ?? DEFAULT_HIT[base], hp: o.hp ?? 1, dmg: o.dmg ?? 1, speed: o.speed ?? 1,
     ability: o.ability ?? '', p: o.p ?? {}, hue: o.hue ?? 0,
     flyer: base === 'harpy',
     spawn: o.spawn,
@@ -67,6 +90,10 @@ function def(
 }
 
 const P = (w: number, min = 0): Placement => ({ w, min });
+const DEFAULT_HIT: Record<BaseKind, number> = {
+  ghoul: ATTACK_DMG.ghoul, jailer: ATTACK_DMG.jailer, archer: ATTACK_DMG.archer, bomber: ATTACK_DMG.bomber,
+  harpy: ATTACK_DMG.harpy, lancer: ATTACK_DMG.charge,
+};
 
 const DEFS: EnemyDef[] = [
   // ---- ghoul family (prison)
@@ -164,7 +191,7 @@ const DEFS: EnemyDef[] = [
   // ---- harpy family (flyers)
   def('harpy', 'harpy', '하피', { spawn: { prison: P(1), ramparts: P(2) } }),
   def('harpy_storm', 'harpy', '폭풍 하피', {
-    hp: 0.9, dmg: 0.8, speed: 0.95, ability: 'storm', hue: 205,
+    hit: ATTACK_DMG.feather, hp: 0.9, dmg: 0.8, speed: 0.95, ability: 'storm', hue: 205,
     p: { feathers: 3, spread: 14, windup: 0.65, range: 300, featherSpeed: 250 },
     spawn: { ramparts: P(2, 0.05) },
   }),
@@ -187,7 +214,7 @@ const DEFS: EnemyDef[] = [
   // ---- lancer family (ramparts)
   def('lancer', 'lancer', '창기병', { spawn: { ramparts: P(3) } }),
   def('lancer_halberd', 'lancer', '미늘창 기사', {
-    hp: 1.25, dmg: 0.9, speed: 0.85, ability: 'halberd', hue: 220,
+    hit: ATTACK_DMG.poke, hp: 1.25, dmg: 0.9, speed: 0.85, ability: 'halberd', hue: 220,
     p: { reach: 70, hits: 2 },
     spawn: { ramparts: P(2) },
   }),
@@ -196,7 +223,7 @@ const DEFS: EnemyDef[] = [
     spawn: { ramparts: P(2, 0.1) },
   }),
   def('lancer_duelist', 'lancer', '결투가', {
-    hp: 0.85, dmg: 0.75, speed: 1.2, ability: 'duelist', hue: 305,
+    hit: ATTACK_DMG.poke, hp: 0.85, dmg: 0.75, speed: 1.2, ability: 'duelist', hue: 305,
     p: { thrusts: 3 },
     spawn: { ramparts: P(2, 0.1) },
   }),

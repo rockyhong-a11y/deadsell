@@ -50,7 +50,9 @@ src/game/enemies/variants.ts    30 enemy types: 6 bases + 24 variants (table, sp
 src/game/miniboss/*             4 mid-bosses (abbess, arachne, valkyrie, witch), hazards  [enemies]
 src/game/level/*                templates, generator, populate, LevelRenderer         [level]
 src/game/props/*                interactables & decor (doors, chests, altars, NPCs, shop, fountain, torches, gates) [level]
-src/game/ui/*                   touch gestures, virtual buttons (vbuttons.ts), HUD, overlays, minimap, menus, settings screen (settings.ts) [ui]
+src/game/ui/*                   touch gestures, virtual buttons (vbuttons.ts), HUD, overlays, minimap, menus, settings screen (settings.ts),
+                                codex screen (codex.ts) + its entry list (codexData.ts)  [ui]
+src/game/rules.ts               shared tuning numbers (crit, affixes, scroll/flask/food, tier/elite scaling, loot) read by gameplay AND the codex [core]
 src/game/scenes/{title,death,victory}Scene.ts                                         [ui]
 src/game/meta/*                 save, Alchemist upgrades                              [ui]
 src/game/fx/*                   particles, fx (numbers, slashes, rings, flash), lighting [fx]
@@ -98,6 +100,18 @@ note the dependency in your report; do not edit the other module.
   A = confirm, B = cancel, Start = pause, Back = map) go to `scene.nav()`. Menus always use the physical A/B. While the
   remap UI waits (`pad.capture`), the next button press is delivered to it and nothing else.
 * Scenes may implement `nav(k)` and `captures()`; `LevelUI.nav` feeds the top modal exactly like the keyboard.
+  `NavKey` also has `tabL` / `tabR` (the physical LB / RB, whatever the gameplay map says): tabbed screens switch tabs with them
+  (`Modal.tab(dir)`, Q / E on the keyboard).
+
+## Codex (도감)
+`ui/codex.ts` (`CodexScreen`, one class like the settings screen: the title scene shows it as a modal over the title, the pause menu
+wraps it in `CodexModal`, so the run stays paused) draws tabs / entry list / detail panel from `ui/codexData.ts`, which builds one
+`CodexEntry` per weapon, skill, enemy, boss, pickup, alchemist upgrade and affix **from the game's own tables** (nothing typed twice:
+values that were private are exported, shared ones live in `rules.ts`; `enemyNumbers` uses the same `enemyHpMul` / `enemyDmgMul` as `Enemy`).
+Only the Korean flavour text and the animation lists (an art contract) are written there; `tests/codex.test.ts` checks both against
+the real `public/assets/sprites/*.json` and against real enemy / boss instances. Previews are a timeline of `PreviewStep`s on one sheet
+(+ an optional prop sprite: grenade arc, turret, trap, arrow), framed from the opaque pixel bounds of their frames and drawn at a whole
+number of device pixels per sprite pixel (`fitScale`); `codexLayout(W, H)` is the pure geometry (tests check it at W = 480..800).
 
 ## Testing & verification
 * Unit tests per area in `tests/<area>.test.ts` (vitest, node env: no DOM at import time).
@@ -115,5 +129,7 @@ note the dependency in your report; do not edit the other module.
   * `e2e/bot.ts` - `botWalk`, an in-page navigation bot: plans with `level/nav.ts` (the generator's own movement graph) and
     drives the real player through `Input` + real physics, stepping with `__ds.step`. Use it to prove an exit is reachable.
   * `e2e/helpers.ts` - boot, touch fingers, `tapRegion(id)` (taps a registered `game.taps` rectangle), event capture.
+  * `e2e/codex.spec.ts` - the codex from the title (touch, keyboard, mocked pad) and from the pause menu; one screenshot per tab
+    (`e2e-shots/codex_*.png`).
   * `e2e/settings.spec.ts` - settings by touch, virtual buttons with real multi-touch, a mocked `navigator.getGamepads`
     (stick, buttons, remap, menus), every filter / resolution / fit applied live (screenshots `e2e-shots/settings_*.png`).

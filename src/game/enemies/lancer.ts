@@ -5,9 +5,9 @@ import type { Player } from '../player/player';
 import { Enemy, type EnemyOpts } from './base';
 import { shockAoE } from './hazards';
 import { warnCircle, warnPath, warnRect } from './telegraph';
-import type { EnemyDef } from './variants';
+import { ATTACK_DMG, BASE_STATS, type EnemyDef } from './variants';
 
-const SPEC = { hp: 70, w: 20, h: 48, patrol: 28, chase: 66, aura: '#5ec8ff', blood: '#8a5a8a' };
+const SPEC = { hp: BASE_STATS.lancer.hp, w: 20, h: 48, patrol: 28, chase: 66, aura: BASE_STATS.lancer.aura, blood: '#8a5a8a' };
 const CHARGE_SPEED = 330;
 const CHARGE_MAX = 1.2;
 
@@ -177,7 +177,7 @@ export class Lancer extends Enemy {
         this.world,
         { x: f > 0 ? this.x - 8 : this.x - reach, y: this.y - this.h - 6, w: reach + 8, h: this.h + 6 },
         'enemy',
-        { amount: this.dmg(11), dir: f, kind: 'melee', source: this, knockback: 250, hitstun: 0.3 },
+        { amount: this.dmg(ATTACK_DMG.poke), dir: f, kind: 'melee', source: this, knockback: 250, hitstun: 0.3 },
         this.hitSet,
       );
       return;
@@ -188,7 +188,7 @@ export class Lancer extends Enemy {
         this.world,
         { x: f > 0 ? this.x : this.x - 68 * this.scale, y: this.y - this.h * 0.8, w: 68 * this.scale, h: this.h * 0.5 },
         'enemy',
-        { amount: this.dmg(11), dir: f, kind: 'melee', source: this, knockback: 150, hitstun: 0.2 },
+        { amount: this.dmg(ATTACK_DMG.poke), dir: f, kind: 'melee', source: this, knockback: 150, hitstun: 0.2 },
         this.hitSet,
       );
       return;
@@ -197,7 +197,7 @@ export class Lancer extends Enemy {
       // airborne until she lands; the landing is the attack
       if (this.onGround && this.stateT > 0.12) {
         this.vx = 0;
-        shockAoE(this.world, this.x, this.y, this.pr('aoeR', 52), this.dmg(14), this, { knockback: 240, knockup: 200 });
+        shockAoE(this.world, this.x, this.y, this.pr('aoeR', 52), this.dmg(ATTACK_DMG.charge), this, { knockback: 240, knockup: 200 });
         this.endActive();
       }
       return;
@@ -208,7 +208,7 @@ export class Lancer extends Enemy {
         this.world,
         { x: f > 0 ? this.x : this.x - 70 * this.scale, y: this.y - this.h * 0.8, w: 70 * this.scale, h: this.h * 0.5 },
         'enemy',
-        { amount: this.dmg(11), dir: f, kind: 'melee', source: this, knockback: 220, hitstun: 0.25 },
+        { amount: this.dmg(ATTACK_DMG.poke), dir: f, kind: 'melee', source: this, knockback: 220, hitstun: 0.25 },
         this.hitSet,
       );
       return;
@@ -224,7 +224,7 @@ export class Lancer extends Enemy {
       this.world,
       { x: f > 0 ? this.x - 8 : this.x - 40, y: this.y - this.h, w: 48, h: this.h },
       'enemy',
-      { amount: this.dmg(14), dir: f, kind: 'melee', source: this, knockback: 320, hitstun: 0.3 },
+      { amount: this.dmg(ATTACK_DMG.charge), dir: f, kind: 'melee', source: this, knockback: 320, hitstun: 0.3 },
       this.hitSet,
     );
     const ledge = this.world.map.floorBelow(this.x + f * (this.w / 2 + 8), this.y + 1, 10) === null;

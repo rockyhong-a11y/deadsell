@@ -7,6 +7,7 @@ import { dropLoot, spawnItemDrop } from '../items/pickups';
 import { rollItem } from '../items/items';
 import { warnBang } from './telegraph';
 import type { BaseKind, EnemyDef, EnemyKind } from './variants';
+import { ELITE, LOOT, enemyDmgMul, enemyHpMul } from '../rules';
 
 export type { BaseKind, EnemyKind } from './variants';
 
@@ -114,11 +115,10 @@ export abstract class Enemy extends Actor {
     this.scale = this.elite ? ELITE_SCALE : 1;
     this.w = Math.round(spec.w * this.scale);
     this.h = Math.round(spec.h * this.scale);
-    const hpMul = (this.tier >= 2 ? 1.6 : 1) * (this.elite ? 3 : 1) * (variant?.hp ?? 1);
-    this.maxHp = this.hp = Math.round(spec.hp * hpMul);
-    this.dmgMult = (this.tier >= 2 ? 1.4 : 1) * (this.elite ? 1.25 : 1) * (variant?.dmg ?? 1);
-    this.speedMult = (this.elite ? 1.15 : 1) * (variant?.speed ?? 1);
-    this.knockbackTaken = this.elite ? 0.5 : 1;
+    this.maxHp = this.hp = Math.round(spec.hp * enemyHpMul(variant?.hp ?? 1, this.tier, this.elite));
+    this.dmgMult = enemyDmgMul(variant?.dmg ?? 1, this.tier, this.elite);
+    this.speedMult = (this.elite ? ELITE.speed : 1) * (variant?.speed ?? 1);
+    this.knockbackTaken = this.elite ? ELITE.knockbackTaken : 1;
     if (spec.blood) this.bloodColor = spec.blood;
     this.homeX = x;
     this.patrolDir = x % 2 < 1 ? 1 : -1;
@@ -552,9 +552,10 @@ export abstract class Enemy extends Actor {
   protected dropRewards(): void {
     if (this.noLoot) return;
     const w = this.world;
-    const mult = this.elite ? 4 : 1;
-    dropLoot(w, this.x, this.y - this.h / 2, { cells: w.rng.int(1, 2) * mult, gold: w.rng.int(2, 6) * mult });
-    if (this.elite && w.rng.chance(0.5)) {
+    const L = LOOT.enemy;
+    const mult = this.elite ? L.eliteMult : 1;
+    dropLoot(w, this.x, this.y - this.h / 2, { cells: w.rng.int(L.cells[0], L.cells[1]) * mult, gold: w.rng.int(L.gold[0], L.gold[1]) * mult });
+    if (this.elite && w.rng.chance(L.eliteItemChance)) {
       spawnItemDrop(w, this.x, this.y - 10, rollItem(w.rng, w.run.tier, w.game.save.unlocked));
     }
   }

@@ -216,6 +216,27 @@ export function dim(c: CanvasRenderingContext2D, W: number, H: number, alpha: nu
   c.globalAlpha = prev;
 }
 
+/** A small open-book (도감) icon drawn with paths, so it never depends on a font glyph. `r` = half the width. */
+export function book(c: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string = COL.text): void {
+  const h = r * 0.82;
+  c.save();
+  c.fillStyle = color;
+  for (const s of [-1, 1]) {
+    // one page: a quad that lifts toward the outer edge, with a 2 px gutter at the spine
+    c.beginPath();
+    c.moveTo(cx + s * 1.2, cy - h * 0.7);
+    c.lineTo(cx + s * r, cy - h);
+    c.lineTo(cx + s * r, cy + h * 0.55);
+    c.lineTo(cx + s * 1.2, cy + h);
+    c.closePath();
+    c.fill();
+  }
+  // text lines on the pages (dark ticks)
+  c.fillStyle = 'rgba(7,6,11,0.6)';
+  for (const s of [-1, 1]) for (const k of [-0.3, 0.15]) c.fillRect(s > 0 ? cx + 4 : cx - r + 2, cy + h * k, r - 6, 1.5);
+  c.restore();
+}
+
 /** A small gear (설정) icon drawn with paths, so it never depends on a font glyph. */
 export function gear(c: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string = COL.text): void {
   const teeth = 8;

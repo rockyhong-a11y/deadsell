@@ -2,7 +2,7 @@ import type { Game } from '../game';
 import type { World } from '../world';
 import type { Actor } from '../entity';
 import { Hud } from './hud';
-import { Modal, ChoiceModal, AlchemistModal, MapModal, PauseModal, SettingsModal, TutorialModal, type ModalKey } from './modals';
+import { Modal, ChoiceModal, AlchemistModal, CodexModal, MapModal, PauseModal, SettingsModal, TutorialModal, type ModalKey } from './modals';
 import type { NavKey } from '../../engine/gamepad';
 
 export interface ChoiceOption {
@@ -144,6 +144,12 @@ export class LevelUI {
     this.push(new SettingsModal(this));
   }
 
+  openCodex(): void {
+    if (this.top instanceof CodexModal) return;
+    this.game.audio.play('ui_open');
+    this.push(new CodexModal(this));
+  }
+
   /** Pause menu "give up": end the run now (death screen). The pause card stays up while the screen fades. */
   giveUp(): void {
     if (this.gaveUp) return;
@@ -165,7 +171,8 @@ export class LevelUI {
     } else if (k === 'map') {
       if (this.top instanceof MapModal) this.top.key('cancel');
       else if (!this.top && !this.world.player.dying) this.openMap();
-    } else if (this.top) this.top.key(k);
+    } else if (k === 'tabL' || k === 'tabR') this.top?.tab(k === 'tabL' ? -1 : 1);
+    else if (this.top) this.top.key(k);
   }
 
   private onKeyDown(e: KeyboardEvent): void {
@@ -173,7 +180,8 @@ export class LevelUI {
       if (this.started) this.dispose();
       return;
     }
-    if (e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.repeat && !this.top?.repeatKey(e.code)) return;
     if (e.code === 'Escape') {
       if (this.top) this.top.key('cancel');
       else if (!this.world.player.dying) this.openPause();
@@ -183,6 +191,8 @@ export class LevelUI {
     } else if (this.top) {
       const k = KEYS[e.code];
       if (k) this.top.key(k);
+      else if (e.code === 'KeyQ') this.top.tab(-1);
+      else if (e.code === 'KeyE') this.top.tab(1);
     }
   }
 

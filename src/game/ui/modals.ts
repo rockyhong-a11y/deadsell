@@ -6,6 +6,8 @@ import { COL, SZ, button, dim, formatTime, icon, panel, pulse, text, textWidth, 
 import { LEVEL_SEQUENCE } from '../run';
 import { drawGestureGlyph, type Glyph } from './glyphs';
 import { SettingsScreen, MODE_LABEL, drawButtonsPreview, drawPadList, type SettingsTab } from './settings';
+import { CodexScreen } from './codex';
+import type { CodexTabId } from './codexData';
 
 export type ModalKey = 'left' | 'right' | 'up' | 'down' | 'confirm' | 'cancel';
 
@@ -29,6 +31,14 @@ export abstract class Modal {
   /** back / Esc */
   cancel(): void {
     this.ui.closeTop();
+  }
+
+  /** tabbed screens: Q / E, LB / RB (dir -1 / +1) */
+  tab(_dir: number): void {}
+
+  /** does a held key (auto-repeat) keep acting? (list screens: arrows) */
+  repeatKey(_code: string): boolean {
+    return false;
   }
 
   protected get ready(): boolean {
@@ -376,6 +386,7 @@ export class PauseModal extends Modal {
         },
       },
       { label: '설정', sub: '조작 · 그래픽 · 사운드', act: () => ui.openSettings() },
+      { label: '도감', sub: '무기 · 스킬 · 적 · 보스 · 아이템', act: () => ui.openCodex() },
       {
         label: this.confirmGiveUp > 0 ? '정말 포기할까요? 한 번 더 터치' : '포기하기',
         color: COL.red,
@@ -541,6 +552,43 @@ export class SettingsModal extends Modal {
 
   key(k: ModalKey): void {
     this.screen.key(k);
+  }
+
+  cancel(): void {
+    this.screen.key('cancel');
+  }
+
+  draw(c: CanvasRenderingContext2D, W: number, H: number): void {
+    this.screen.draw(c, W, H);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Codex (도감): wraps CodexScreen, which the title screen also uses. The run stays paused underneath.
+
+export class CodexModal extends Modal {
+  readonly screen: CodexScreen;
+
+  constructor(ui: LevelUI, tab: CodexTabId = 'weapon') {
+    super(ui);
+    this.screen = new CodexScreen(ui.game, () => ui.closeTop(this), tab);
+  }
+
+  update(dt: number): void {
+    super.update(dt);
+    this.screen.update(dt);
+  }
+
+  key(k: ModalKey): void {
+    this.screen.key(k);
+  }
+
+  tab(dir: number): void {
+    this.screen.cycleTab(dir);
+  }
+
+  repeatKey(code: string): boolean {
+    return code === 'ArrowUp' || code === 'ArrowDown' || code === 'KeyW' || code === 'KeyS';
   }
 
   cancel(): void {

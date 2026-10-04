@@ -8,6 +8,7 @@ import { approach, overlaps } from '../../engine/math';
 import { moveBody } from '../physics';
 import type { ItemInstance } from './types';
 import { ITEMS, COLOR_NAMES, itemLines, itemName, AFFIX_NAMES } from './items';
+import { FOODS, SCROLL } from '../rules';
 
 /**
  * Pickups: cells, gold, food, scrolls, dropped items. OWNER: player agent.
@@ -197,8 +198,9 @@ class Food extends Drop {
 }
 
 /** Drop a food pickup (heals). */
-export function spawnFood(world: World, x: number, y: number, healPct = 0.35): void {
-  const sprite = healPct <= 0.25 ? 'food_apple' : healPct <= 0.4 ? 'food_bread' : 'food_meat';
+export function spawnFood(world: World, x: number, y: number, healPct: number = FOODS[1].healPct): void {
+  // the closest of the three foods (apple / bread / meat) by heal share
+  const sprite = (healPct <= (FOODS[0].healPct + FOODS[1].healPct) / 2 ? FOODS[0] : healPct <= (FOODS[1].healPct + FOODS[2].healPct) / 2 ? FOODS[1] : FOODS[2]).sprite;
   const f = new Food(x, y - 10, healPct, sprite);
   f.vx = world.rng.range(-60, 60);
   f.vy = -200;
@@ -315,8 +317,8 @@ export function spawnItemDrop(world: World, x: number, y: number, inst: ItemInst
 }
 
 // ---------------------------------------------------------------------------
-const SCROLL_COLORS: ItemColor[] = ['brutality', 'tactics', 'survival'];
-const SCROLL_SPRITE: Record<ItemColor, string> = { brutality: 'scroll_red', tactics: 'scroll_purple', survival: 'scroll_green' };
+export const SCROLL_COLORS: ItemColor[] = ['brutality', 'tactics', 'survival'];
+export const SCROLL_SPRITE: Record<ItemColor, string> = { brutality: 'scroll_red', tactics: 'scroll_purple', survival: 'scroll_green' };
 
 /** A scroll of power: interact to choose Brutality / Tactics / Survival. */
 class Scroll extends Drop implements Interactable {
@@ -353,7 +355,7 @@ class Scroll extends Drop implements Interactable {
     const run = w.run;
     const options: ChoiceOption[] = SCROLL_COLORS.map((c) => ({
       label: COLOR_NAMES[c],
-      sub: `Lv ${run.stats[c]} → ${run.stats[c] + 1} · ${COLOR_NAMES[c]} 장비 피해 +15% · 최대 체력 +${c === 'survival' ? 20 : 10}%`,
+      sub: `Lv ${run.stats[c]} → ${run.stats[c] + 1} · ${COLOR_NAMES[c]} 장비 피해 +${Math.round(SCROLL.dmgPerLevel * 100)}% · 최대 체력 +${Math.round(SCROLL.hpPerLevel[c] * 100)}%`,
       color: COLOR_HEX[c],
       icon: 'scroll',
     }));

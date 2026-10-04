@@ -501,9 +501,9 @@ test.describe('full run', () => {
     await tapRegion(c, 'hud-pause');
     await expect.poll(() => modalOpen(page), { timeout: 3_000 }).toBe(true);
     await page.waitForTimeout(500);
-    await tapRegion(c, 'pause4');
+    await tapRegion(c, 'pause5'); // 포기하기 (after 설정 and 도감)
     await page.waitForTimeout(300);
-    await tapRegion(c, 'pause4');
+    await tapRegion(c, 'pause5');
     await waitScene(page, 'DeathScene', 10_000);
     expect(c.errors).toEqual([]);
   });

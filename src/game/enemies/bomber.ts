@@ -4,9 +4,9 @@ import type { Player } from '../player/player';
 import { Enemy, type EnemyOpts } from './base';
 import { Bomb, BOMB_RADIUS, explode, lobVelocity, type BombOpts } from './projectiles';
 import { warnCircle } from './telegraph';
-import type { EnemyDef } from './variants';
+import { ATTACK_DMG, BASE_STATS, type EnemyDef } from './variants';
 
-const SPEC = { hp: 35, w: 16, h: 40, patrol: 26, chase: 58, aura: '#ffd23f', blood: '#a05a2a' };
+const SPEC = { hp: BASE_STATS.bomber.hp, w: 16, h: 40, patrol: 26, chase: 58, aura: BASE_STATS.bomber.aura, blood: '#a05a2a' };
 const MIN_DIST = 110;
 const MAX_DIST = 250;
 
@@ -78,7 +78,7 @@ export class Bomber extends Enemy {
   private selfDestruct(): void {
     this.noLoot = true;
     this.hp = 0;
-    explode(this.world, this.x, this.y - 12, this.pr('radius', 50), this.dmg(14), this, { knockback: 300, knockup: 200, shake: 7 });
+    explode(this.world, this.x, this.y - 12, this.pr('radius', 50), this.dmg(ATTACK_DMG.bomber), this, { knockback: 300, knockup: 200, shake: 7 });
     this.die({ amount: 0, dir: 0, kind: 'explosion' });
   }
 
@@ -101,7 +101,7 @@ export class Bomber extends Enemy {
     const ground = w.map.floorBelow(tx, p.y - 30, 420) ?? p.y;
     const T = clamp(Math.abs(tx - x0) / 250, 0.5, 0.95);
     const v = lobVelocity(x0, y0, tx, ground - 5, T);
-    const o: BombOpts = { damage: this.dmg(14), radius: BOMB_RADIUS, source: this, targetX: tx, targetY: ground };
+    const o: BombOpts = { damage: this.dmg(ATTACK_DMG.bomber), radius: BOMB_RADIUS, source: this, targetX: tx, targetY: ground };
     switch (this.ab) {
       case 'frost':
         o.freeze = this.pr('freeze', 2);
@@ -109,7 +109,7 @@ export class Bomber extends Enemy {
         break;
       case 'cluster':
         o.split = Math.round(this.pr('split', 3));
-        o.bombletDamage = Math.max(1, Math.round(this.dmg(14) * this.pr('bombletDmg', 0.55)));
+        o.bombletDamage = Math.max(1, Math.round(this.dmg(ATTACK_DMG.bomber) * this.pr('bombletDmg', 0.55)));
         o.bombletRadius = this.pr('bombletR', 30);
         o.radius = 36;
         o.tint = '#ffd23f';

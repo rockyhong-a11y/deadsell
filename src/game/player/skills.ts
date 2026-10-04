@@ -18,6 +18,11 @@ export interface SkillDef {
   use(p: Player, item: ItemInstance): void;
 }
 
+/** Base damage per skill (fire grenade blast, ice grenade blast, one turret arrow, wolf trap bite). */
+export const SKILL_BASE: Record<'fire_grenade' | 'ice_grenade' | 'turret' | 'wolf_trap', number> = {
+  fire_grenade: 30, ice_grenade: 8, turret: 7, wolf_trap: 20,
+};
+
 function lob(p: Player, item: ItemInstance, type: 'fire' | 'ice', base: number): void {
   const vx = p.facing * 235 + p.vx * 0.35;
   const g = new Grenade(p.x + p.facing * 8, p.y - 30, vx, -270, p, item, type, base);
@@ -25,14 +30,14 @@ function lob(p: Player, item: ItemInstance, type: 'fire' | 'ice', base: number):
 }
 
 export const SKILLS: Partial<Record<ItemId, SkillDef>> = {
-  fire_grenade: { anim: 'throw', castTime: 0.34, fireAt: 0.12, sfx: 'throw', moveScale: 0.5, use: (p, it) => lob(p, it, 'fire', 30) },
-  ice_grenade: { anim: 'throw', castTime: 0.34, fireAt: 0.12, sfx: 'throw', moveScale: 0.5, use: (p, it) => lob(p, it, 'ice', 8) },
+  fire_grenade: { anim: 'throw', castTime: 0.34, fireAt: 0.12, sfx: 'throw', moveScale: 0.5, use: (p, it) => lob(p, it, 'fire', SKILL_BASE.fire_grenade) },
+  ice_grenade: { anim: 'throw', castTime: 0.34, fireAt: 0.12, sfx: 'throw', moveScale: 0.5, use: (p, it) => lob(p, it, 'ice', SKILL_BASE.ice_grenade) },
   turret: {
     anim: 'deploy', castTime: 0.5, fireAt: 0.25, sfx: 'throw', moveScale: 0.25,
-    use: (p, it) => { p.world.spawn(new Turret(p.x + p.facing * 18, p.y, p, it, 7, p.facing)); },
+    use: (p, it) => { p.world.spawn(new Turret(p.x + p.facing * 18, p.y, p, it, SKILL_BASE.turret, p.facing)); },
   },
   wolf_trap: {
     anim: 'deploy', castTime: 0.45, fireAt: 0.22, sfx: 'throw', moveScale: 0.25,
-    use: (p, it) => { p.world.spawn(new WolfTrap(p.x + p.facing * 20, p.y, p, it, 20)); },
+    use: (p, it) => { p.world.spawn(new WolfTrap(p.x + p.facing * 20, p.y, p, it, SKILL_BASE.wolf_trap)); },
   },
 };

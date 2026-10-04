@@ -4,6 +4,7 @@ import { AnimPlayer, type SpriteSheet } from '../engine/assets';
 import { moveBody, type Body } from './physics';
 import type { World } from './world';
 import type { DamageInfo, DamageResult, Team } from './combat';
+import { AFFIX } from './rules';
 
 let nextId = 1;
 
@@ -153,7 +154,7 @@ export abstract class Actor extends Entity {
     }
     if (info.bleed) {
       this.status.bleed = Math.max(this.status.bleed, info.bleed);
-      this.status.bleedStacks = Math.min(5, this.status.bleedStacks + 1);
+      this.status.bleedStacks = Math.min(AFFIX.bleedStacks, this.status.bleedStacks + 1);
     }
     if (info.freeze) this.status.freeze = Math.max(this.status.freeze, info.freeze);
     w.fx.damageNumber(this.x, this.y - this.h - 4, amount, info);

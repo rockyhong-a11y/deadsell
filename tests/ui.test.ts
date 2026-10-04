@@ -375,10 +375,10 @@ describe('LevelUI: pause + tutorial', () => {
     t.tap('pause2');
     expect(t.game.save.settings.hints).toBe(!before);
     t.advance(0.05);
-    t.tap('pause4'); // first press asks for confirmation
+    t.tap('pause5'); // 포기하기 (after 설정 = pause3 and 도감 = pause4): the first press asks for confirmation
     expect(t.game.playerDied).not.toHaveBeenCalled();
     t.advance(0.05);
-    t.tap('pause4');
+    t.tap('pause5');
     expect(t.game.playerDied).toHaveBeenCalledTimes(1);
   });
 

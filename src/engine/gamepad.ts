@@ -36,7 +36,8 @@ export const DPAD_BUTTONS = { up: 12, down: 13, left: 14, right: 15 } as const;
 const MAX_BUTTON = 31;
 
 /** Menu / UI navigation keys (ModalKey + the two global menu buttons). */
-export type NavKey = 'left' | 'right' | 'up' | 'down' | 'confirm' | 'cancel' | 'pause' | 'map';
+/** (`tabL` / `tabR` = the shoulder buttons LB / RB: switch tabs in tabbed screens such as the codex) */
+export type NavKey = 'left' | 'right' | 'up' | 'down' | 'confirm' | 'cancel' | 'pause' | 'map' | 'tabL' | 'tabR';
 
 const BUTTON_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', '뒤로', '시작', 'L3', 'R3', '↑', '↓', '←', '→', '홈'];
 
@@ -153,6 +154,8 @@ export function mapPad(snap: PadSnapshot | null, map: PadMap, prev: PadState, dt
   }
   if (raw.includes(0)) nav.push('confirm');
   if (raw.includes(1)) nav.push('cancel');
+  if (raw.includes(4)) nav.push('tabL');
+  if (raw.includes(5)) nav.push('tabR');
 
   return {
     frame: { x, y, press, release, nav, raw, active: raw.length > 0 || x !== 0 || y !== 0 },

@@ -1,6 +1,7 @@
 import type { Game, Scene } from '../game';
-import { COL, SZ, button, formatTime, gear, panel, pulse, text } from '../ui/draw';
+import { COL, SZ, book, button, formatTime, gear, panel, pulse, text } from '../ui/draw';
 import { SettingsScreen } from '../ui/settings';
+import { CodexScreen } from '../ui/codex';
 import type { NavKey } from '../../engine/gamepad';
 import { Embers, drawBiomeBg, gradientBg, vignette } from '../ui/backdrop';
 import { unlockedCount } from '../meta/progression';
@@ -15,9 +16,10 @@ export class TitleScene implements Scene {
   private t = 0;
   private started = false;
   private embers = new Embers(70);
-  /** 0 = start, 1 = 설정 (keyboard / gamepad selection) */
+  /** 0 = start, 1 = 설정, 2 = 도감 (keyboard / gamepad selection; right / down go start -> 설정 -> 도감, left / up the other way) */
   private sel = 0;
   private settings: SettingsScreen | null = null;
+  private codex: CodexScreen | null = null;
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(private game: Game) {}
@@ -33,6 +35,7 @@ export class TitleScene implements Scene {
     if (this.keyHandler) window.removeEventListener('keydown', this.keyHandler);
     this.keyHandler = null;
     this.settings?.close();
+    this.codex?.close();
   }
 
   private start(): void {
@@ -52,15 +55,37 @@ export class TitleScene implements Scene {
     });
   }
 
-  /** start or open the settings, whichever is selected */
+  /** 도감: every weapon, skill, enemy, boss and item (a modal over the title) */
+  openCodex(): void {
+    if (this.codex || this.settings || this.started) return;
+    this.game.audio.play('ui_open');
+    this.codex = new CodexScreen(this.game, () => {
+      this.codex = null;
+      this.sel = 0; // back on "start"
+      this.game.input.reset();
+    });
+  }
+
+  /** move the keyboard / pad selection (a cycle of the three buttons; `right` from start still lands on 설정 as before) */
+  private moveSel(dir: 1 | -1): void {
+    this.sel = (this.sel + dir + 3) % 3;
+  }
+
+  /** start, open the codex or open the settings, whichever is selected */
   private activate(): void {
-    if (this.settings || this.t < 0.3) return;
+    if (this.settings || this.codex || this.t < 0.3) return;
     if (this.sel === 1) this.openSettings();
+    else if (this.sel === 2) this.openCodex();
     else this.start();
   }
 
   /** gamepad menu keys */
   nav(k: NavKey): void {
+    if (this.codex) {
+      if (k === 'map') return;
+      this.codex.key(k);
+      return;
+    }
     if (this.settings) {
       if (k === 'map') return;
       this.settings.key(k);
@@ -68,17 +93,28 @@ export class TitleScene implements Scene {
     }
     if (k === 'confirm') this.activate();
     else if (k === 'pause') this.openSettings();
-    else if (k === 'left' || k === 'right' || k === 'up' || k === 'down') this.sel = 1 - this.sel;
+    else if (k === 'left' || k === 'up') this.moveSel(-1);
+    else if (k === 'right' || k === 'down') this.moveSel(1);
   }
 
-  /** the settings screen is up: the pad drives it */
+  /** the settings screen or the codex is up: the pad drives it */
   captures(): boolean {
-    return !!this.settings;
+    return !!this.settings || !!this.codex;
   }
 
   private onKey(e: KeyboardEvent): void {
-    if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || this.started) return;
     const c = e.code;
+    // held arrows keep scrolling the codex list
+    const repeatOk = !!this.codex && (c === 'ArrowUp' || c === 'ArrowDown' || c === 'KeyW' || c === 'KeyS');
+    if ((e.repeat && !repeatOk) || e.ctrlKey || e.altKey || e.metaKey || this.started) return;
+    if (this.codex) {
+      const k = NAV_KEYS[c];
+      if (c === 'Escape') this.codex.key('cancel');
+      else if (c === 'KeyQ') this.codex.key('tabL');
+      else if (c === 'KeyE') this.codex.key('tabR');
+      else if (k) this.codex.key(k);
+      return;
+    }
     if (this.settings) {
       const k = NAV_KEYS[c];
       if (c === 'Escape') this.settings.key('cancel');
@@ -86,13 +122,18 @@ export class TitleScene implements Scene {
       return;
     }
     if (c === 'Escape') this.openSettings();
-    else if (c === 'ArrowLeft' || c === 'ArrowRight' || c === 'ArrowDown' || c === 'KeyA' || c === 'KeyD' || c === 'KeyS') this.sel = 1 - this.sel;
+    else if (c === 'ArrowLeft' || c === 'ArrowUp' || c === 'KeyA' || c === 'KeyW') this.moveSel(-1);
+    else if (c === 'ArrowRight' || c === 'ArrowDown' || c === 'KeyD' || c === 'KeyS') this.moveSel(1);
   }
 
   update(dt: number): void {
     this.t += dt;
     const d = this.game.display;
     this.embers.update(dt, d.worldW, d.worldH);
+    if (this.codex) {
+      this.codex.update(dt);
+      return;
+    }
     if (this.settings) {
       this.settings.update(dt);
       return;
@@ -185,6 +226,14 @@ export class TitleScene implements Scene {
     gear(c, sb.x + 22, sb.y + sb.h / 2, 8, this.sel === 1 && dev !== 'touch' ? COL.amber : COL.text);
     text(c, '설정', sb.x + 38, sb.y + sb.h / 2, { bold: true, size: SZ.m });
     g.taps.add({ id: 'settings', rect: sb, mode: 'up', onTap: () => this.openSettings() });
+    // 도감 button, left of 설정 (same size and style)
+    const cb = { x: sb.x - 8 - sb.w, y: sb.y, w: sb.w, h: sb.h };
+    const onCodex = this.sel === 2 && dev !== 'touch';
+    button(c, cb, { label: '', selected: onCodex, color: COL.amber });
+    book(c, cb.x + 22, cb.y + cb.h / 2, 9, onCodex ? COL.amber : COL.text);
+    text(c, '도감', cb.x + 38, cb.y + cb.h / 2, { bold: true, size: SZ.m });
+    g.taps.add({ id: 'codex', rect: cb, mode: 'up', onTap: () => this.openCodex() });
     this.settings?.draw(c, W, H);
+    this.codex?.draw(c, W, H);
   }
 }

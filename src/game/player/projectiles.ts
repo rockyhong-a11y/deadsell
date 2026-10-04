@@ -101,6 +101,12 @@ class Glow extends Entity {
   }
 }
 
+/** Grenade numbers (shown in the codex): blast radius, burn (fire) / freeze (ice) seconds. */
+export const GRENADE = {
+  fire: { radius: 40, burn: 4, burnDps: 6 },
+  ice: { radius: 60, freeze: 3 },
+} as const;
+
 export interface ExplosionOpts {
   radius: number;
   base: number;
@@ -123,7 +129,7 @@ export function explode(owner: Player, item: ItemInstance, x: number, y: number,
       dir: sgn(t.x - x),
       knockback: fire ? 170 : 60,
       knockup: fire ? 140 : 0,
-      ...(fire ? { burn: 4, burnDps: 6 } : { freeze: 3, hitstun: 0 }),
+      ...(fire ? { burn: GRENADE.fire.burn, burnDps: GRENADE.fire.burnDps } : { freeze: GRENADE.ice.freeze, hitstun: 0 }),
     });
     infos.set(t, info);
     return info;
@@ -198,7 +204,7 @@ export class Grenade extends Entity {
     if (this.dead) return;
     this.dead = true;
     const fire = this.type === 'fire';
-    explode(this.owner, this.item, this.x, this.y - 4, { radius: fire ? 40 : 60, base: this.base, kind: this.type });
+    explode(this.owner, this.item, this.x, this.y - 4, { radius: fire ? GRENADE.fire.radius : GRENADE.ice.radius, base: this.base, kind: this.type });
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
@@ -213,6 +219,8 @@ export class Turret extends Entity {
   z = 15;
   static readonly LIFE = 10;
   static readonly RANGE = 220;
+  /** seconds between two shots */
+  static readonly INTERVAL = 0.7;
   private t = 0;
   private cd = 0.55;
   private shootT = 0;
@@ -247,7 +255,7 @@ export class Turret extends Entity {
     const target = this.pickTarget();
     if (target) this.facing = target.x >= this.x ? 1 : -1;
     if (target && this.cd <= 0) {
-      this.cd = 0.7;
+      this.cd = Turret.INTERVAL;
       this.shootT = 0.3;
       this.anim!.playFor('turret_shoot', 0.3);
       const sx = this.x + this.facing * 12;

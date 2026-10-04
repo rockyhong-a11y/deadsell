@@ -9,6 +9,7 @@ import { dropLoot, spawnFood, spawnItemDrop } from '../items/pickups';
 import { rollItem } from '../items/items';
 import { warnCircle, warnPath, warnRect } from '../enemies/telegraph';
 import { Debris, Shockwave } from './hazards';
+import { FOODS } from '../rules';
 
 /** Tuning (docs/DESIGN.md §5: 2200 HP, hits 18–30). */
 export const MATRON = {
@@ -24,6 +25,10 @@ export const MATRON = {
   leap: { rise: 0.55, hang: 0.75, rd: 195, dmg: 30, rx: 108 },
   summon: { w: 0.9, a: 0.35, r: 0.8 },
   debris: { dmg: 18, radius: 34 },
+  /** drops on death: cells, gold, two items of this tier, one meat */
+  drop: { cells: 30, gold: 120, itemTier: 3, foodPct: FOODS[2].healPct },
+  /** phase 2 starts when her hp share falls to this */
+  phase2: 0.5,
   deathAt: 2.0,
   deathTotal: 3.0,
 } as const;
@@ -142,7 +147,7 @@ export class Matron extends Actor {
   }
 
   protected onHurt(): void {
-    if (this.phase === 1 && !this.pendingPhase2 && this.hp <= this.maxHp * 0.5) this.pendingPhase2 = true;
+    if (this.phase === 1 && !this.pendingPhase2 && this.hp <= this.maxHp * MATRON.phase2) this.pendingPhase2 = true;
   }
 
   die(info: DamageInfo): void {
@@ -164,11 +169,11 @@ export class Matron extends Actor {
     w.particles.emit('death', this.x, this.y - 60, { power: 2, count: 40 });
     w.emit({ type: 'enemyKilled', enemy: this, elite: true });
     // lots of loot
-    dropLoot(w, this.x, this.y - 50, { cells: 30, gold: 120 });
+    dropLoot(w, this.x, this.y - 50, { cells: MATRON.drop.cells, gold: MATRON.drop.gold });
     const unlocked = w.game.save.unlocked;
-    spawnItemDrop(w, this.x - 40, this.y - 30, rollItem(w.rng, 3, unlocked));
-    spawnItemDrop(w, this.x + 40, this.y - 30, rollItem(w.rng, 3, unlocked));
-    spawnFood(w, this.x, this.y - 30, 0.5);
+    spawnItemDrop(w, this.x - 40, this.y - 30, rollItem(w.rng, MATRON.drop.itemTier, unlocked));
+    spawnItemDrop(w, this.x + 40, this.y - 30, rollItem(w.rng, MATRON.drop.itemTier, unlocked));
+    spawnFood(w, this.x, this.y - 30, MATRON.drop.foodPct);
   }
 
   // ------------------------------------------------------------ state helpers

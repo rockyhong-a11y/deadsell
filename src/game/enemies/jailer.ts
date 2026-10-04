@@ -5,9 +5,9 @@ import { Enemy, type EnemyOpts } from './base';
 import { FloorWave } from './hazards';
 import { ChainHook } from './projectiles';
 import { warnLine, warnRect } from './telegraph';
-import type { EnemyDef } from './variants';
+import { ATTACK_DMG, BASE_STATS, type EnemyDef } from './variants';
 
-const SPEC = { hp: 90, w: 24, h: 46, patrol: 24, chase: 48, aura: '#ff5a5a', blood: '#8a3a3a' };
+const SPEC = { hp: BASE_STATS.jailer.hp, w: 24, h: 46, patrol: 24, chase: 48, aura: BASE_STATS.jailer.aura, blood: '#8a3a3a' };
 
 type Mode = 'mace' | 'hook';
 
@@ -165,7 +165,7 @@ export class Jailer extends Enemy {
     }
     const f = this.facing;
     const r = this.reach;
-    const info: DamageInfo = { amount: this.dmg(12), dir: f, kind: 'melee', source: this, knockback: 280, hitstun: 0.3 };
+    const info: DamageInfo = { amount: this.dmg(ATTACK_DMG.jailer), dir: f, kind: 'melee', source: this, knockback: 280, hitstun: 0.3 };
     if (this.ab === 'torch') {
       info.burn = this.pr('burn', 3);
       info.burnDps = this.pr('burnDps', 5);

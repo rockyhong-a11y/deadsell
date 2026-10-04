@@ -5,9 +5,9 @@ import { Enemy, type EnemyOpts } from './base';
 import { FirePatch, SongRing } from './hazards';
 import { Arrow } from './projectiles';
 import { warnLine } from './telegraph';
-import type { EnemyDef } from './variants';
+import { ATTACK_DMG, BASE_STATS, type EnemyDef } from './variants';
 
-const SPEC = { hp: 30, w: 22, h: 28, patrol: 40, chase: 120, aura: '#c77dff', blood: '#6a3a8a' };
+const SPEC = { hp: BASE_STATS.harpy.hp, w: 22, h: 28, patrol: 40, chase: 120, aura: BASE_STATS.harpy.aura, blood: '#6a3a8a' };
 const DIVE_SPEED = 360;
 const DIVE_MAX = 0.9;
 
@@ -186,7 +186,7 @@ export class Harpy extends Enemy {
         const a = n === 1 ? 0 : (i / (n - 1) - 0.5) * 2 * spread;
         const c = Math.cos(a);
         const sn = Math.sin(a);
-        w.spawn(new Arrow(this.x + dx * 10, cy + dy * 10, (dx * c - dy * sn) * sp, (dx * sn + dy * c) * sp, this.dmg(9), this, { style: 'feather', life: 2.4 }));
+        w.spawn(new Arrow(this.x + dx * 10, cy + dy * 10, (dx * c - dy * sn) * sp, (dx * sn + dy * c) * sp, this.dmg(ATTACK_DMG.feather), this, { style: 'feather', life: 2.4 }));
       }
       w.audio.play('swing', { vol: 0.6, pitch: 1.5 });
       w.particles.emit('dust', this.x, cy, { count: 4, dir: this.facing });
@@ -228,7 +228,7 @@ export class Harpy extends Enemy {
       this.world,
       { x: b.x - 4, y: b.y - 2, w: b.w + 8, h: b.h + 6 },
       'enemy',
-      { amount: this.dmg(10), dir: this.vx >= 0 ? 1 : -1, kind: 'melee', source: this, knockback: 230, knockup: 100, hitstun: 0.25 },
+      { amount: this.dmg(ATTACK_DMG.harpy), dir: this.vx >= 0 ? 1 : -1, kind: 'melee', source: this, knockback: 230, knockup: 100, hitstun: 0.25 },
       this.hitSet,
     );
     // keep the straight line (collisions zero a component of the velocity)

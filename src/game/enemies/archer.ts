@@ -3,9 +3,9 @@ import type { Player } from '../player/player';
 import { Enemy, type EnemyOpts } from './base';
 import { Arrow, Bolt } from './projectiles';
 import { warnLine } from './telegraph';
-import type { EnemyDef } from './variants';
+import { ATTACK_DMG, BASE_STATS, type EnemyDef } from './variants';
 
-const SPEC = { hp: 30, w: 16, h: 42, patrol: 26, chase: 62, aura: '#7dff6a', blood: '#a03a4a' };
+const SPEC = { hp: BASE_STATS.archer.hp, w: 16, h: 42, patrol: 26, chase: 62, aura: BASE_STATS.archer.aura, blood: '#a03a4a' };
 const MIN_DIST = 120;
 const MAX_DIST = 220;
 const ARROW_SPEED = 330;
@@ -116,7 +116,7 @@ export class Archer extends Enemy {
     switch (this.ab) {
       case 'crossbow': {
         const sp = this.pr('boltSpeed', 520);
-        w.spawn(new Bolt(o.x, o.y, dx * sp, dy * sp, this.dmg(10), this));
+        w.spawn(new Bolt(o.x, o.y, dx * sp, dy * sp, this.dmg(ATTACK_DMG.archer), this));
         w.audio.play('bow_shoot', { vol: 0.9, pitch: 0.7 });
         w.particles.emit('spark', o.x + dx * 8, o.y + dy * 8, { dir: this.facing, count: 4 });
         break;
@@ -130,17 +130,17 @@ export class Archer extends Enemy {
           const sn = Math.sin(a);
           const vx = (dx * c - dy * sn) * ARROW_SPEED;
           const vy = (dx * sn + dy * c) * ARROW_SPEED;
-          w.spawn(new Arrow(o.x, o.y, vx, vy, this.dmg(10), this));
+          w.spawn(new Arrow(o.x, o.y, vx, vy, this.dmg(ATTACK_DMG.archer), this));
         }
         w.audio.play('bow_shoot', { vol: 0.8, pitch: 1.1 });
         break;
       }
       case 'fire':
-        w.spawn(new Arrow(o.x, o.y, dx * ARROW_SPEED, dy * ARROW_SPEED, this.dmg(10), this, { burn: this.pr('burn', 3), burnDps: this.pr('burnDps', 5), style: 'fire' }));
+        w.spawn(new Arrow(o.x, o.y, dx * ARROW_SPEED, dy * ARROW_SPEED, this.dmg(ATTACK_DMG.archer), this, { burn: this.pr('burn', 3), burnDps: this.pr('burnDps', 5), style: 'fire' }));
         w.audio.play('bow_shoot', { vol: 0.7 });
         break;
       default:
-        w.spawn(new Arrow(o.x, o.y, dx * ARROW_SPEED, dy * ARROW_SPEED, this.dmg(10), this));
+        w.spawn(new Arrow(o.x, o.y, dx * ARROW_SPEED, dy * ARROW_SPEED, this.dmg(ATTACK_DMG.archer), this));
         w.audio.play('bow_shoot', { vol: 0.7 });
     }
   }

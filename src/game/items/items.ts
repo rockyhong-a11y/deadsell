@@ -1,6 +1,7 @@
 import type { Rng } from '../../engine/rng';
 import type { ItemDef, ItemId, ItemInstance, AffixId } from './types';
 import { WEAPONS, type MeleeWeapon } from '../player/weapons';
+import { AFFIX, AFFIX_ROLL, TIER_DMG } from '../rules';
 
 /**
  * Item catalogue + rolling. OWNER: player agent.
@@ -56,7 +57,7 @@ export function rollItem(
   const fallback: ItemId = slot === 'skill' ? 'fire_grenade' : 'rusty_sword';
   const id = rng.pick(pool.length ? pool : [fallback]);
   const affixes = affixPool(id);
-  const roll = rng.chance(Math.min(0.8, 0.3 + 0.15 * (tier - 1)));
+  const roll = rng.chance(Math.min(AFFIX_ROLL.max, AFFIX_ROLL.base + AFFIX_ROLL.perTier * (tier - 1)));
   const affix = roll || opts.guaranteeAffix ? rng.pick(affixes) : null;
   return { id, tier, affix };
 }
@@ -67,7 +68,7 @@ export function itemName(inst: ItemInstance): string {
 
 /** Damage of one swing/shot at this tier (before run stats), for the item card. */
 function cardDamage(inst: ItemInstance, base: number): number {
-  return Math.round(base * (1 + 0.25 * (inst.tier - 1)) * (inst.affix === 'dmg' ? 1.2 : 1));
+  return Math.round(base * (1 + TIER_DMG * (inst.tier - 1)) * (inst.affix === 'dmg' ? AFFIX.dmgMul : 1));
 }
 
 /** Lines for the item card (description, numbers, affix). */

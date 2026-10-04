@@ -186,6 +186,85 @@ def i_scroll():
     return [r, h, h2]
 
 
+# ---- corpse market (CONTENT3): the ten shop uniques + the currency icon ----------------------------------
+
+def i_bone_cleaver():
+    r = L.m_bone_cleaver()
+    orient(r, 40, twist=-14)
+    return [r]
+
+
+def i_reaper_scythe():
+    r = L.m_reaper_scythe()
+    orient(r, 38, twist=-8)
+    return [r]
+
+
+def i_stitch_needle():
+    r = L.m_stitch_needle()
+    orient(r, 45, twist=-10)
+    return [r]
+
+
+def i_widow_fangs():
+    a = L.m_widow_fang("wa")
+    b = L.m_widow_fang("wb", mirror=True)
+    orient(a, -44, twist=-6, loc=(-0.04, -0.04, 0))
+    orient(b, 44, twist=6, loc=(0.04, 0.06, 0))
+    return [a, b]
+
+
+def i_coffin_lid():
+    r = L.m_coffin_lid()
+    orient(r, 0, twist=-26, lean=-8)
+    return [r]
+
+
+def i_marrow_bow():
+    r = L.m_marrow_bow(thick=1.5)
+    orient(r, 45, twist=0)
+    ar = L.m_arrow(length=1.0, fletch="bone_w")
+    orient(ar, 45 - 90, loc=(0, -0.05, 0))
+    bpy.context.view_layer.update()
+    return [r, ar]
+
+
+def i_corpse_bomb():
+    r, tip = L.m_corpse_bomb()
+    orient(r, 0, twist=-10)
+    sp = L.spark("cb_sp", 0.2, 0.3, tip + Vector((0, -0.05, 0.03)))
+    fl = L.flame("cb_fl", 0.2, 0.065, layers=("#a8201c", "#ff5a1e", "#ffd04a"), seed=2, sway=-0.2,
+                 loc=tip + Vector((-0.01, -0.03, -0.01)))
+    return [r] + sp + fl
+
+
+def i_bone_spikes():
+    r = L.m_bone_spikes()
+    orient(r, 0, twist=-18)
+    return [r]
+
+
+def i_soul_lantern():
+    r = L.m_soul_lantern()
+    orient(r, 0, twist=-20)
+    fl = L.flame("sl_fl", 0.2, 0.07, layers=("#1a6aa8", "#2fb4e8", "#8af0ff", "#e6fdff"), seed=6, sway=0.1,
+                 loc=(0.0, -0.1, 0.12))
+    h = halo("sl_h", "disc", (0, 0, 0.26), dist=0.3, r=0.26, col="#1666c8")
+    return [r, h] + fl
+
+
+def i_chain_hook():
+    r = L.m_chain_hook()
+    orient(r, 0, twist=-24)
+    return [r]
+
+
+def i_corpse_piece():
+    r = L.m_corpse_piece(1.0)
+    orient(r, 24, twist=-24, lean=-16)
+    return [r]
+
+
 ICONS = [
     # id, builder, yaw, pitch
     ("rusty_sword", i_rusty_sword, 15, 10),
@@ -203,6 +282,18 @@ ICONS = [
     ("gold", i_gold, 15, 25),
     ("flask", i_flask, 15, 10),
     ("scroll", i_scroll, 15, 10),
+    # CONTENT3: corpse-shop uniques, currency
+    ("bone_cleaver", i_bone_cleaver, 15, 10),
+    ("reaper_scythe", i_reaper_scythe, 15, 10),
+    ("stitch_needle", i_stitch_needle, 15, 10),
+    ("widow_fangs", i_widow_fangs, 10, 10),
+    ("coffin_lid", i_coffin_lid, 15, 10),
+    ("marrow_bow", i_marrow_bow, 20, 10),
+    ("corpse_bomb", i_corpse_bomb, 15, 12),
+    ("bone_spikes", i_bone_spikes, 15, 18),
+    ("soul_lantern", i_soul_lantern, 15, 10),
+    ("chain_hook", i_chain_hook, 15, 10),
+    ("corpse_piece", i_corpse_piece, 15, 22),
 ]
 
 

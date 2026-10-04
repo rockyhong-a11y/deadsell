@@ -135,6 +135,16 @@ PAL = {
     "feather": ("#4a2a6a", "#22123a", "#7a4aa0", True),
     "feather_light": ("#8a62b8", "#43286a", "#c0a0e8", True),
     "straw": ("#b39a52", "#5e4a36", "#dcc480", True),
+    # corpse market (CONTENT3): bone white, dried blood, red thread, flesh, sacking
+    "bone_w": ("#e8dcc4", "#8a7a82", "#fffaea", True),
+    "bone_black": ("#2e2836", "#14101c", "#554c66", True),
+    "blood_dry": ("#7a1f2a", "#3a0d1c", "#a8343e", True),
+    "thread": ("#c8324a", "#6e1430", "#f0586c", True),
+    "flesh_pale": ("#d9bba6", "#8e5a6c", "#f8e4d4", True),
+    "flesh_dark": ("#b98f86", "#6e4058", "#dcb8a8", True),
+    "sack": ("#9a7a52", "#523a30", "#c8a272", True),
+    "burlap": ("#b89a68", "#6a5240", "#dcc08a", True),
+    "yarn": ("#9c2a3a", "#4a1224", "#cc4458", True),
 }
 
 
@@ -1057,3 +1067,285 @@ def set_trap(P, closed=0.0):
     off = 0.012 * closed
     P["jaw_n"].location = (0, -off, 0.045)
     P["jaw_f"].location = (0, off, 0.045)
+
+
+# --------------------------------------------------------------------------
+# Corpse market (CONTENT3): the corpse piece and the ten shop uniques.
+# Same conventions as the models above: weapons along +Z with the hilt at the origin.
+
+
+def m_corpse_piece(scale=1.0):
+    """A stitched chunk of the dead lying on the ground, long axis along X (turn it about Z).
+
+    Pale flesh in two tones sewn together at x = 0.02 with dark-red cross stitches, a bone end,
+    a cyan ember glint tucked into the seam.  Centred on the origin."""
+    flesh, flesh_d, bone = mat("flesh_pale"), mat("flesh_dark"), mat("bone_w")
+    thread, blood = mat("thread"), mat("blood_dry")
+    parts = [sphere("cp_lobe_a", 0.15, flesh, loc=(-0.1, 0, 0.12), segs=14, rings=8, scale=(1.0, 0.83, 0.8)),
+             sphere("cp_lobe_b", 0.13, flesh_d, loc=(0.12, 0.01, 0.115), segs=14, rings=8, scale=(1.0, 0.89, 0.85))]
+    # lumps and a bruise so it does not read as an egg
+    parts.append(sphere("cp_bump_a", 0.065, flesh, loc=(-0.13, 0.02, 0.235), segs=10, rings=6, scale=(1, 0.92, 0.77)))
+    parts.append(sphere("cp_bump_b", 0.05, flesh_d, loc=(0.2, -0.04, 0.19), segs=10, rings=6, scale=(1, 1, 0.9)))
+    parts.append(sphere("cp_bruise", 0.045, blood, loc=(-0.1, -0.115, 0.1), segs=8, rings=5, scale=(1, 0.33, 0.78)))
+    # exposed bone end with a round knob
+    parts.append(cyl("cp_bone", 0.05, 0.11, bone, loc=(-0.21, 0, 0.13), rot=(0, 90, 0), segs=8))
+    parts.append(sphere("cp_knob", 0.062, bone, loc=(-0.3, 0.0, 0.13), segs=10, rings=6))
+    parts.append(sphere("cp_knob2", 0.045, bone, loc=(-0.295, -0.045, 0.1), segs=8, rings=5))
+    # seam: dark-red band around the chunk + six cross stitches around it
+    parts.append(torus("cp_seam", 0.12, 0.016, blood, loc=(0.02, 0, 0.12), rot=(0, 90, 0), segs=14, rsegs=5))
+    for k in range(6):
+        pv = empty("cp_pv%d" % k, loc=(0.02, 0, 0.12), rot=(-60 * k, 0, 0))
+        for sg in (-1, 1):
+            st = box("cp_st%d_%d" % (k, sg), (0.085, 0.014, 0.014), thread, loc=(0, -0.125, 0), rot=(0, sg * 38, 0))
+            st.parent = pv
+        parts.append(pv)
+    parts.append(sphere("cp_ember", 0.032, glow("#4fe3ff"), loc=(0.07, -0.105, 0.15), segs=8, rings=5))
+    parts.append(sphere("cp_ember_hot", 0.014, glow("#e6fdff"), loc=(0.065, -0.128, 0.162), segs=6, rings=4))
+    for o in parts:                 # centre the lump on the anchor so a turn does not swing it sideways
+        o.location.x += 0.04
+    return group("corpse_piece", parts, scale=scale)
+
+
+def crescent_pts(R, a0, a1, w_out, w_in, n=14, taper=1.3):
+    """Closed XZ polygon of a curved blade about an arc centre at the origin.
+
+    The centre line runs at radius R from angle a0 to a1 (degrees from +X, either direction); the outer edge sits
+    w_out beyond it and the inner edge w_in inside it, both tapering to a point at a1."""
+    outer, inner = [], []
+    for i in range(n + 1):
+        u = i / n
+        f = max(0.0, 1.0 - u ** taper) if i < n else 0.0
+        a = math.radians(a0 + (a1 - a0) * u)
+        outer.append(((R + w_out * f) * math.cos(a), (R + w_out * f) * math.sin(a)))
+        inner.append(((R - w_in * f) * math.cos(a), (R - w_in * f) * math.sin(a)))
+    return outer + list(reversed(inner[:-1]))
+
+
+def m_bone_cleaver():
+    """Butcher's cleaver of fused bone: slab blade, knuckle bones down the spine, dried blood."""
+    bone, bone_d, steel = mat("bone_w"), mat("bone"), mat("steel")
+    pts = [(-0.07, 0.03), (-0.07, 0.56), (-0.03, 0.61), (0.1, 0.61), (0.17, 0.55), (0.19, 0.38), (0.17, 0.2),
+           (0.13, 0.03)]
+    parts = [prism("bc_blade", pts, 0.05, bone, bevel=0.01)]
+    edge = [(0.13, 0.03), (0.17, 0.2), (0.19, 0.38), (0.17, 0.55), (0.14, 0.57), (0.15, 0.38), (0.13, 0.2), (0.1, 0.03)]
+    parts.append(prism("bc_edge", edge, 0.056, steel))
+    for i, z in enumerate((0.1, 0.26, 0.42, 0.58)):
+        parts.append(sphere("bc_knuckle%d" % i, 0.04, bone_d, loc=(-0.075, 0, z), segs=8, rings=6))
+    parts.append(sphere("bc_hole", 0.034, mat("iron_dark"), loc=(0.02, -0.02, 0.48), segs=10, rings=6,
+                        scale=(1, 0.3, 1)))
+    parts.append(sphere("bc_blood1", 0.06, mat("blood_dry"), loc=(0.07, -0.026, 0.3), segs=8, rings=6,
+                        scale=(1, 0.18, 1.4)))
+    parts.append(prism("bc_drip", [(0.1, 0.12), (0.14, 0.12), (0.13, 0.03), (0.115, 0.07), (0.105, 0.02)], 0.01,
+                       mat("blood_dry"), y0=-0.026))
+    parts.append(box("bc_guard", (0.2, 0.065, 0.05), bone, loc=(0.02, 0, 0.0), bevel=0.012))
+    parts.append(cyl("bc_grip", 0.032, 0.2, mat("leather_red"), loc=(0, 0, -0.2)))
+    for i, z in enumerate((-0.18, -0.13, -0.08, -0.03)):
+        parts.append(torus("bc_wrap%d" % i, 0.034, 0.008, mat("thread"), loc=(0, 0, z), segs=12, rsegs=4))
+    parts.append(sphere("bc_pommel", 0.052, bone, loc=(0, 0, -0.22), segs=10, rings=6))
+    return group("bone_cleaver", parts)
+
+
+def m_reaper_scythe(haft=1.1):
+    """Long curved scythe: dark blade sweeping back from the top of the haft, stitched grip."""
+    steel, steel_d = mat("steel"), mat("steel_dark")
+    top = haft * 0.5
+    parts = [cyl("rs_haft", 0.034, haft, mat("wood_dark"), loc=(0, 0, -haft * 0.5))]
+    for i in range(5):
+        parts.append(torus("rs_wrap%d" % i, 0.037, 0.009, mat("thread"), loc=(0, 0, -0.32 + i * 0.06), segs=12,
+                           rsegs=4))
+    parts.append(cyl("rs_collar", 0.052, 0.12, mat("bone_w"), loc=(0, 0, top - 0.08), r_top=0.04))
+    R = 0.62
+    blade = crescent_pts(R, 92, 166, 0.025, 0.14)
+    parts.append(prism("rs_blade", blade, 0.034, steel_d, loc=(0, 0, top - R + 0.02), bevel=0.006))
+    edge = crescent_pts(R - 0.05, 98, 160, 0.0, 0.07)
+    parts.append(prism("rs_edge", edge, 0.04, steel, loc=(0, 0, top - R + 0.02), y0=-0.003))
+    for i, a in enumerate((0.0, 0.02)):
+        parts.append(torus("rs_stitch%d" % i, 0.05, 0.006, mat("thread"), loc=(0, 0, top - 0.1 + 0.05 * i), segs=10,
+                           rsegs=4))
+    parts.append(prism("rs_rag", [(0.0, 0.0), (0.05, -0.02), (0.07, -0.16), (0.03, -0.13), (0.01, -0.2),
+                                  (-0.02, -0.1)], 0.012, mat("cloth_red"), loc=(0.03, -0.042, top - 0.1)))
+    parts.append(cone("rs_butt", 0.04, 0.0, 0.07, mat("iron"), loc=(0, 0, -haft * 0.5), rot=(180, 0, 0), segs=8))
+    return group("reaper_scythe", parts)
+
+
+def m_stitch_needle(length=1.15):
+    """Spear-length sewing needle, thread-wrapped grip, red thread trailing from the eye."""
+    steel, thread = mat("steel"), mat("thread")
+    parts = [cone("sn_shaft", 0.05, 0.0, length, steel, loc=(0, 0, 0.1), segs=10)]
+    parts.append(box("sn_head", (0.13, 0.04, 0.16), steel, loc=(0, 0, 0.05), bevel=0.012))
+    parts.append(torus("sn_eye", 0.05, 0.017, mat("steel_dark"), loc=(0, -0.03, 0.05), rot=(90, 0, 0), segs=14,
+                       rsegs=5, scale=(0.8, 1, 1.35)))
+    parts.append(cyl("sn_grip", 0.058, 0.22, mat("leather_red"), loc=(0, 0, 0.3), r_top=0.054))
+    for i in range(4):
+        parts.append(torus("sn_wrap%d" % i, 0.06, 0.012, thread, loc=(0, 0, 0.33 + 0.055 * i), segs=12, rsegs=4))
+    path = [(0.0, -0.04, 0.05), (-0.09, -0.06, -0.03), (-0.04, -0.05, -0.12), (0.08, -0.06, -0.14),
+            (0.1, -0.05, -0.23), (-0.02, -0.06, -0.27)]
+    parts.append(tube("sn_thread", catmull(path, 4), 0.022, thread, segs=6))
+    parts.append(sphere("sn_knot", 0.036, thread, loc=(-0.02, -0.06, -0.27), segs=8, rings=5))
+    return group("stitch_needle", parts)
+
+
+def m_widow_fang(tag="wf", mirror=False):
+    """One curved black-bone fang dagger.  The blade curves toward +X (-X when mirrored)."""
+    bone_b, bone = mat("bone_black"), mat("bone_w")
+    R = 0.34
+    sg = -1.0 if mirror else 1.0
+    pts = [(sg * x, z) for x, z in crescent_pts(R, 180, 100, 0.0, 0.11, taper=1.15)]
+    parts = [prism(tag + "_blade", pts, 0.045, bone_b, loc=(sg * R, 0, 0.03), bevel=0.006)]
+    ridge = [(sg * x, z) for x, z in crescent_pts(R - 0.02, 178, 112, 0.0, 0.04, taper=1.1)]
+    parts.append(prism(tag + "_ridge", ridge, 0.052, mat("steel_dark"), loc=(sg * R, 0, 0.03), y0=-0.002))
+    parts.append(torus(tag + "_guard", 0.05, 0.02, bone, loc=(0.0, 0, 0.0), segs=12, rsegs=5, scale=(1.25, 1, 0.8)))
+    parts.append(cyl(tag + "_grip", 0.03, 0.15, mat("blood_dry"), loc=(0, 0, -0.15)))
+    for i, z in enumerate((-0.12, -0.07, -0.02)):
+        parts.append(torus("%s_wrap%d" % (tag, i), 0.032, 0.009, mat("thread"), loc=(0, 0, z), segs=10, rsegs=4))
+    parts.append(sphere(tag + "_pom", 0.042, bone, loc=(0, 0, -0.17), segs=8, rings=6))
+    return group(tag, parts)
+
+
+def m_coffin_lid():
+    """Narrow coffin lid with iron straps, used as a shield (faces -Y)."""
+    wood, wood_l = mat("wood_dark"), mat("wood")
+    outline = [(-0.13, 0.5), (0.13, 0.5), (0.24, 0.2), (0.15, -0.5), (-0.15, -0.5), (-0.24, 0.2)]
+    inner = [(-0.095, 0.44), (0.095, 0.44), (0.19, 0.18), (0.115, -0.44), (-0.115, -0.44), (-0.19, 0.18)]
+    parts = [prism("cl_board", outline, 0.07, wood, bevel=0.012),
+             prism("cl_panel", inner, 0.02, wood_l, y0=-0.04)]
+    for i, (z, w) in enumerate(((0.3, 0.46), (-0.02, 0.36), (-0.34, 0.3))):
+        parts.append(box("cl_strap%d" % i, (w, 0.09, 0.07), mat("steel_dark"), loc=(0, -0.003, z), bevel=0.01))
+        for sx in (-1, 1):
+            parts.append(sphere("cl_rivet%d_%d" % (i, sx), 0.021, mat("steel"), loc=(sx * (w / 2 - 0.035), -0.05, z),
+                                segs=8, rings=5))
+    bone = mat("bone_w")
+    parts.append(box("cl_cross_v", (0.05, 0.03, 0.26), bone, loc=(0, -0.058, 0.07), bevel=0.008))
+    parts.append(box("cl_cross_h", (0.17, 0.03, 0.05), bone, loc=(0, -0.058, 0.13), bevel=0.008))
+    parts.append(sphere("cl_core", 0.02, glow("#4fe3ff"), loc=(0, -0.078, 0.13), segs=8, rings=5))
+    parts.append(prism("cl_crack", [(0.03, -0.1), (0.07, -0.18), (0.055, -0.26), (0.09, -0.36), (0.07, -0.37),
+                                   (0.04, -0.28), (0.05, -0.18), (0.015, -0.1)], 0.01, mat("black"), y0=-0.036))
+    return group("coffin_lid", parts)
+
+
+def m_marrow_bow(string_r=0.016, curve=1.25, thick=1.15):
+    """Bow of ribs and sinew: bone limbs studded with rib knobs, red sinew string (like m_hunter_bow)."""
+    up = [(0.0, 0.0), (-0.03, 0.15), (-0.09, 0.3), (-0.15, 0.43), (-0.19, 0.53), (-0.2, 0.58),
+          (-0.185, 0.64), (-0.145, 0.68)]
+    up = [(x * curve, z) for x, z in up]
+    curve_pts = [Vector((x, 0, -z)) for x, z in reversed(up[1:])] + [Vector((x, 0, z)) for x, z in up]
+    pts = catmull(curve_pts, per=4)
+    n = len(pts)
+    radii = []
+    for i in range(n):
+        s = abs(i - (n - 1) / 2) / ((n - 1) / 2)
+        radii.append((0.05 * (1 - s) + 0.02 * s) * thick)
+    bone = mat("bone_w")
+    parts = [tube("mb_limbs", pts, radii, bone, segs=8)]
+    for i in range(3, n - 2, 4):                      # rib knobs along both limbs
+        rr = radii[i] * 1.0
+        parts.append(sphere("mb_knob%d" % i, rr * 1.15, mat("bone"), loc=pts[i] + Vector((-0.012, -0.02, 0)),
+                            segs=8, rings=5))
+    parts.append(cyl("mb_grip", 0.056 * thick, 0.18, mat("blood_dry"), loc=(0, 0, -0.09)))
+    for z in (-0.07, -0.02, 0.03, 0.08):
+        parts.append(torus("mb_wrap", 0.058 * thick, 0.011, mat("thread"), loc=(0, 0, z - 0.0), segs=12, rsegs=4))
+    cu = Vector((up[5][0] - 0.012, 0, up[5][1]))
+    cd = Vector((cu.x, 0, -cu.z))
+    tip_u = Vector((up[-1][0], 0, up[-1][1]))
+    tip_d = Vector((tip_u.x, 0, -tip_u.z))
+    for i, tp in enumerate((tip_u, tip_d)):
+        parts.append(sphere("mb_tip%d" % i, 0.03 * thick, mat("bone"), loc=tp, segs=8, rings=6))
+    parts.append(tube("mb_string", [tip_u, cu, cd, tip_d], string_r, mat("thread"), segs=6))
+    return group("marrow_bow", parts)
+
+
+def m_corpse_bomb():
+    """Stitched leather sack bulging with bones, tied at the neck, with a burning wick.
+    Returns (root, wick_tip) with the wick tip in the root's space."""
+    sack, sack_d = mat("sack"), mat("burlap")
+    parts = [sphere("cb_sack", 0.2, sack, loc=(0, 0, 0.2), segs=18, rings=12, scale=(1.0, 0.92, 1.0)),
+             sphere("cb_belly", 0.17, sack_d, loc=(0.03, -0.05, 0.14), segs=14, rings=10, scale=(1.0, 0.8, 0.85))]
+    # neck + tie + cord tails
+    parts.append(cyl("cb_neck", 0.075, 0.1, sack, loc=(0, 0, 0.36), r_top=0.05))
+    parts.append(torus("cb_tie", 0.062, 0.017, mat("thread"), loc=(0, 0, 0.38), segs=12, rsegs=5))
+    parts.append(prism("cb_tail1", [(0, 0), (0.025, 0), (0.07, -0.1), (0.045, -0.1)], 0.014, mat("thread"),
+                       loc=(0.02, -0.07, 0.385)))
+    parts.append(prism("cb_tail2", [(0, 0), (-0.025, 0), (-0.08, -0.07), (-0.055, -0.08)], 0.014, mat("thread"),
+                       loc=(-0.02, -0.07, 0.385)))
+    # bones poking out of the sack
+    bone = mat("bone_w")
+    for i, (loc, rot, ln) in enumerate(((Vector((0.12, -0.05, 0.3)), (0, 55, 0), 0.17),
+                                         (Vector((-0.14, -0.02, 0.22)), (0, -70, 0), 0.18),
+                                         (Vector((0.05, -0.15, 0.06)), (-60, 0, 20), 0.14))):
+        parts.append(cyl("cb_bone%d" % i, 0.026, ln, bone, loc=loc, rot=rot, segs=7))
+        d = Matrix.Rotation(math.radians(rot[1]), 3, "Y") @ Matrix.Rotation(math.radians(rot[0]), 3, "X") @ Vector((0, 0, ln))
+        for sx in (-0.012, 0.03):
+            parts.append(sphere("cb_knob%d_%d" % (i, int(sx * 1000)), 0.036, bone, loc=loc + d + Vector((0, sx, 0)),
+                                segs=8, rings=5))
+    # stitched seam down the front
+    seam = [(0.01, -0.2, 0.36), (0.015, -0.195, 0.28), (0.01, -0.2, 0.2), (0.015, -0.195, 0.12), (0.01, -0.185, 0.06)]
+    parts.append(tube("cb_seam", catmull(seam, 3), 0.012, mat("blood_dry"), segs=5))
+    for i, z in enumerate((0.33, 0.27, 0.21, 0.15, 0.09)):
+        for sg in (-1, 1):
+            parts.append(box("cb_st%d_%d" % (i, sg), (0.075, 0.012, 0.014), mat("thread"),
+                             loc=(0.012, -0.203 + 0.003 * abs(z - 0.2), z), rot=(0, sg * 40, 0)))
+    # wick
+    wick = [(0.0, 0.0, 0.43), (0.02, 0.0, 0.5), (-0.03, 0.0, 0.56), (-0.08, 0.0, 0.58)]
+    parts.append(tube("cb_wick", catmull(wick, 3), 0.014, mat("straw"), segs=6))
+    return group("corpse_bomb", parts), Vector((-0.08, 0.0, 0.58))
+
+
+def m_bone_spikes():
+    """Cluster of three bone spikes erupting from a chunk of floor."""
+    bone, blood = mat("bone_w"), mat("blood_dry")
+    parts = [cyl("bs_floor", 0.3, 0.06, mat("iron_dark"), segs=10, depth_scale=0.7)]
+    for i, (x, y, ang, h, r) in enumerate(((0.0, 0.07, -3, 0.66, 0.1), (-0.22, -0.05, -17, 0.46, 0.085),
+                                           (0.22, -0.06, 19, 0.42, 0.08))):
+        a = math.radians(ang)
+        parts.append(cone("bs_spike%d" % i, r, 0.0, h, bone, loc=(x, y, 0.03), rot=(0, ang, 0), segs=7))
+        f = 0.6
+        parts.append(cone("bs_tip%d" % i, r * (1 - f) * 1.12, 0.0, h * (1 - f) + 0.01, blood,
+                          loc=(x + math.sin(a) * h * f, y, 0.03 + math.cos(a) * h * f), rot=(0, ang, 0), segs=7))
+        parts.append(torus("bs_base%d" % i, r * 0.85, r * 0.3, mat("bone"), loc=(x, y, 0.05), segs=10, rsegs=5))
+    for i, (x, y, s) in enumerate(((-0.37, 0.0, 0.8), (0.37, 0.0, 0.7), (0.05, -0.2, 0.7))):
+        parts.append(rocky("bs_rock%d" % i, 0.06 * s, mat("stone_dark"), seed=i + 2, loc=(x, y, 0.05), subdiv=1))
+    return group("bone_spikes", parts)
+
+
+def m_soul_lantern():
+    """Small iron lantern with a cyan soul flame.  Flame objects are returned separately."""
+    iron, iron_d = mat("iron"), mat("iron_dark")
+    parts = [cyl("sl_base", 0.15, 0.05, iron_d, loc=(0, 0, 0.0), r_top=0.12, segs=10),
+             cyl("sl_floor", 0.13, 0.03, iron, loc=(0, 0, 0.05), segs=10),
+             cyl("sl_glass", 0.115, 0.34, glow("#2a8cc8"), loc=(0, 0, 0.08), r_top=0.125, segs=10),
+             cyl("sl_cap", 0.17, 0.04, iron, loc=(0, 0, 0.42), segs=10),
+             cone("sl_roof", 0.17, 0.05, 0.12, iron_d, loc=(0, 0, 0.46), segs=10),
+             torus("sl_ring", 0.07, 0.015, iron, loc=(0, 0, 0.64), rot=(90, 0, 0), segs=14, rsegs=5),
+             sphere("sl_knob", 0.028, iron, loc=(0, 0, 0.59), segs=8, rings=5)]
+    for i in range(6):
+        a = 2 * math.pi * i / 6 + 0.3
+        parts.append(cyl("sl_bar%d" % i, 0.014, 0.35, iron, loc=(0.13 * math.cos(a), 0.13 * math.sin(a), 0.08), segs=6))
+    for z in (0.15, 0.3):
+        parts.append(torus("sl_band%d" % int(z * 10), 0.124, 0.011, iron_d, loc=(0, 0, z), segs=14, rsegs=4))
+    return group("soul_lantern", parts)
+
+
+def m_chain_hook():
+    """Rusted hook on a coiled chain.  Hook up, chain looping below."""
+    rust, iron = mat("rust"), mat("iron")
+    hp = [(0.0, 0, 0.0), (0.0, 0, 0.18), (0.0, 0, 0.3), (0.08, 0, 0.44), (0.21, 0, 0.48), (0.29, 0, 0.38),
+          (0.27, 0, 0.26), (0.18, 0, 0.2)]
+    hpts = catmull(hp, 4)
+    nh = len(hpts)
+    radii = [0.062 - 0.05 * max(0.0, (i / (nh - 1) - 0.6) / 0.4) ** 1.2 for i in range(nh)]
+    parts = [tube("ch_hook", hpts, radii, rust, segs=7, caps=False)]
+    parts.append(cone("ch_barb", 0.06, 0.0, 0.14, rust, loc=(0.18, 0, 0.2), rot=(0, -35, 0), segs=6))
+    parts.append(torus("ch_eye", 0.075, 0.024, iron, loc=(0.0, 0, -0.07), rot=(90, 0, 0), segs=12, rsegs=5))
+    parts.append(cyl("ch_collar", 0.07, 0.09, iron, loc=(0, 0, -0.01), segs=8))
+    # coiled chain: links laid along a loop hanging from the eye
+    n = 8
+    cr = 0.26
+    cx, cz = 0.0, -0.58
+    for i in range(n):
+        a = math.radians(95 + 330 * i / (n - 1))
+        p = Vector((cx + cr * math.cos(a), 0.0, cz + cr * math.sin(a)))
+        tang = Vector((-math.sin(a), 0.0, math.cos(a)))
+        parts += chain("ch_l%d" % i, 1, 0.19, iron, start=p - tang * 0.095, direction=tang, r_wire=0.032,
+                       twist0=0 if i % 2 == 0 else 90, width_ratio=0.62)
+    hook = group("ch_hookg", parts[:4], scale=1.6)
+    return group("chain_hook", [hook] + parts[4:])

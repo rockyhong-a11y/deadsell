@@ -1,6 +1,6 @@
 """Shared model / rig / render helpers for the NPC sprite sheets and the key-art scripts.
 
-Used by asset_alchemist.py and asset_merchant.py.  Never run directly.
+Used by asset_alchemist.py, asset_merchant.py and asset_seamstress.py.  Never run directly.
 
 Everything is modelled in "native" heroine proportions (1.75 u tall woman, rest pose =
 arms and legs hanging straight down, facing +X) directly at WORLD rest coordinates and
@@ -215,10 +215,15 @@ class NPC:
                 os.remove(os.path.join(out, fn))
         for a in anims:
             mf = a.get("mouth")
+            xf = a.get("extra")           # optional per-frame hook (frame already posed), e.g. a per-frame thread mesh
 
-            def extra(i, n, frame, mf=mf):
+            def extra(i, n, frame, mf=mf, xf=xf):
                 self.mouth(frame, bool(mf(i, n)) if mf else False)
+                if xf:
+                    xf(i, n, frame)
             common.render_animation(self.rig, a["name"], a["n"], a["fn"], out, extra)
+            if a.get("done"):
+                a["done"]()
             print("NPC %s: %s x%d" % (self.name, a["name"], a["n"]))
         spec = {"frameW": FW, "frameH": FH, "anchor": [AX, AY], "outline": True, "colors": 0,
                 "animations": [{"name": a["name"], "fps": a["fps"], "loop": a.get("loop", False)} for a in anims]}

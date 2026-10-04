@@ -1,0 +1,23 @@
+{
+ "image": "corpse.png",
+ "frameW": 24,
+ "frameH": 24,
+ "anchor": [
+  12,
+  22
+ ],
+ "animations": {
+  "piece": {
+   "row": 0,
+   "frames": 6,
+   "fps": 10,
+   "loop": true
+  },
+  "piece_big": {
+   "row": 1,
+   "frames": 6,
+   "fps": 10,
+   "loop": true
+  }
+ }
+}

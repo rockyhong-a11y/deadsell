@@ -7,7 +7,7 @@ import { GRAVITY, MAX_FALL } from '../../engine/config';
 import { approach, overlaps } from '../../engine/math';
 import { moveBody } from '../physics';
 import type { ItemInstance } from './types';
-import { ITEMS, COLOR_NAMES, itemLines, itemName, AFFIX_NAMES } from './items';
+import { ITEMS, COLOR_NAMES, itemColor, itemLines, itemName, AFFIX_NAMES } from './items';
 import { CORPSE, FOODS, SCROLL } from '../rules';
 
 /**
@@ -270,7 +270,7 @@ class ItemDrop extends Drop implements Interactable {
     const options: ChoiceOption[] = slots.map((cur, i) => ({
       label: `${names[i]} · ${itemName(cur!)}`,
       sub: `${itemName(this.inst)}(으)로 교체`,
-      color: COLOR_HEX[ITEMS[cur!.id].color],
+      color: itemColor(cur!.id),
       icon: ITEMS[cur!.id].icon,
     }));
     this.busy = true;
@@ -286,7 +286,7 @@ class ItemDrop extends Drop implements Interactable {
   private finish(replaced: ItemInstance | null): void {
     const w = this.world;
     this.dead = true;
-    const col = COLOR_HEX[ITEMS[this.inst.id].color];
+    const col = itemColor(this.inst.id);
     w.audio.play('pickup_item');
     w.particles.emit('magic', this.x, this.y - 10, { count: 10, color: col });
     w.emit({ type: 'pickup', what: 'item', amount: 1 });
@@ -307,13 +307,13 @@ class ItemDrop extends Drop implements Interactable {
       this.sparkT -= dt;
       if (this.sparkT <= 0 && this.world.player) {
         this.sparkT = 0.5;
-        this.world.particles.emit('magic', this.x, this.y - 16, { count: 1, color: COLOR_HEX[ITEMS[this.inst.id].color] });
+        this.world.particles.emit('magic', this.x, this.y - 16, { count: 1, color: itemColor(this.inst.id) });
       }
     }
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
-    const col = COLOR_HEX[ITEMS[this.inst.id].color];
+    const col = itemColor(this.inst.id);
     const bob = Math.sin(this.t * 3) * 2.5;
     const pulse = 0.5 + 0.2 * Math.sin(this.t * 4);
     drawGlow(ctx, this.x, this.y - 14 + bob, 26, col, pulse);

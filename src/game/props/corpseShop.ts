@@ -1,9 +1,8 @@
 import type { Interactable } from '../world';
 import type { Rng } from '../../engine/rng';
 import { UNIQUE_IDS, type ItemId, type ItemInstance } from '../items/types';
-import { ITEMS, itemLines, itemName, uniquePrice } from '../items/items';
+import { itemColor, itemLines, itemName, uniquePrice } from '../items/items';
 import { PIECE_COLOR, spawnItemDrop } from '../items/pickups';
-import { COLOR_HEX } from '../combat';
 import { AnimPlayer } from '../../engine/assets';
 import { Prop, drawSoftGlow, drawWorldText } from './common';
 import { drawItemIcon } from './pedestal';
@@ -83,7 +82,7 @@ export class CorpseShopItem extends Prop implements Interactable {
       drawWorldText(ctx, '품절', this.x, this.y - 30, '#8d8d98', 11);
       return;
     }
-    const col = COLOR_HEX[ITEMS[this.item.id].color];
+    const col = itemColor(this.item.id);
     const bob = Math.sin(this.t * 2.4 + this.x) * 2;
     drawSoftGlow(ctx, this.x, this.y - 36 + bob, 18, col, 0.5);
     drawItemIcon(this.world, ctx, this.item, this.x, this.y - 36 + bob, 1.2);

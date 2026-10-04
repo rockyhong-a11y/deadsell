@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SpriteSheet, SHEETS, type SheetManifest } from '../src/engine/assets';
 import { DEFAULT_PAD_MAP, PAD_SCROLL_DELAY, mapPad, newPadState } from '../src/engine/gamepad';
-import { ITEMS, AFFIX_NAMES } from '../src/game/items/items';
-import { ITEM_IDS } from '../src/game/items/types';
+import { ITEMS, AFFIX_NAMES, UNIQUE_COLOR } from '../src/game/items/items';
+import { ITEM_IDS, UNIQUE_IDS } from '../src/game/items/types';
 import { ALL_ENEMY_KINDS, BASE_KINDS, ENEMY_DEFS } from '../src/game/enemies/variants';
 import { createEnemy } from '../src/game/enemies/factory';
 import type { Enemy } from '../src/game/enemies/base';
@@ -120,9 +120,10 @@ describe('codex entries cover the whole game', () => {
   const all = buildCodex();
   const ids = new Set(all.map((e) => e.id));
 
-  it('has 7 weapons, 4 skills, 30 enemies, 5 bosses and the item pages', () => {
-    expect(codexEntries('weapon')).toHaveLength(7);
-    expect(codexEntries('skill')).toHaveLength(4);
+  it('has 13 weapons (7 + 6 unique), 8 skills (4 + 4 unique), 30 enemies, 5 bosses and the item pages', () => {
+    expect(codexEntries('weapon')).toHaveLength(13);
+    expect(codexEntries('skill')).toHaveLength(8);
+    expect(UNIQUE_IDS).toHaveLength(10);
     expect(codexEntries('enemy')).toHaveLength(30);
     expect(codexEntries('boss')).toHaveLength(5);
     expect(codexEntries('item').length).toBeGreaterThanOrEqual(2 + 3 + 3 + 2 + META_UPGRADES.length + Object.keys(AFFIX_NAMES).length);
@@ -209,8 +210,11 @@ describe('codex entries cover the whole game', () => {
     }
   });
 
-  it('weapon / skill names use the item colour', () => {
-    for (const e of [...codexEntries('weapon'), ...codexEntries('skill')]) expect(e.nameColor, e.id).toBe(COLOR_HEX[ITEMS[e.id as keyof typeof ITEMS].color]);
+  it('weapon / skill names use the item colour (unique items: the bone-gold unique colour)', () => {
+    for (const e of [...codexEntries('weapon'), ...codexEntries('skill')]) {
+      const d = ITEMS[e.id as keyof typeof ITEMS];
+      expect(e.nameColor, e.id).toBe(d.unique ? UNIQUE_COLOR : COLOR_HEX[d.color]);
+    }
   });
 });
 
@@ -264,7 +268,11 @@ describe('codex previews point at real sheets and animations (public/assets/spri
     expect(skills.get('ice_grenade')!.preview.steps[0].anim).toBe('throw');
     expect(skills.get('turret')!.preview.steps[0].anim).toBe('deploy');
     expect(skills.get('wolf_trap')!.preview.steps[0].anim).toBe('deploy');
-    for (const e of skills.values()) expect(e.preview.prop?.sheet, e.id).toBe('projectiles');
+    expect(skills.get('corpse_bomb')!.preview.steps[0].anim).toBe('throw');
+    for (const id of ['bone_spikes', 'soul_lantern']) expect(skills.get(id)!.preview.steps[0].anim, id).toBe('deploy');
+    expect(skills.get('chain_hook')!.preview.steps[0].anim).toBe('throw');
+    // the unique skills drawn in code (spikes, flames, the hook) have no sprite of their own: only the cast is shown
+    for (const e of skills.values()) expect(e.preview.prop?.sheet, e.id).toBe(['bone_spikes', 'soul_lantern', 'chain_hook'].includes(e.id) ? undefined : 'projectiles');
   });
 
   it('enemies and bosses cycle through every animation of their own sheet', () => {

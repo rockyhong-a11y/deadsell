@@ -44,8 +44,14 @@ export interface MeleeWeapon {
   hits: MeleeHit[];
   /** idle time after the last recover before the combo resets */
   resetDelay: number;
-  /** bleed duration applied by every hit (blood sword) */
+  /** bleed duration applied by every hit (blood sword, 뼈 도살검) */
   bleed?: number;
+  /** unique signatures (docs/CONTENT3.md §5): every hit crits against a bleeding target / for this many seconds after a roll / after taking damage */
+  critBleeding?: boolean;
+  critAfterRoll?: number;
+  critAfterHurt?: number;
+  /** unique signature: share of max HP healed by each kill of this weapon */
+  healOnKill?: number;
 }
 
 export interface BowWeapon {
@@ -58,6 +64,8 @@ export interface BowWeapon {
   minSpeed: number;
   maxSpeed: number;
   moveScale: number;
+  /** unique signature: a fully drawn arrow pierces every enemy in its path (each is hit once) */
+  pierce?: boolean;
 }
 
 export interface ShieldWeapon {
@@ -67,15 +75,21 @@ export interface ShieldWeapon {
   parryWindow: number;
   parryStun: number;
   moveScale: number;
+  /** unique signature: a parry releases a shockwave around the heroine (radius px, unblockable, stuns) */
+  shockwave?: { radius: number; damage: number; stun: number };
 }
 
 export type WeaponDef = MeleeWeapon | BowWeapon | ShieldWeapon;
-export type WeaponId = 'rusty_sword' | 'blood_sword' | 'spear' | 'twin_daggers' | 'war_hammer' | 'hunter_bow' | 'old_shield';
+export type WeaponId =
+  | 'rusty_sword' | 'blood_sword' | 'spear' | 'twin_daggers' | 'war_hammer' | 'hunter_bow' | 'old_shield'
+  | 'bone_cleaver' | 'reaper_scythe' | 'stitch_needle' | 'widow_fangs' | 'coffin_lid' | 'marrow_bow';
 
 const RED = '#ff7a6a';
 const STEEL = '#e8f4ff';
 const PURPLE = '#c690ff';
 const GREEN = '#9bff7a';
+const BONE = '#f0e6d2';
+const BLOOD = '#ff4a58';
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
   rusty_sword: {
@@ -138,6 +152,67 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     parryWindow: 0.2,
     parryStun: 1.5,
     moveScale: 0.4,
+  },
+
+  // ---- unique weapons (docs/CONTENT3.md §5): the base tables sit ~15 % above the DPS of their family's item, the signature on top ----
+  bone_cleaver: {
+    kind: 'melee',
+    resetDelay: 0.3,
+    bleed: 3,
+    critBleeding: true,
+    hits: [
+      { anim: 'sword_1', windup: 0.08, active: 0.06, recover: 0.17, damage: 17, box: { x: 0, y: -46, w: 50, h: 42 }, lunge: 190, knockback: 100, hitstop: 0.06, shake: 1.5, swing: 'swing', hit: 'hit', slash: { radius: 44, from: -1.1, to: 0.8, color: BONE, width: 8 } },
+      { anim: 'sword_2', windup: 0.08, active: 0.06, recover: 0.17, damage: 17, box: { x: 0, y: -46, w: 50, h: 42 }, lunge: 190, knockback: 100, hitstop: 0.06, shake: 1.5, swing: 'swing', hit: 'hit', slash: { radius: 44, from: 0.9, to: -0.9, color: BLOOD, width: 8 } },
+      { anim: 'sword_3', windup: 0.1, active: 0.08, recover: 0.28, damage: 28, box: { x: 0, y: -52, w: 56, h: 48 }, lunge: 260, knockback: 220, knockup: 80, hitstop: 0.08, shake: 2.5, swing: 'swing_heavy', hit: 'hit_heavy', slash: { radius: 50, from: -2.0, to: 0.9, color: BLOOD, width: 10, life: 0.2 } },
+    ],
+  },
+  reaper_scythe: {
+    kind: 'melee',
+    resetDelay: 0.35,
+    healOnKill: 0.08,
+    hits: [
+      { anim: 'hammer_1', windup: 0.14, active: 0.08, recover: 0.3, damage: 32, box: { x: -22, y: -60, w: 94, h: 60 }, lunge: 110, knockback: 160, hitstop: 0.08, shake: 2.5, swing: 'swing_heavy', hit: 'hit_heavy', slash: { radius: 60, from: -2.6, to: 0.5, color: BLOOD, width: 10, life: 0.22 } },
+      { anim: 'hammer_2', windup: 0.14, active: 0.08, recover: 0.32, damage: 38, box: { x: -40, y: -52, w: 118, h: 52 }, lunge: 90, knockback: 200, hitstop: 0.08, shake: 2.5, swing: 'swing_heavy', hit: 'hit_heavy', slash: { radius: 64, from: 0.9, to: -1.7, color: BONE, width: 10, life: 0.22 } },
+    ],
+  },
+  stitch_needle: {
+    kind: 'melee',
+    resetDelay: 0.3,
+    critAfterRoll: 2,
+    hits: [
+      { anim: 'spear_1', windup: 0.09, active: 0.06, recover: 0.16, damage: 18, box: { x: 4, y: -34, w: 68, h: 16 }, lunge: 120, knockback: 110, hitstop: 0.05, shake: 1, swing: 'stab', hit: 'hit', slash: { radius: 66, from: -0.12, to: 0.12, color: BONE, width: 4, life: 0.12 } },
+      { anim: 'spear_2', windup: 0.09, active: 0.06, recover: 0.16, damage: 18, box: { x: 4, y: -34, w: 68, h: 16 }, lunge: 120, knockback: 110, hitstop: 0.05, shake: 1, swing: 'stab', hit: 'hit', slash: { radius: 66, from: -0.12, to: 0.12, color: BONE, width: 4, life: 0.12 } },
+      { anim: 'spear_3', windup: 0.13, active: 0.07, recover: 0.27, damage: 28, box: { x: 4, y: -38, w: 74, h: 22 }, lunge: 300, knockback: 240, hitstop: 0.08, shake: 3, swing: 'swing_heavy', hit: 'hit_heavy', slash: { radius: 72, from: -0.18, to: 0.18, color: BLOOD, width: 6, life: 0.16 } },
+    ],
+  },
+  widow_fangs: {
+    kind: 'melee',
+    resetDelay: 0.28,
+    critAfterHurt: 3,
+    hits: [
+      { anim: 'dagger_1', windup: 0.04, active: 0.04, recover: 0.08, damage: 8, box: { x: 0, y: -42, w: 32, h: 36 }, lunge: 220, knockback: 50, hitstop: 0.05, shake: 1, swing: 'swing', hit: 'hit', slash: { radius: 28, from: -0.9, to: 0.7, color: BLOOD, width: 5, life: 0.1 } },
+      { anim: 'dagger_2', windup: 0.04, active: 0.04, recover: 0.08, damage: 8, box: { x: 0, y: -42, w: 32, h: 36 }, lunge: 220, knockback: 50, hitstop: 0.05, shake: 1, swing: 'swing', hit: 'hit', slash: { radius: 28, from: 0.8, to: -0.8, color: BLOOD, width: 5, life: 0.1 } },
+      { anim: 'dagger_3', windup: 0.04, active: 0.04, recover: 0.08, damage: 8, box: { x: 0, y: -42, w: 32, h: 36 }, lunge: 220, knockback: 50, hitstop: 0.05, shake: 1, swing: 'swing', hit: 'hit', slash: { radius: 28, from: -0.7, to: 0.8, color: BLOOD, width: 5, life: 0.1 } },
+      { anim: 'dagger_4', windup: 0.06, active: 0.05, recover: 0.14, damage: 12, box: { x: 0, y: -44, w: 36, h: 40 }, lunge: 260, knockback: 130, hitstop: 0.06, shake: 1.5, swing: 'swing_heavy', hit: 'hit_heavy', slash: { radius: 32, from: -1.4, to: 0.9, color: BONE, width: 7, life: 0.14 } },
+    ],
+  },
+  coffin_lid: {
+    kind: 'shield',
+    reduction: 0.9,
+    parryWindow: 0.2,
+    parryStun: 1.5,
+    moveScale: 0.4,
+    shockwave: { radius: 72, damage: 30, stun: 1.5 },
+  },
+  marrow_bow: {
+    kind: 'bow',
+    damage: 34,
+    drawTime: 0.45,
+    minFrac: 0.35,
+    minSpeed: 380,
+    maxSpeed: 700,
+    moveScale: 0.4,
+    pierce: true,
   },
 };
 

@@ -4,7 +4,7 @@ import type { LevelUI } from './levelUI';
 import type { Entity } from '../entity';
 import type { Interactable } from '../world';
 import type { ItemInstance } from '../items/types';
-import { ITEMS, itemName, itemLines } from '../items/items';
+import { ITEMS, UNIQUE_COLOR, UNIQUE_TAG, itemColor, itemName, itemLines } from '../items/items';
 import { COLOR_HEX } from '../combat';
 import { touchView } from './touch';
 import { drawVButtons, vbLayout, type VSkillView } from './vbuttons';
@@ -551,10 +551,11 @@ export class Hud {
     const bx = clamp(Math.round(sx - bw / 2), 4, W - 4 - bw);
     const by = clamp(Math.round(anchorY - bh), 82, H - 60);
     const rect = { x: bx, y: by, w: bw, h: bh };
-    // card first (behind the bubble)
+    // card first (behind the bubble); unique items get the bone-gold frame and name
     const item = itemOf(e);
     if (item) this.drawItemCard(c, W, rect);
-    panel(c, rect.x, rect.y, rect.w, rect.h, { fill: '#0b0e1a', alpha: 0.92, stroke: COL.cyan, lineWidth: 1.5, r: 6 });
+    const accent = item && ITEMS[item.id].unique ? UNIQUE_COLOR : COL.cyan;
+    panel(c, rect.x, rect.y, rect.w, rect.h, { fill: '#0b0e1a', alpha: 0.92, stroke: accent, lineWidth: 1.5, r: 6 });
     // tail
     c.fillStyle = '#0b0e1a';
     c.beginPath();
@@ -564,7 +565,7 @@ export class Hud {
     c.lineTo(tx, rect.y + rect.h + 5);
     c.closePath();
     c.fill();
-    text(c, label, rect.x + rect.w / 2, rect.y + (sub ? 13 : rect.h / 2 + 0.5), { align: 'center', bold: true, color: COL.cyan });
+    text(c, label, rect.x + rect.w / 2, rect.y + (sub ? 13 : rect.h / 2 + 0.5), { align: 'center', bold: true, color: accent });
     if (sub) text(c, sub, rect.x + rect.w / 2, rect.y + 28, { align: 'center', color: COL.gold });
     game.taps.add({ id: 'hud-interact', rect: atLeast(rect, 56, 40), mode: 'up', onTap: () => game.input.tap('interact') });
   }
@@ -574,16 +575,24 @@ export class Hud {
     const item = itemOf(e);
     if (!item) return;
     const def = ITEMS[item.id];
-    const w = 204;
+    const w = def.unique ? 236 : 204;
     const textW = w - 60;
-    const lines = itemLines(item).flatMap((l, i) => wrap(c, l, textW, SZ.s).map((s) => ({ s, color: i === 0 ? COL.text : COL.amber })));
+    const sig = def.unique ? itemLines(item).length - 1 : -1; // the signature line of a unique item is its last
+    const accent = itemColor(item.id);
+    const lines = itemLines(item).flatMap((l, i) => wrap(c, l, textW, SZ.s).map((s) => ({ s, color: i === 0 ? COL.text : i === sig ? accent : COL.amber })));
     const h = Math.max(46, 24 + lines.length * 13 + 8);
     const x = clamp(Math.round(bubble.x + bubble.w / 2 - w / 2), 4, W - 4 - w);
     const y = Math.max(4, bubble.y - h - 8);
-    const accent = COLOR_HEX[def.color];
     panel(c, x, y, w, h, { fill: '#0b0e1a', alpha: 0.94, stroke: accent, lineWidth: 1.5, r: 6 });
     icon(this.ui.game.assets, c, def.icon, x + 28, y + h / 2, 36);
-    text(c, itemName(item), x + 52, y + 12, { bold: true, color: accent });
+    const name = itemName(item);
+    text(c, name, x + 52, y + 12, { bold: true, color: accent });
+    if (def.unique) {
+      const tw = Math.round(textWidth(c, UNIQUE_TAG, SZ.s)) + 8;
+      const tx = x + 52 + Math.round(textWidth(c, name, SZ.s, true)) + 6;
+      panel(c, tx, y + 5, tw, 15, { fill: '#2a2210', alpha: 0.9, stroke: accent, r: 3 });
+      text(c, UNIQUE_TAG, tx + tw / 2, y + 12.5, { align: 'center', color: accent });
+    }
     lines.forEach((l, i) => text(c, l.s, x + 52, y + 27 + i * 13, { color: l.color }));
   }
 

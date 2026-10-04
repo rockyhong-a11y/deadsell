@@ -66,7 +66,7 @@ interface Swing {
 }
 
 interface BowState { slot: number; item: ItemInstance; def: BowWeapon; btn: Btn; t: number; phase: 'draw' | 'shoot'; full: boolean; drawTime: number }
-interface BlockState { slot: number; item: ItemInstance; def: ShieldWeapon; btn: Btn; t: number; reflected: WeakSet<object> }
+interface BlockState { slot: number; item: ItemInstance; def: ShieldWeapon; btn: Btn; t: number; reflected: WeakSet<object>; waved: boolean }
 interface CastState { slot: number; item: ItemInstance; def: SkillDef; t: number; fired: boolean }
 interface LedgeState { t: number; x0: number; y0: number; x1: number; y1: number; dir: 1 | -1 }
 
@@ -95,6 +95,9 @@ export class Player extends Actor {
   private djT = 0;
   private dropT = 0;
   private ledgeCd = 0;
+  /** seconds since the last roll ended / since the last hit taken (unique weapons: crit windows); huge = never */
+  private sinceRoll = Infinity;
+  private sinceHurt = Infinity;
   private rollT = 0;
   private rollDir: 1 | -1 = 1;
   private rollCd = 0;
@@ -224,9 +227,13 @@ export class Player extends Actor {
     w.addHitstop(feel.hitstop + (crit ? 0.03 : 0));
     w.shake(feel.shake + (crit ? 1 : 0), 0.12);
     w.audio.play(crit ? 'crit' : feel.sfx ?? 'hit');
-    if (res.killed && item?.affix === 'heal_on_kill' && !this.dying) {
-      this.heal(Math.max(1, Math.round(this.maxHp * AFFIX.healPct)));
-      w.particles.emit('heal', this.x, this.y - 24, { count: 6 });
+    if (res.killed && !this.dying) {
+      const wd = item ? weaponDef(item.id) : null;
+      const pct = (item?.affix === 'heal_on_kill' ? AFFIX.healPct : 0) + (wd?.kind === 'melee' ? wd.healOnKill ?? 0 : 0);
+      if (pct > 0) {
+        this.heal(Math.max(1, Math.round(this.maxHp * pct)));
+        w.particles.emit('heal', this.x, this.y - 24, { count: 6 });
+      }
     }
   }
 
@@ -287,6 +294,8 @@ export class Player extends Actor {
   private tickTimers(dt: number): void {
     this.rollCd -= dt;
     this.ledgeCd -= dt;
+    this.sinceRoll += dt;
+    this.sinceHurt += dt;
     this.landT -= dt;
     this.djT -= dt;
     this.parryAnimT -= dt;
@@ -523,6 +532,7 @@ export class Player extends Actor {
     if (this.rollT >= ROLL_DUR) {
       this.mode = 'free';
       this.rollCd = 0.1;
+      this.sinceRoll = 0;
       const mx = this.moveDir();
       this.vx = mx ? mx * RUN_SPEED : this.rollDir * RUN_SPEED * 0.4;
     }
@@ -761,12 +771,19 @@ export class Player extends Actor {
     return false;
   }
 
+  /** Unique weapons: crit against a bleeding target / for a while after a roll / after taking damage. */
+  private signatureCrit(def: MeleeWeapon, target: Actor): boolean {
+    if (def.critBleeding && target.status.bleed > 0) return true;
+    if (def.critAfterRoll !== undefined && this.sinceRoll <= def.critAfterRoll) return true;
+    return def.critAfterHurt !== undefined && this.sinceHurt <= def.critAfterHurt;
+  }
+
   private swingHit(a: Swing): void {
     const h = a.hit;
     const box = this.hitBox(h);
     const infos = new Map<Actor, DamageInfo>();
     const reports = hitArea(this.world, box, 'player', (t) => {
-      const crit = h.crit === 'always' || (h.crit === 'behind' && isBehind(this, t));
+      const crit = h.crit === 'always' || (h.crit === 'behind' && isBehind(this, t)) || this.signatureCrit(a.def, t);
       const info = this.damageInfo(a.item, h.damage, { dir: this.facing, knockback: h.knockback, knockup: h.knockup, stun: h.stun, crit, kind: 'melee' });
       if (crit) info.amount *= CRIT_MULT;
       if (a.def.bleed) info.bleed = Math.max(info.bleed ?? 0, a.def.bleed);
@@ -818,7 +835,7 @@ export class Player extends Actor {
     const frac = b.def.minFrac + (1 - b.def.minFrac) * c;
     const speed = lerp(b.def.minSpeed, b.def.maxSpeed, c);
     const info = this.damageInfo(b.item, b.def.damage * frac, { kind: 'ranged', dir: this.facing, knockback: 50 + 150 * c, knockup: c >= 1 ? 60 : undefined });
-    const arrow = new Arrow(this.x + this.facing * 14, this.y - 26, this.facing * speed, 0, this, b.item, info, { hitstop: 0.04 + 0.04 * c, shake: 1 + c, sfx: 'arrow_hit' });
+    const arrow = new Arrow(this.x + this.facing * 14, this.y - 26, this.facing * speed, 0, this, b.item, info, { hitstop: 0.04 + 0.04 * c, shake: 1 + c, sfx: 'arrow_hit' }, !!b.def.pierce && c >= 1);
     w.spawn(arrow);
     w.audio.play('bow_shoot', { pitch: 0.9 + 0.2 * c });
     w.particles.emit('spark', this.x + this.facing * 16, this.y - 26, { dir: this.facing, count: 2 });
@@ -838,7 +855,7 @@ export class Player extends Actor {
   // ---------------------------------------------------------------- shield
   private startBlock(slot: number, item: ItemInstance, def: ShieldWeapon, btn: Btn): void {
     this.mode = 'block';
-    this.blk = { slot, item, def, btn, t: 0, reflected: new WeakSet() };
+    this.blk = { slot, item, def, btn, t: 0, reflected: new WeakSet(), waved: false };
     this.parryAnimT = 0;
     this.anim?.play('shield_block', true);
   }
@@ -887,6 +904,31 @@ export class Player extends Actor {
     w.fx.screenFlash('#ffffff', 0.12, 0.3);
     w.addHitstop(0.12);
     w.shake(3, 0.15);
+    if (b?.def.shockwave && !b.waved) {
+      b.waved = true;
+      this.parryShockwave(b.item, b.def.shockwave);
+    }
+  }
+
+  /** 관 뚜껑: a parry sends out a shockwave around the heroine (unblockable, stuns). */
+  private parryShockwave(item: ItemInstance, sw: { radius: number; damage: number; stun: number }): void {
+    const w = this.world;
+    const cx = this.x;
+    const cy = this.y - 20;
+    const infos = new Map<Actor, DamageInfo>();
+    const reports = hitArea(w, { x: cx - sw.radius, y: cy - sw.radius, w: sw.radius * 2, h: sw.radius * 2 }, 'player', (t) => {
+      const b = t.hurtbox();
+      const nx = clamp(cx, b.x, b.x + b.w);
+      const ny = clamp(cy, b.y, b.y + b.h);
+      if (Math.hypot(nx - cx, ny - cy) > sw.radius) return null;
+      const info = this.damageInfo(item, sw.damage, { kind: 'explosion', unblockable: true, dir: sign(t.x - this.x) || this.facing, knockback: 160, stun: sw.stun });
+      infos.set(t, info);
+      return info;
+    });
+    for (const r of reports) this.onDealt(r, item, infos.get(r.target)!, { hitstop: 0.06, shake: 2, sfx: 'hit_heavy' });
+    w.fx.ring(cx, this.y - 4, { radius: sw.radius, color: '#f0e6d2', life: 0.35, flat: 0.45 });
+    w.particles.emit('slam', this.x, this.y, { count: 12, color: '#f0e6d2' });
+    w.audio.play('slam', { vol: 0.8, pitch: 1.2 });
   }
 
   private isFrontal(info: DamageInfo): boolean {
@@ -928,6 +970,7 @@ export class Player extends Actor {
       this.die(info);
       return { applied: true, amount, killed: true, blocked: true };
     }
+    this.sinceHurt = 0;
     this.addRecoverable(amount);
     w.emit({ type: 'playerHurt', amount });
     return { applied: true, amount, killed: false, blocked: true };
@@ -938,6 +981,7 @@ export class Player extends Actor {
     this.addRecoverable(amount);
     w.emit({ type: 'playerHurt', amount });
     if (info.kind === 'dot') return;
+    this.sinceHurt = 0;
     this.cancelActions();
     this.mode = 'hurt';
     this.hurtT = 0.28;

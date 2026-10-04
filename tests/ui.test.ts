@@ -127,7 +127,7 @@ describe('meta progression', () => {
     }
     const unlockable = META_UPGRADES.filter((u) => u.item).map((u) => u.item!);
     const starter = defaultSave().unlocked;
-    for (const id of Object.keys(ITEMS)) expect([...starter, ...unlockable]).toContain(id);
+    for (const id of Object.keys(ITEMS)) if (!ITEMS[id as keyof typeof ITEMS].unique) expect([...starter, ...unlockable]).toContain(id);
     const bp = META_UPGRADES.find((u) => u.id === 'unlock_spear')!;
     expect(bp.name).toContain(ITEMS.spear.name);
   });

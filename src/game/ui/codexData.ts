@@ -1,7 +1,7 @@
 import { ITEM_IDS, type AffixId, type ItemId } from '../items/types';
-import { AFFIX_NAMES, COLOR_NAMES, ITEMS, affixPool } from '../items/items';
+import { AFFIX_NAMES, COLOR_NAMES, ITEMS, UNIQUE_COLOR, UNIQUE_TAG, affixPool, signatureText, uniquePrice } from '../items/items';
 import { WEAPONS, type MeleeWeapon, type WeaponId } from '../player/weapons';
-import { SKILLS, SKILL_BASE } from '../player/skills';
+import { BONE_SPIKES, CHAIN_HOOK, CORPSE_BOMB, SKILLS, SKILL_BASE, SOUL_LANTERN, type SkillId } from '../player/skills';
 import { GRENADE, Turret, WolfTrap } from '../player/projectiles';
 import {
   ALL_ENEMY_KINDS, BASE_KINDS, BASE_STATS, ENEMY_DEFS, LATE_DEPTH, type BaseKind, type EnemyDef, type EnemyKind,
@@ -101,6 +101,8 @@ export interface CodexEntry {
 // helpers
 
 const HEROINE = 'heroine';
+/** the colour of corpse pieces (`PIECE_COLOR` of items/pickups.ts is a UI-side constant; same value) */
+const COL_PIECE = '#e8d7c3';
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 const num = (v: number): string => String(Math.round(v * 100) / 100);
 const secs = (v: number): string => `${num(v)}초`;
@@ -113,6 +115,25 @@ const affixList = (id: ItemId): string => affixPool(id).map((a) => AFFIX_SHORT[a
 /** the damage multiplier line shared by every weapon / skill ("성장") */
 const scaling = (color: keyof typeof COLOR_NAMES): string =>
   `${COLOR_NAMES[color]} 레벨당 피해 +${pct(SCROLL.dmgPerLevel)} · 티어당 +${pct(TIER_DMG)}`;
+
+/** name colour / tag / list heading of a weapon or skill page: unique items get the bone-gold name and the 유니크 tag */
+function uniqueHead(id: ItemId, color: keyof typeof COLOR_NAMES, tag: string): Pick<CodexEntry, 'name' | 'nameColor' | 'tag' | 'group'> {
+  const d = ITEMS[id];
+  return d.unique
+    ? { name: d.name, nameColor: UNIQUE_COLOR, tag: `${UNIQUE_TAG} · ${tag}`, group: UNIQUE_TAG }
+    : { name: d.name, nameColor: COLOR_HEX[color], tag };
+}
+
+/** a unique item's page starts with its signature and ends with where it is sold; no affix can roll on it */
+function uniqueRows(id: ItemId, rows: CodexRow[]): CodexRow[] {
+  if (!ITEMS[id].unique) return rows;
+  const out = rows.map((r) => (r.label === '접사' ? { ...r, text: '붙지 않음 (유니크는 접사가 없다)' } : r));
+  return [
+    { label: '고유 효과', text: signatureText(id), color: UNIQUE_COLOR },
+    ...out,
+    { label: '가격', text: `시체 상점 · ${uniquePrice(id, 1)}조각 (회차 배율)`, color: COL_PIECE },
+  ];
+}
 
 const AFFIX_SHORT: Record<AffixId, string> = {
   burn: '화상', bleed: '출혈', dmg: `피해 +${pct(AFFIX.dmgMul - 1)}`, speed: `공속 +${pct(1 - AFFIX.speedMul)}`, heal_on_kill: '처치 회복',
@@ -129,6 +150,7 @@ function meleeRows(w: MeleeWeapon): CodexRow[] {
   const always = hits.map((h, i) => (h.crit === 'always' ? `${i + 1}타` : '')).filter(Boolean);
   const special: string[] = [];
   if (w.bleed) special.push(`출혈 ${secs(w.bleed)} (적중마다 중첩)`);
+  if (w.healOnKill) special.push(`처치할 때마다 최대 체력의 ${pct(w.healOnKill)} 회복`);
   const stuns = uniq(hits.map((h) => h.stun ?? 0).filter((s) => s > 0));
   if (stuns.length) special.push(`기절 ${stuns.map(num).join(' / ')}초`);
   const ups = hits.map((h, i) => (h.knockup ? `${i + 1}타` : '')).filter(Boolean);
@@ -143,7 +165,10 @@ function meleeRows(w: MeleeWeapon): CodexRow[] {
     {
       label: '치명타',
       text: always.length ? `${always.join('·')} 치명타 확정 (피해 ×${CRIT_MULT})`
-        : hits.some((h) => h.crit === 'behind') ? `적의 등 뒤를 맞히면 치명타 (피해 ×${CRIT_MULT})` : '없음',
+        : hits.some((h) => h.crit === 'behind') ? `적의 등 뒤를 맞히면 치명타 (피해 ×${CRIT_MULT})`
+        : w.critBleeding ? `출혈 중인 적을 맞히면 치명타 (피해 ×${CRIT_MULT})`
+        : w.critAfterRoll ? `구르기가 끝난 뒤 ${secs(w.critAfterRoll)} 동안 모든 타격이 치명타 (피해 ×${CRIT_MULT})`
+        : w.critAfterHurt ? `피해를 입은 뒤 ${secs(w.critAfterHurt)} 동안 모든 타격이 치명타 (피해 ×${CRIT_MULT})` : '없음',
     },
     { label: '특수', text: special.join(' · ') },
   ];
@@ -163,7 +188,7 @@ function weaponEntry(id: WeaponId): CodexEntry {
       { label: '피해', text: `완전히 당기면 ${w.damage} · 짧게 탭하면 ${pct(w.minFrac)}` },
       { label: '충전', text: `${secs(w.drawTime)} · 화살 속도 ${w.minSpeed}–${w.maxSpeed}px/s` },
       { label: '이동', text: `당기는 동안 이동 속도 ${pct(w.moveScale)}` },
-      { label: '특수', text: '원거리 · 길게 눌러 조준하고 떼면 발사' },
+      { label: '특수', text: w.pierce ? '원거리 · 완전히 당긴 화살은 적을 관통' : '원거리 · 길게 눌러 조준하고 떼면 발사' },
     ];
     steps = [{ anim: 'bow_draw', dur: w.drawTime, hold: 0.04 }, { anim: 'bow_shoot', hold: 0.8 }];
     prop = { sheet: 'projectiles', steps: [{ anim: 'arrow' }], dx: 26, dy: -32, start: w.drawTime + 0.05, motion: 'fly', travel: 92, flight: 0.35 };
@@ -171,23 +196,21 @@ function weaponEntry(id: WeaponId): CodexEntry {
     rows = [
       { label: '막기', text: `정면 피해 -${pct(w.reduction)} (이동 속도 ${pct(w.moveScale)})` },
       { label: '패링', text: `막기 직후 ${secs(w.parryWindow)} 안에 맞으면 패링 · 공격한 적 기절 ${secs(w.parryStun)}` },
-      { label: '특수', text: '공격 수단이 없는 방어 전용 장비' },
+      { label: '특수', text: w.shockwave ? `패링하면 충격파 · 반경 ${w.shockwave.radius}px, 피해 ${w.shockwave.damage}, 기절 ${secs(w.shockwave.stun)}, 방어 불가` : '공격 수단이 없는 방어 전용 장비' },
     ];
     steps = [{ anim: 'shield_block', hold: 0.9 }, { anim: 'shield_parry', hold: 0.9 }];
   }
-  rows.push({ label: '성장', text: w.kind === 'shield' ? '방어량은 성장하지 않음 · 접사로 처치 회복만 가능' : scaling(def.color) });
+  rows.push({ label: '성장', text: w.kind === 'shield' ? (w.shockwave ? `방어량은 성장하지 않음 · 충격파 피해는 ${scaling(def.color)}` : '방어량은 성장하지 않음 · 접사로 처치 회복만 가능') : scaling(def.color) });
   rows.push({ label: '접사', text: affixList(id) });
   return {
-    id, tab: 'weapon', name: def.name, nameColor: COLOR_HEX[def.color], tag: `${KIND_LABEL[def.kind]} · ${COLOR_NAMES[def.color]}`,
-    desc: def.desc, icon: { sheet: 'icons', anim: def.icon }, rows,
+    id, tab: 'weapon', ...uniqueHead(id, def.color, `${KIND_LABEL[def.kind]} · ${COLOR_NAMES[def.color]}`),
+    desc: def.desc, icon: { sheet: 'icons', anim: def.icon }, rows: uniqueRows(id, rows),
     preview: { sheet: HEROINE, steps, rest: 'idle', ground: true, prop },
   };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 // skills
-
-type SkillId = keyof typeof SKILL_BASE;
 
 function skillEntry(id: SkillId): CodexEntry {
   const def = ITEMS[id];
@@ -198,7 +221,7 @@ function skillEntry(id: SkillId): CodexEntry {
     { label: '시전', text: `${sk.anim === 'throw' ? '던지기' : '설치'} ${secs(sk.castTime)} · 이동 속도 ${pct(sk.moveScale)}` },
   ];
   let steps: PreviewStep[] = [{ anim: sk.anim, dur: sk.castTime, hold: 1.4 }];
-  let prop: PreviewProp;
+  let prop: PreviewProp | undefined;
   if (id === 'fire_grenade') {
     const g = GRENADE.fire;
     rows.push(
@@ -220,19 +243,44 @@ function skillEntry(id: SkillId): CodexEntry {
     );
     prop = { sheet: 'projectiles', steps: [{ anim: 'turret_deploy', hold: 0.1 }, { anim: 'turret_idle', dur: 0.6 }, { anim: 'turret_shoot', hold: 0.1 }, { anim: 'turret_idle', dur: 0.5 }], dx: 24, dy: -14, start: sk.fireAt };
     steps = [{ anim: sk.anim, dur: sk.castTime, hold: 3.2 }];
-  } else {
+  } else if (id === 'wolf_trap') {
     rows.push(
       { label: '피해', text: `덫에 걸린 적 ${base}` },
       { label: '효과', text: `밟은 첫 적을 ${secs(WolfTrap.ROOT)} 속박 (기절)` },
     );
     prop = { sheet: 'projectiles', steps: [{ anim: 'trap_open', dur: 1.2, hold: 0 }, { anim: 'trap_snap', hold: 0.9 }], dx: 26, dy: -6, start: sk.fireAt };
     steps = [{ anim: sk.anim, dur: sk.castTime, hold: 2.4 }];
+  } else if (id === 'corpse_bomb') {
+    const c = CORPSE_BOMB;
+    rows.push(
+      { label: '피해', text: `폭발 ${base} (반경 ${c.radius}px) · 넉백` },
+      { label: '효과', text: `폭발에 쓰러진 적은 한 번 더 폭발한다 (반경 ${c.chain.radius}px, 피해 ${c.chain.base} · 연쇄는 한 번뿐)` },
+    );
+    prop = { sheet: 'projectiles', steps: [{ anim: 'fire_grenade' }], dx: 8, dy: -30, start: sk.fireAt, motion: 'lob', travel: 62, flight: 0.55, blast: { radius: c.radius, color: '#f0e6d2' } };
+  } else if (id === 'bone_spikes') {
+    const b = BONE_SPIKES;
+    rows.push(
+      { label: '피해', text: `뼈 가시 하나당 ${base} (같은 적이 여러 개에 맞을 수 있다)` },
+      { label: '효과', text: `앞쪽 바닥에서 뼈 가시 ${b.count}개가 ${secs(b.interval)} 간격으로 ${b.spacing}px씩 솟는다 · 맞은 적은 떠오른다 (띄우기 ${b.knockup})` },
+    );
+  } else if (id === 'soul_lantern') {
+    const l = SOUL_LANTERN;
+    rows.push(
+      { label: '피해', text: `영혼불에 닿은 적 ${base} + ${secs(l.burn)} 화상 (초당 ${l.burnDps})` },
+      { label: '효과', text: `영혼불 ${l.flames}개가 ${secs(l.life)} 동안 반경 ${l.radius}px로 신더 주위를 돈다 · 같은 적에게는 ${secs(l.hitCd)}마다` },
+    );
+  } else {
+    const h = CHAIN_HOOK;
+    rows.push(
+      { label: '피해', text: `갈고리에 맞은 첫 적 ${base} + 기절 ${secs(h.stun)}` },
+      { label: '효과', text: `${h.range}px 앞까지 날아가 맞은 적을 신더 앞으로 끌어온다 · 넉백이 거의 없는 적(넉백 ${pct(h.pullMinKnockback)} 미만)은 끌려오지 않고 기절만` },
+    );
   }
   rows.push({ label: '성장', text: scaling(def.color) });
   rows.push({ label: '접사', text: affixList(id) });
   return {
-    id, tab: 'skill', name: def.name, nameColor: COLOR_HEX[def.color], tag: `스킬 · ${COLOR_NAMES[def.color]}`,
-    desc: def.desc, icon: { sheet: 'icons', anim: def.icon }, rows,
+    id, tab: 'skill', ...uniqueHead(id, def.color, `스킬 · ${COLOR_NAMES[def.color]}`),
+    desc: def.desc, icon: { sheet: 'icons', anim: def.icon }, rows: uniqueRows(id, rows),
     preview: { sheet: HEROINE, steps, rest: 'idle', ground: true, prop },
   };
 }

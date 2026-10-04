@@ -76,9 +76,10 @@ export function buyUpgrade(u: MetaUpgrade, run: RunState, save: SaveData): BuyRe
   return 'ok';
 }
 
-/** How many of the catalogue's items are unlocked (title screen stat). */
+/** How many of the catalogue's items are unlocked (title screen stat). Unique items cannot be unlocked: they are not counted. */
 export function unlockedCount(save: SaveData): { have: number; total: number } {
-  return { have: save.unlocked.length, total: Object.keys(ITEMS).length };
+  const normal = (Object.keys(ITEMS) as ItemId[]).filter((id) => !ITEMS[id].unique);
+  return { have: save.unlocked.filter((id) => normal.includes(id)).length, total: normal.length };
 }
 
 /** Initialise a new run from the meta save (flasks, gold, starting equipment). */

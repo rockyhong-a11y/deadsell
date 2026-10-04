@@ -1,4 +1,4 @@
-import { ITEM_IDS, STARTER_UNLOCKS, type ItemId } from '../items/types';
+import { ITEM_IDS, STARTER_UNLOCKS, UNIQUE_IDS, type ItemId } from '../items/types';
 import { DEFAULT_GFX, sanitizeGfx, type GfxSettings } from '../../engine/filters';
 import { DEFAULT_PAD_MAP, sanitizePadMap, type PadMap } from '../../engine/gamepad';
 import { CORPSE } from '../rules';
@@ -79,7 +79,7 @@ export function loadSave(): SaveData {
     if (!raw) return base;
     const d = JSON.parse(raw);
     if (!d || typeof d !== 'object') return base;
-    const known = new Set<string>(ITEM_IDS);
+    const known = new Set<string>(ITEM_IDS.filter((id) => !UNIQUE_IDS.includes(id)));
     const unlocked = Array.isArray(d.unlocked) ? (d.unlocked as unknown[]).filter((id): id is ItemId => typeof id === 'string' && known.has(id)) : [];
     const up = d.upgrades && typeof d.upgrades === 'object' ? d.upgrades : {};
     const st = d.settings && typeof d.settings === 'object' ? d.settings : {};

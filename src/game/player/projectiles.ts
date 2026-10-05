@@ -644,12 +644,17 @@ export class ChainHook extends Entity {
     const a = this.victim!;
     const o = this.owner;
     this.pullT += dt;
-    if (a.dead || !a.targetable || this.pullT > 0.8) {
+    if (a.dead || !a.targetable) {
       this.dead = true;
       return;
     }
+    // the stun starts when the pull ends: it is held at its full length while the victim is dragged
     a.vx = 0;
-    a.status.stun = Math.max(a.status.stun, 0.2);
+    a.status.stun = Math.max(a.status.stun, this.spec.stun);
+    if (this.pullT > 0.8) {
+      this.dead = true;
+      return;
+    }
     const gx = o.x + o.facing * (o.w / 2 + a.w / 2 + 6);
     const dx = gx - a.x;
     const dy = o.y - a.y;

@@ -13,7 +13,7 @@ import { ITEM_IDS, STARTER_UNLOCKS, UNIQUE_IDS, type ItemId, type ItemInstance }
 import { Rng } from '../src/engine/rng';
 import { CorpseShopItem, corpseShopStock } from '../src/game/props';
 import { buildLevel, populateLevel } from '../src/game/level/build';
-import { WEAPONS, type MeleeWeapon } from '../src/game/player/weapons';
+import { WEAPONS, type BowWeapon, type MeleeWeapon, type ShieldWeapon, type WeaponDef } from '../src/game/player/weapons';
 import { BONE_SPIKES, CHAIN_HOOK, CORPSE_BOMB, SKILLS, SKILL_BASE, SOUL_LANTERN } from '../src/game/player/skills';
 import { Arrow, BoneSpikes, ChainHook, Grenade, SoulFlames } from '../src/game/player/projectiles';
 import { buildCodex, codexEntries } from '../src/game/ui/codexData';
@@ -87,6 +87,16 @@ const dpsOf = (w: MeleeWeapon, withCrit: boolean): number => {
   return dmg / time;
 };
 
+/** a weapon table narrowed by its `kind` (throws when the id is of another kind) */
+function weapon<K extends WeaponDef['kind']>(id: keyof typeof WEAPONS, kind: K): Extract<WeaponDef, { kind: K }> {
+  const w = WEAPONS[id];
+  if (w.kind !== kind) throw new Error(`${id} is a ${w.kind}, not a ${kind}`);
+  return w as Extract<WeaponDef, { kind: K }>;
+}
+const melee = (id: keyof typeof WEAPONS): MeleeWeapon => weapon(id, 'melee');
+const bowOf = (id: keyof typeof WEAPONS): BowWeapon => weapon(id, 'bow');
+const shieldOf = (id: keyof typeof WEAPONS): ShieldWeapon => weapon(id, 'shield');
+
 // ---------------------------------------------------------------------------------------------------------------------
 describe('the catalogue of unique items (docs/CONTENT3.md §5)', () => {
   const spec: [ItemId, string, string, string, string, number][] = [
@@ -127,17 +137,17 @@ describe('the catalogue of unique items (docs/CONTENT3.md §5)', () => {
   });
 
   it('weapon families: sword 3 hits, hammer 2 sweeps (faster), spear 3 thrusts, daggers 4 hits (anims of the family)', () => {
-    const anims = (id: keyof typeof WEAPONS) => (WEAPONS[id] as MeleeWeapon).hits.map((h) => h.anim);
+    const anims = (id: keyof typeof WEAPONS) => melee(id).hits.map((h) => h.anim);
     expect(anims('bone_cleaver')).toEqual(['sword_1', 'sword_2', 'sword_3']);
     expect(anims('reaper_scythe')).toEqual(['hammer_1', 'hammer_2']);
     expect(anims('stitch_needle')).toEqual(['spear_1', 'spear_2', 'spear_3']);
     expect(anims('widow_fangs')).toEqual(['dagger_1', 'dagger_2', 'dagger_3', 'dagger_4']);
-    const dur = (id: keyof typeof WEAPONS) => (WEAPONS[id] as MeleeWeapon).hits.reduce((n, h) => n + h.windup + h.active + h.recover, 0);
+    const dur = (id: keyof typeof WEAPONS) => melee(id).hits.reduce((n, h) => n + h.windup + h.active + h.recover, 0);
     expect(dur('reaper_scythe')).toBeLessThan(dur('war_hammer'));
-    const hammerReach = Math.max(...(WEAPONS.war_hammer as MeleeWeapon).hits.map((h) => h.box.w));
-    expect(Math.max(...(WEAPONS.reaper_scythe as MeleeWeapon).hits.map((h) => h.box.w))).toBeGreaterThanOrEqual(hammerReach);
-    expect(WEAPONS.coffin_lid).toMatchObject({ kind: 'shield', reduction: 0.9, shockwave: { radius: 72, damage: 30, stun: 1.5 } });
-    expect(WEAPONS.marrow_bow).toMatchObject({ kind: 'bow', pierce: true });
+    const hammerReach = Math.max(...melee('war_hammer').hits.map((h) => h.box.w));
+    expect(Math.max(...melee('reaper_scythe').hits.map((h) => h.box.w))).toBeGreaterThanOrEqual(hammerReach);
+    expect(shieldOf('coffin_lid')).toMatchObject({ kind: 'shield', reduction: 0.9, shockwave: { radius: 72, damage: 30, stun: 1.5 } });
+    expect(bowOf('marrow_bow')).toMatchObject({ kind: 'bow', pierce: true });
   });
 
   it('balance: the base tables sit roughly 15 % above the DPS of their family (the signature comes on top)', () => {
@@ -145,11 +155,11 @@ describe('the catalogue of unique items (docs/CONTENT3.md §5)', () => {
       ['bone_cleaver', 'rusty_sword'], ['reaper_scythe', 'war_hammer'], ['stitch_needle', 'spear'], ['widow_fangs', 'twin_daggers'],
     ];
     for (const [u, base] of pairs) {
-      const r = dpsOf(WEAPONS[u] as MeleeWeapon, false) / dpsOf(WEAPONS[base] as MeleeWeapon, true);
+      const r = dpsOf(melee(u), false) / dpsOf(melee(base), true);
       expect(r, `${u} / ${base}`).toBeGreaterThan(1.05);
       expect(r, `${u} / ${base}`).toBeLessThan(1.25);
     }
-    const bow = (id: 'hunter_bow' | 'marrow_bow') => (WEAPONS[id].damage / WEAPONS[id].drawTime);
+    const bow = (id: 'hunter_bow' | 'marrow_bow') => bowOf(id).damage / bowOf(id).drawTime;
     expect(bow('marrow_bow') / bow('hunter_bow')).toBeGreaterThan(1.05);
     expect(bow('marrow_bow') / bow('hunter_bow')).toBeLessThan(1.25);
   });
@@ -166,10 +176,10 @@ describe('the catalogue of unique items (docs/CONTENT3.md §5)', () => {
       expect(signatureText(id), id).not.toMatch(/undefined|NaN/);
     }
     // numbers of the cards are the table numbers
-    expect(signatureText('reaper_scythe')).toContain(`${Math.round((WEAPONS.reaper_scythe as MeleeWeapon).healOnKill! * 100)}%`);
-    expect(signatureText('stitch_needle')).toContain(`${(WEAPONS.stitch_needle as MeleeWeapon).critAfterRoll}초`);
-    expect(signatureText('widow_fangs')).toContain(`${(WEAPONS.widow_fangs as MeleeWeapon).critAfterHurt}초`);
-    expect(signatureText('coffin_lid')).toContain(`${WEAPONS.coffin_lid.shockwave!.radius}px`);
+    expect(signatureText('reaper_scythe')).toContain(`${Math.round(melee('reaper_scythe').healOnKill! * 100)}%`);
+    expect(signatureText('stitch_needle')).toContain(`${melee('stitch_needle').critAfterRoll}초`);
+    expect(signatureText('widow_fangs')).toContain(`${melee('widow_fangs').critAfterHurt}초`);
+    expect(signatureText('coffin_lid')).toContain(`${shieldOf('coffin_lid').shockwave!.radius}px`);
     expect(signatureText('corpse_bomb')).toContain(`${CORPSE_BOMB.chain.radius}px`);
     expect(signatureText('bone_spikes')).toContain(`${BONE_SPIKES.count}개`);
     expect(signatureText('soul_lantern')).toContain(`${SOUL_LANTERN.flames}개`);
@@ -178,7 +188,7 @@ describe('the catalogue of unique items (docs/CONTENT3.md §5)', () => {
     expect(itemLines(item('coffin_lid'))[1]).toContain('-90%');
     expect(itemLines(item('old_shield'))[1]).toContain('-80%');
     // the card scales the damage figures of a signature with the tier
-    expect(signatureText('coffin_lid', (b) => b * 2)).toContain(`피해 ${WEAPONS.coffin_lid.shockwave!.damage * 2}`);
+    expect(signatureText('coffin_lid', (b) => b * 2)).toContain(`피해 ${shieldOf('coffin_lid').shockwave!.damage * 2}`);
   });
 });
 
@@ -247,7 +257,7 @@ describe('the 시체 상점 stocks three distinct uniques', () => {
   it('populateLevel puts three pedestals with distinct uniques (tier of the run, no affix) into the 쉼터', () => {
     for (const seed of [1, 7, 13]) {
       const t = setup();
-      t.run.tier = 2;
+      t.run.levelIndex = 3; // the second 쉼터: item tier 2
       t.world.entities.length = 0;
       populateLevel(t.world, buildLevel(LEVEL_SEQUENCE.find((l) => l.kind === 'passage')!, seed));
       steps(t.world, 1);
@@ -265,13 +275,99 @@ describe('the 시체 상점 stocks three distinct uniques', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
+describe('buying a unique at the 시체 상점 leaves a usable item', () => {
+  /** a pedestal with `id` in front of the heroine, and `pieces` carried; `toasts` records the toast events */
+  function shopFor(id: ItemId, pieces: number, loop = 1) {
+    const t = setup();
+    t.run.loop = loop;
+    const ped = new CorpseShopItem(t.p.x + 10, FLOOR, { id, tier: 1, affix: null }, loop);
+    t.world.spawn(ped);
+    steps(t.world, 1);
+    t.run.pieces = pieces;
+    const toasts: string[] = [];
+    t.world.on((e) => { if (e.type === 'toast') toasts.push(e.text); });
+    return { ...t, ped, toasts };
+  }
+  type Drop = { inst: ItemInstance; x: number; canInteract(): boolean; interact(): void };
+  const dropsOf = (t: Ctx): Drop[] => t.world.entities.filter((e): e is typeof e & Drop => !e.dead && (e as unknown as Drop).inst !== undefined);
+
+  it('too few pieces: error sound, toast, nothing spent, nothing dropped, the pedestal still sells', () => {
+    const t = shopFor('bone_cleaver', UNIQUE_PRICE.bone_cleaver! - 1);
+    t.ped.interact();
+    expect(t.sounds).toContain('error');
+    expect(t.toasts).toEqual(['시체 조각이 부족하다']);
+    expect([t.run.pieces, t.ped.sold, t.ped.canInteract(), dropsOf(t).length]).toEqual([UNIQUE_PRICE.bone_cleaver! - 1, false, true, 0]);
+    expect(t.ped.promptText()).toBe(`구매 · ${ITEMS.bone_cleaver.name}`);
+  });
+
+  it('paying drops the item at the pedestal; it can be picked up into the matching slot with tier and no affix', () => {
+    const t = shopFor('chain_hook', 30);
+    t.ped.interact();
+    expect(t.run.pieces).toBe(30 - UNIQUE_PRICE.chain_hook!);
+    expect([t.ped.sold, t.ped.canInteract()]).toEqual([true, false]);
+    expect(t.toasts).toEqual([`${ITEMS.chain_hook.name} 구매`]);
+    // sold out: a second try neither charges nor drops
+    t.ped.interact();
+    expect(t.run.pieces).toBe(30 - UNIQUE_PRICE.chain_hook!);
+    steps(t.world, 40);
+    const drops = dropsOf(t);
+    expect(drops).toHaveLength(1);
+    expect(drops[0].inst).toEqual({ id: 'chain_hook', tier: 1, affix: null });
+    expect(drops[0].canInteract()).toBe(true);
+    expect(Math.abs(drops[0].x - t.ped.x)).toBeLessThan(20);
+    // the prompt-bubble target is the item now, not the empty pedestal
+    expect(t.world.nearestInteractable(t.p.x, t.p.y - 16)).toBe(drops[0]);
+    drops[0].interact();
+    expect(t.run.skills).toEqual([{ id: 'chain_hook', tier: 1, affix: null }, null]);
+    expect(dropsOf(t)).toHaveLength(0);
+  });
+
+  it('the loop multiplier is the price; a full slot asks which to replace and drops the old item', () => {
+    const t = shopFor('marrow_bow', 100, 3); // loop 3: x2
+    expect(t.ped.price).toBe(UNIQUE_PRICE.marrow_bow! * 2);
+    t.run.weapons = [item('rusty_sword'), item('spear')];
+    t.ped.interact();
+    expect(t.run.pieces).toBe(100 - UNIQUE_PRICE.marrow_bow! * 2);
+    steps(t.world, 40);
+    dropsOf(t)[0].interact(); // the test UI picks the first option: the main hand
+    expect(t.run.weapons.map((w) => w?.id)).toEqual(['marrow_bow', 'spear']);
+    steps(t.world, 5);
+    expect(dropsOf(t).map((d) => d.inst.id)).toEqual(['rusty_sword']);
+  });
+
+  it('every unique: buy, pick up, use once (a weapon swings / draws / blocks, a skill starts its cooldown)', () => {
+    for (const id of UNIQUE_IDS) {
+      const t = shopFor(id, 99);
+      const e = new Dummy(t.p.x + 40, FLOOR);
+      t.world.spawn(e);
+      t.ped.interact();
+      steps(t.world, 40);
+      const [drop] = dropsOf(t);
+      expect(drop.inst.id, id).toBe(id);
+      drop.interact();
+      const slot = ITEMS[id].slot === 'skill' ? t.run.skills : t.run.weapons;
+      expect(slot.map((s) => s?.id), id).toContain(id);
+      const states = new Set<string>();
+      if (ITEMS[id].slot === 'skill') t.input.tap(slot[0]?.id === id ? 'skill1' : 'skill2');
+      else t.input.press(slot[0]?.id === id ? 'attack1' : 'attack2');
+      for (let i = 0; i < 60; i++) {
+        steps(t.world, 1);
+        states.add(t.p.state);
+      }
+      if (ITEMS[id].slot === 'skill') expect(Math.max(...t.p.skillCooldown), id).toBeGreaterThan(0);
+      else expect([...states].some((st) => st !== 'free'), `${id} states ${[...states]}`).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
 describe('뼈 도살검: every hit bleeds, crit against bleeding targets', () => {
   it('the first hit bleeds (3 s) without crit; the next hit on the bleeding target crits for x2', () => {
     const t = duel('bone_cleaver');
     swing(t);
     swing(t);
     const [a, b] = t.e.log;
-    expect([a.crit, a.bleed]).toEqual([undefined, WEAPONS.bone_cleaver && (WEAPONS.bone_cleaver as MeleeWeapon).bleed]);
+    expect(a.crit).toBeFalsy();
     expect(a.bleed).toBe(3);
     expect(a.amount).toBe(17);
     expect(b.crit).toBe(true);
@@ -304,7 +400,7 @@ describe('사신의 낫: each kill heals 8 % of max HP', () => {
     expect(t.p.hp).toBe(50);
     swing(t);
     expect(t.e.dying).toBe(true);
-    expect(t.p.hp).toBe(50 + Math.round(t.p.maxHp * (WEAPONS.reaper_scythe as MeleeWeapon).healOnKill!));
+    expect(t.p.hp).toBe(50 + Math.round(t.p.maxHp * melee('reaper_scythe').healOnKill!));
     expect(t.p.hp).toBe(58);
 
     const hurt = duel('reaper_scythe'); // a target that survives
@@ -348,7 +444,7 @@ describe('재봉 바늘: all hits crit for 2 s after a roll', () => {
     place(t);
     swing(t);
     expect(t.e.log[2].crit).toBe(true);
-    steps(t.world, Math.ceil((WEAPONS.stitch_needle as MeleeWeapon).critAfterRoll! * 60) + 10);
+    steps(t.world, Math.ceil(melee('stitch_needle').critAfterRoll! * 60) + 10);
     place(t);
     swing(t);
     expect(t.e.log[3].crit).toBeFalsy();
@@ -380,7 +476,7 @@ describe('과부의 송곳니: all hits crit for 3 s after taking damage (spite)
     // all four hits of the combo crit inside the window
     for (let i = 0; i < 3; i++) swing(t);
     expect(t.e.log.slice(-3).every((l) => l.crit)).toBe(true);
-    steps(t.world, Math.ceil((WEAPONS.widow_fangs as MeleeWeapon).critAfterHurt! * 60) + 10);
+    steps(t.world, Math.ceil(melee('widow_fangs').critAfterHurt! * 60) + 10);
     t.e.x = t.p.x + 30;
     swing(t);
     expect(t.e.log.at(-1)!.crit).toBeFalsy();
@@ -435,7 +531,7 @@ describe('관 뚜껑: blocks 90 %, a parry releases a shockwave', () => {
   it('the shockwave reaches exactly the radius of its table', () => {
     const t = setup();
     equip(t, 'coffin_lid', 1);
-    const r = WEAPONS.coffin_lid.kind === 'shield' ? WEAPONS.coffin_lid.shockwave!.radius : 0;
+    const r = shieldOf('coffin_lid').shockwave!.radius;
     const inside = new Dummy(t.p.x + r - 8 - 2, FLOOR); // hurtbox edge 2 px inside the circle (at chest height)
     const outside = new Dummy(t.p.x + r + 8 + 6, FLOOR);
     t.world.spawn(inside);
@@ -480,7 +576,7 @@ describe('골수 활: a fully drawn arrow pierces every enemy in its path', () =
     t.input.press('attack1');
     steps(t.world, drawSteps);
     t.input.release('attack1');
-    steps(t.world, 70);
+    steps(t.world, 130); // the arrow flies on past all three until its 1.6 s life is over
     return { ...t, es };
   }
 
@@ -488,10 +584,10 @@ describe('골수 활: a fully drawn arrow pierces every enemy in its path', () =
     const t = shoot('marrow_bow', 40);
     for (const e of t.es) {
       expect(e.log, 'each enemy is hit once').toHaveLength(1);
-      expect(e.log[0].amount).toBe((WEAPONS.marrow_bow as { damage: number }).damage);
+      expect(e.log[0].amount).toBe(bowOf('marrow_bow').damage);
       expect(e.log[0].kind).toBe('ranged');
     }
-    expect(t.world.entities.some((x) => x instanceof Arrow && !x.dead)).toBe(false); // it ends on the far wall
+    expect(t.world.entities.some((x) => x instanceof Arrow && !x.dead)).toBe(false);
   });
 
   it('a half-drawn arrow, and the ordinary bow at full draw, stop at the first enemy', () => {
@@ -585,13 +681,17 @@ describe('뼈 가시: five spikes along the floor, 28 px apart, one every 0.08 s
     for (const e of [...slots, behind]) t.world.spawn(e);
     steps(t.world, 1);
     t.input.tap('skill1');
-    steps(t.world, 60);
-    return { ...t, slots, behind };
+    let line: BoneSpikes | undefined;
+    for (let i = 0; i < 60; i++) {
+      steps(t.world, 1);
+      line ??= t.world.entities.find((e): e is BoneSpikes => e instanceof BoneSpikes);
+    }
+    return { ...t, slots, behind, line: line! };
   }
 
   it('erupts 5 spikes in front, 28 px apart; each hurts the enemy over it once (18 damage, knock-up 220); the sixth slot and behind are safe', () => {
     const t = cast();
-    const line = t.world.entities.find((e): e is BoneSpikes => e instanceof BoneSpikes)!;
+    const line = t.line;
     expect(line.spikes).toHaveLength(BONE_SPIKES.count);
     expect(line.spikes.map((s) => s.x)).toEqual([1, 2, 3, 4, 5].map((k) => t.p.x + BONE_SPIKES.spacing * k));
     expect(new Set(line.spikes.map((s) => s.y))).toEqual(new Set([FLOOR]));
@@ -628,13 +728,13 @@ describe('뼈 가시: five spikes along the floor, 28 px apart, one every 0.08 s
     const wall = flatMap();
     wall.set(Math.floor((120 + 28 * 3) / 24), 15, T.Solid);
     const a = cast(wall);
-    const n = a.world.entities.find((e): e is BoneSpikes => e instanceof BoneSpikes)!.spikes.length;
+    const n = a.line.spikes.length;
     expect(n).toBeLessThan(BONE_SPIKES.count);
     expect(n).toBeGreaterThanOrEqual(2);
     const pit = flatMap();
     for (let x = 8; x < 12; x++) { pit.set(x, 16, T.Empty); pit.set(x, 17, T.Empty); }
     const b = cast(pit);
-    expect(b.world.entities.find((e): e is BoneSpikes => e instanceof BoneSpikes)!.spikes.length).toBeLessThan(BONE_SPIKES.count);
+    expect(b.line.spikes.length).toBeLessThan(BONE_SPIKES.count);
   });
 });
 
@@ -687,13 +787,33 @@ describe('영혼 등불: three soul flames orbit her for 8 s', () => {
     steps(t.world, 1);
     const f = t.flames.flame(0);
     expect(Math.abs(f.x - t.p.x)).toBeLessThanOrEqual(SOUL_LANTERN.radius + 1e-6);
-    steps(t.world, Math.round(SOUL_LANTERN.life * 60) - 30);
-    expect(t.world.entities.some((e) => e instanceof SoulFlames)).toBe(false);
+    // a second cast, counted from the step the flames come out to the step they are gone
+    const u = setup();
+    equip(u, 'soul_lantern');
+    u.input.tap('skill1');
+    let flames: SoulFlames | undefined;
+    for (let i = 0; i < 60 && !flames; i++) {
+      steps(u.world, 1);
+      flames = u.world.entities.find((e): e is SoulFlames => e instanceof SoulFlames);
+    }
+    expect(flames).toBeTruthy();
+    let n = 0;
+    while (!flames!.dead && n < 1000) {
+      steps(u.world, 1);
+      n++;
+    }
+    expect(Math.abs(n / 60 - SOUL_LANTERN.life)).toBeLessThan(0.1);
+    steps(u.world, 2);
+    expect(u.world.entities.some((e) => e instanceof SoulFlames)).toBe(false);
   });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
 describe('사슬 갈고리: the first enemy hit is pulled to her', () => {
+  /**
+   * Cast the hook at enemies `dx` px in front of her and follow the first one frame by frame: its stun right after the
+   * hit (`stunAtHit`) and how long it stays stunned counted from the step the hook is gone (`stunAfter`, seconds).
+   */
   function hook(opts: { dx?: number[]; kb?: number; map?: TileMap } = {}) {
     const t = setup(opts.map);
     equip(t, 'chain_hook');
@@ -701,8 +821,18 @@ describe('사슬 갈고리: the first enemy hit is pulled to her', () => {
     for (const e of es) t.world.spawn(e);
     steps(t.world, 1);
     t.input.tap('skill1');
-    steps(t.world, 100);
-    return { ...t, es };
+    let line: ChainHook | undefined;
+    let stunAtHit = 0;
+    let gone = -1;
+    let stunOver = -1;
+    for (let i = 0; i < 200; i++) {
+      steps(t.world, 1);
+      line ??= t.world.entities.find((e): e is ChainHook => e instanceof ChainHook);
+      if (!stunAtHit && es[0].log.length) stunAtHit = es[0].status.stun;
+      if (gone < 0 && line?.dead) gone = i;
+      if (gone >= 0 && stunOver < 0 && es[0].status.stun <= 0) stunOver = i;
+    }
+    return { ...t, es, stunAtHit, stunAfter: stunOver < 0 ? Infinity : (stunOver - gone) / 60 };
   }
 
   it('hurts (12), stuns (1 s) and drags the enemy to just in front of her', () => {
@@ -711,9 +841,15 @@ describe('사슬 갈고리: the first enemy hit is pulled to her', () => {
     expect([e.log[0].amount, e.log[0].stun]).toEqual([SKILL_BASE.chain_hook, CHAIN_HOOK.stun]);
     expect(e.x).toBeLessThan(t.p.x + 30);
     expect(e.x).toBeGreaterThan(t.p.x + 8);
-    expect(e.status.stun).toBeGreaterThan(0);
     expect(t.world.entities.some((x) => x instanceof ChainHook)).toBe(false);
     expect(t.p.skillCooldownMax[0]).toBe(7);
+  });
+
+  it('the stun starts when the pull ends: she is left with the enemy stunned for the full 1.0 s', () => {
+    const t = hook();
+    expect(t.stunAtHit).toBeGreaterThan(CHAIN_HOOK.stun - 0.05);
+    expect(t.stunAfter).toBeGreaterThan(CHAIN_HOOK.stun - 0.05);
+    expect(t.stunAfter).toBeLessThan(CHAIN_HOOK.stun + 0.05);
   });
 
   it('only the first enemy on the line is caught', () => {
@@ -729,7 +865,7 @@ describe('사슬 갈고리: the first enemy hit is pulled to her', () => {
     const [e] = t.es;
     expect(e.x).toBe(t.p.x + 150);
     expect([e.log[0].amount, e.log[0].stun]).toEqual([SKILL_BASE.chain_hook, CHAIN_HOOK.stun]);
-    expect(e.status.stun).toBeGreaterThan(0);
+    expect(t.stunAtHit).toBeGreaterThan(CHAIN_HOOK.stun - 0.05);
     // exactly at the limit is pulled
     expect(hook({ kb: CHAIN_HOOK.pullMinKnockback }).es[0].x).toBeLessThan(120 + 30);
   });
@@ -787,13 +923,13 @@ describe('the codex pages of the unique items', () => {
 
   it('their numbers are the table numbers', () => {
     const text = (id: string) => (weapons.get(id) ?? skills.get(id))!.rows.map((r) => r.text).join('\n');
-    expect(text('bone_cleaver')).toContain(`출혈 ${(WEAPONS.bone_cleaver as MeleeWeapon).bleed}초`);
-    expect(text('reaper_scythe')).toContain(`${Math.round((WEAPONS.reaper_scythe as MeleeWeapon).healOnKill! * 100)}%`);
-    expect(text('stitch_needle')).toContain(`${(WEAPONS.stitch_needle as MeleeWeapon).critAfterRoll}초`);
-    expect(text('widow_fangs')).toContain(`${(WEAPONS.widow_fangs as MeleeWeapon).critAfterHurt}초`);
-    expect(text('coffin_lid')).toContain(`${Math.round(WEAPONS.coffin_lid.reduction * 100)}%`);
-    expect(text('coffin_lid')).toContain(`반경 ${WEAPONS.coffin_lid.shockwave!.radius}px`);
-    expect(text('marrow_bow')).toContain(`${WEAPONS.marrow_bow.damage}`);
+    expect(text('bone_cleaver')).toContain(`출혈 ${melee('bone_cleaver').bleed}초`);
+    expect(text('reaper_scythe')).toContain(`${Math.round(melee('reaper_scythe').healOnKill! * 100)}%`);
+    expect(text('stitch_needle')).toContain(`${melee('stitch_needle').critAfterRoll}초`);
+    expect(text('widow_fangs')).toContain(`${melee('widow_fangs').critAfterHurt}초`);
+    expect(text('coffin_lid')).toContain(`${Math.round(shieldOf('coffin_lid').reduction * 100)}%`);
+    expect(text('coffin_lid')).toContain(`반경 ${shieldOf('coffin_lid').shockwave!.radius}px`);
+    expect(text('marrow_bow')).toContain(`${bowOf('marrow_bow').damage}`);
     expect(text('corpse_bomb')).toContain(`반경 ${CORPSE_BOMB.radius}px`);
     expect(text('corpse_bomb')).toContain(`반경 ${CORPSE_BOMB.chain.radius}px`);
     expect(text('bone_spikes')).toContain(`${BONE_SPIKES.spacing}px`);

@@ -11,6 +11,12 @@ import { SAVE_KEY, boot, waitScene, sceneName, entitiesOf, teleportNear } from '
 test.use({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 });
 test.setTimeout(180_000);
 
+/** the ten unique items of docs/CONTENT3.md §5 (the 시체 상점 sells only these) */
+const UNIQUES = ['bone_cleaver', 'reaper_scythe', 'stitch_needle', 'widow_fangs', 'coffin_lid', 'marrow_bow', 'corpse_bomb', 'bone_spikes', 'soul_lantern', 'chain_hook'];
+
+/** the unique skills (the others are weapons) */
+const ITEM_SLOT_SKILL = ['corpse_bomb', 'bone_spikes', 'soul_lantern', 'chain_hook'];
+
 const SHOTS = 'e2e/__shots__/';
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png` });
 
@@ -133,33 +139,73 @@ test('kills drop pieces, Selma sews them, the shop sells, the golem follows into
     await shot(page, '06_sewn');
   });
 
-  await test.step('시체 상점: a pedestal sells its item for carried pieces', async () => {
-    const injected = await page.evaluate(() => {
-      const w = (window as any).__ds.world;
-      const peds = w.entities.filter((e: any) => e.constructor.name === 'CorpseShopItem');
-      const stocked = peds.filter((p: any) => p.item).length;
-      // no unique items in the game yet: put a catalogue item on the first pedestal so the purchase path runs in the real game
-      if (!stocked) { peds[0].item = { id: 'war_hammer', tier: w.run.tier, affix: null }; peds[0].price = 25; peds[0].sold = false; }
-      return !stocked;
-    });
-    if (injected) test.info().annotations.push({ type: 'note', description: 'no unique items in the shop stock yet: a stand-in item was placed on the first pedestal' });
-    const price = await page.evaluate(() => (window as any).__ds.world.entities.find((e: any) => e.constructor.name === 'CorpseShopItem' && e.item).price as number);
+  await test.step('시체 상점: three distinct uniques; one is bought with pieces, picked up, equipped and used once', async () => {
+    const stock: { id?: string; price: number; sold: boolean; affix: string | null }[] = await page.evaluate(() =>
+      (window as any).__ds.world.entities.filter((e: any) => e.constructor.name === 'CorpseShopItem').map((p: any) => ({ id: p.item?.id as string | undefined, price: p.price as number, sold: p.sold as boolean, affix: p.item?.affix ?? null })));
+    expect(stock, 'three pedestals').toHaveLength(3);
+    for (const s of stock) {
+      expect(UNIQUES, 'a unique item on every pedestal (no 품절)').toContain(s.id);
+      expect([s.sold, s.affix]).toEqual([false, null]);
+      expect(s.price).toBeGreaterThan(0);
+    }
+    expect(new Set(stock.map((s) => s.id)).size, 'distinct').toBe(3);
+    const ped = 1;
+    const { id, price } = stock[ped] as { id: string; price: number };
     // too poor: error toast, nothing happens
     await page.evaluate(() => { const ds = (window as any).__ds; ds.pieces(1); ds.step(5); });
-    const ped = (await page.evaluate(() => { const e = (window as any).__ds.world.entities.filter((e: any) => e.constructor.name === 'CorpseShopItem').findIndex((p: any) => p.item); return e; })) as number;
     await clearText(page);
     await interact(page, 'CorpseShopItem', ped);
     await page.waitForTimeout(300);
-    expect((await drawn(page)).some((t) => t === '시체 조각이 부족하다')).toBe(true);
+    const texts = await drawn(page);
+    expect(texts.some((t) => t === '시체 조각이 부족하다')).toBe(true);
+    expect(texts.some((t) => t.startsWith('구매 · ')), 'the prompt names the item').toBe(true);
+    expect(texts.some((t) => t === '유니크'), 'the item card carries the 유니크 tag').toBe(true);
     expect((await run(page)).pieces).toBe(1);
-    // rich: pays, the item drops at the pedestal
+    await shot(page, '07a_unique_card');
+    // rich: pays, the item drops at the pedestal, the pedestal is spent
     await page.evaluate((n) => { const ds = (window as any).__ds; ds.pieces(n + 7); ds.step(5); }, price);
     await interact(page, 'CorpseShopItem', ped);
     await page.waitForTimeout(300);
     expect((await run(page)).pieces).toBe(7);
     expect(await page.evaluate(() => (window as any).__ds.world.entities.filter((e: any) => e.constructor.name === 'ItemDrop' && !e.dead).length)).toBe(1);
+    expect(await page.evaluate((k) => (window as any).__ds.world.entities.filter((e: any) => e.constructor.name === 'CorpseShopItem')[k].sold, ped)).toBe(true);
     await page.waitForTimeout(500);
     await shot(page, '07_bought');
+    // pick the item up: it goes into its slot as the shop sold it (tier of the run, no affix)
+    await clearText(page);
+    await interact(page, 'ItemDrop');
+    await page.waitForTimeout(300);
+    const held = await page.evaluate((want) => {
+      const r = (window as any).__ds.game.run;
+      const all = [...r.weapons.map((w: any, slot: number) => ({ w, slot, kind: 'weapon' })), ...r.skills.map((w: any, slot: number) => ({ w, slot, kind: 'skill' }))];
+      const f = all.find((x) => x.w?.id === want);
+      return f ? { slot: f.slot as number, kind: f.kind as string, affix: f.w.affix, tier: f.w.tier as number, run: r.tier as number } : null;
+    }, id);
+    expect(held, `${id} is equipped`).not.toBeNull();
+    expect([held!.affix, held!.tier]).toEqual([null, held!.run]);
+    expect(await page.evaluate(() => (window as any).__ds.world.entities.filter((e: any) => e.constructor.name === 'ItemDrop' && !e.dead).length)).toBe(0);
+    // use it once with the real input: a weapon swings / draws / blocks, a skill starts its cooldown
+    const used = await page.evaluate(([kind, slot]) => {
+      const ds = (window as any).__ds, w = ds.world, inp = w.input, p = w.player;
+      const e = ds.spawn('ghoul', 40);
+      ds.step(2);
+      const seen = new Set<string>();
+      if (kind === 'skill') {
+        inp.tap(slot === 0 ? 'skill1' : 'skill2');
+        for (let f = 0; f < 60; f++) { ds.step(1); seen.add(p.state); }
+        return { moved: p.skillCooldown[slot as number] > 0, seen: [...seen] };
+      }
+      const a = slot === 0 ? 'attack1' : 'attack2';
+      inp.press(a);
+      for (let f = 0; f < 40; f++) { ds.step(1); seen.add(p.state); }
+      inp.release(a);
+      for (let f = 0; f < 30; f++) { ds.step(1); seen.add(p.state); }
+      e.dead = true;
+      return { moved: [...seen].some((st) => st !== 'free'), seen: [...seen] };
+    }, [held!.kind, held!.slot] as const);
+    expect(used.moved, `${id} used once (states ${used.seen})`).toBe(true);
+    await page.waitForTimeout(300);
+    await shot(page, '07b_unique_used');
   });
 
   await test.step('the golem pile builds a golem that follows into the next level', async () => {
@@ -197,6 +243,70 @@ test('kills drop pieces, Selma sews them, the shop sells, the golem follows into
   });
 
   expect(c.errors, 'no console / page errors').toEqual([]);
+});
+
+test('every unique item can be equipped and used in the real game (its entities draw, no console errors)', async ({ page }) => {
+  const c = await boot(page, { query: '?seed=4&god=1' });
+  await startRun(page, 4);
+  const home = await page.evaluate(() => { const p = (window as any).__ds.player; return { x: p.x as number, y: p.y as number }; });
+  // the entity each signature spawns (none for the shield: it only reacts to a parry) and how many steps after the cast the effect is on screen
+  const spawns: Record<string, [string | null, number]> = {
+    bone_cleaver: [null, 0], reaper_scythe: [null, 0], stitch_needle: [null, 0], widow_fangs: [null, 0], coffin_lid: [null, 0],
+    marrow_bow: ['Arrow', 0], corpse_bomb: ['Grenade', 26], bone_spikes: ['BoneSpikes', 26], soul_lantern: ['SoulFlames', 40], chain_hook: ['ChainHook', 22],
+  };
+  for (const id of UNIQUES) {
+    const skill = ITEM_SLOT_SKILL.includes(id);
+    // phase 1: back to the start, equip, put three ghouls in front of her, use it; stop while the effect is still on the screen
+    await page.evaluate(([uid, sk, frames, hx, hy]) => {
+      const ds = (window as any).__ds;
+      const w = ds.world, inp = w.input, p = w.player;
+      for (const e of w.entities) if (e.constructor.name === 'SoulFlames') e.dead = true;
+      ds.killAll();
+      ds.teleport(hx, hy);
+      ds.step(2);
+      p.hp = p.maxHp;
+      p.facing = 1;
+      ds.give(uid, 0);
+      ds.step(2);
+      (window as any).__foes = [40, 70, 100].map((dx) => ds.spawn('ghoul', dx));
+      (window as any).__seen = { classes: [] as string[], states: [] as string[] };
+      ds.step(2);
+      const look = () => {
+        const s = (window as any).__seen;
+        for (const e of w.entities) if (!e.dead && !s.classes.includes(e.constructor.name)) s.classes.push(e.constructor.name);
+        if (!s.states.includes(p.state)) s.states.push(p.state);
+      };
+      if (sk) {
+        inp.tap('skill1');
+        for (let f = 0; f < frames; f++) { ds.step(1); look(); }
+      } else {
+        inp.press('attack1');
+        for (let f = 0; f < 40; f++) { ds.step(1); look(); }
+        inp.release('attack1');
+        for (let f = 0; f < 40; f++) { ds.step(1); look(); }
+      }
+    }, [id, skill, spawns[id][1], home.x, home.y] as const);
+    await page.waitForTimeout(60); // a couple of really rendered frames
+    if (skill) await shot(page, `16_unique_${id}`);
+    // phase 2: let it run out, read what happened
+    const r = await page.evaluate((sk) => {
+      const ds = (window as any).__ds;
+      const p = ds.world.player;
+      const seen = (window as any).__seen as { classes: string[]; states: string[] };
+      if (sk) for (let f = 0; f < 90; f++) { ds.step(1); for (const e of ds.world.entities) if (!e.dead && !seen.classes.includes(e.constructor.name)) seen.classes.push(e.constructor.name); }
+      const foes = (window as any).__foes as any[];
+      const hurt = foes.filter((e) => e.dead || e.dying || e.hp < e.maxHp).length;
+      for (const e of foes) e.dead = true;
+      return { ...seen, cooldown: p.skillCooldown[0] as number, hurt };
+    }, skill);
+    const want = spawns[id][0];
+    if (want) expect(r.classes, `${id} spawns ${want}`).toContain(want);
+    if (skill) expect(r.cooldown, `${id} started its cooldown`).toBeGreaterThan(0);
+    else expect(r.states.some((st) => st !== 'free'), `${id} swung / drew / blocked (states ${r.states})`).toBe(true);
+    // the signature really reaches the ghouls in front of her (the shield only answers a parry)
+    if (id !== 'coffin_lid') expect(r.hurt, `${id} hurt an enemy`).toBeGreaterThan(0);
+  }
+  expect(c.errors).toEqual([]);
 });
 
 test('the body made whole clears the loop: loop-clear scene, then the title shows the next 회차', async ({ page }) => {

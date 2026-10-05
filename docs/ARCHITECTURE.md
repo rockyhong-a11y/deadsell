@@ -102,10 +102,23 @@ note the dependency in your report; do not edit the other module.
   `Game.victory()` sews the carried pieces on the spot and hands the `SewResult` to `VictoryScene`; a completed body sends its tap to the loop-clear scene.
 * **쉼터 (the `passage` level).** The template is 64 x 18 with markers `Z` (seamstress), `C` (corpse-shop pedestal, 3x) and `G` (golem pile)
   (`MARKER_SPAWN`, spawn types `seamstress` / `corpse_shop` / `golem_pile`). `populateLevel` stocks the pedestals with `corpseShopStock(rng, 3)`:
-  distinct ids from `UNIQUE_IDS` (items/types.ts; none yet = three empty "품절" pedestals); the price is `uniquePrice(id, loop)` (items.ts).
+  distinct ids from `UNIQUE_IDS` (items/types.ts: the ten unique items; with fewer left than pedestals the rest read "품절"); the price is
+  `uniquePrice(id, loop)` (items.ts). Buying pays carried pieces and drops the item (tier of the run, no affix) with `spawnItemDrop`.
 * **Golem.** `allies/golem.ts`: a `team: 'player'` Actor (enemy melee / area attacks hit it through `hitArea`, enemy AI keeps targeting the heroine).
   It writes its hp into `run.golem` every step, so `LevelScene` can bring it to the next level with `spawnRunGolem(world, player, level.kind)`
   (healed in every 쉼터). `GolemPile` pays `golemCost(loop)` pieces, plays `assemble` and spawns the `Golem`; `newGolemState(run)` creates the slot.
+
+## Unique items (docs/CONTENT3.md §5)
+* **Identity.** An `ItemDef` with `unique: true` (items.ts): ten of them (`UNIQUE_IDS`), sold only by Selma. `rollItem` filters them out of every pool (drops, chests,
+  pedestals, the gold shop, mid-boss drops), `affixPool` is empty for them, `loadSave` drops them from `unlocked` and `unlockedCount` does not count them.
+  `itemColor(id)` is the name colour (`UNIQUE_COLOR` `#f0d9a0` for uniques, the stat colour otherwise) and `UNIQUE_TAG` (`유니크`) the tag on the item card and
+  in the codex. `signatureText(id)` is the effect line, read from the tables below (item card, codex).
+* **Numbers.** Weapons: `player/weapons.ts` (`bleed` + `critBleeding`, `healOnKill`, `critAfterRoll`, `critAfterHurt`, shield `shockwave`, bow `pierce`);
+  skills: `player/skills.ts` (`SKILL_BASE`, `CORPSE_BOMB`, `BONE_SPIKES`, `SOUL_LANTERN`, `CHAIN_HOOK`). Every number the UI shows comes from there.
+* **Hooks.** `Player` keeps `sinceRoll` / `sinceHurt` for the two crit windows and `signatureCrit` in `swingHit`; the shield's parry (`parryFeedback`)
+  releases the shockwave once per block; `Arrow` takes a `pierce` flag (a fully drawn 골수 활 shot); `Grenade` has a `corpse` type (the blast of the 시체 폭탄,
+  and one chain burst for each enemy it kills). New entities in `player/projectiles.ts`: `BoneSpikes`, `SoulFlames`, `ChainHook` (the hook holds its victim
+  stunned for the full `CHAIN_HOOK.stun` while it drags it, so the stun runs out after the pull).
 
 ## Settings, control modes, graphics
 `save.settings` (validated field by field in `loadSave`, old saves load with defaults): `controlMode`
@@ -160,7 +173,8 @@ The detail text of a page that does not fit (final boss on a narrow view: up to 
   * `e2e/helpers.ts` - boot, touch fingers, `tapRegion(id)` (taps a registered `game.taps` rectangle), event capture.
   * `e2e/corpse.spec.ts` - docs/CONTENT3.md: kills -> pieces -> HUD counter, Selma sews (body saved), the 시체 상점 pays in pieces, the golem pile builds a
     golem that follows into the next level, body 99 + 1 -> loop-clear scene -> title `2회차`, victory auto-sew, death loses carried pieces, the HUD
-    counters in all three control modes at 480 / 800 UI widths (screenshots `e2e/__shots__/`, git-ignored; text is read by recording `fillText`).
+    counters in all three control modes at 480 / 800 UI widths, a unique bought at the 시체 상점 (three distinct on the pedestals, picked up, equipped,
+    used once) and all ten uniques used in the real render loop (screenshots `e2e/__shots__/`, git-ignored; text is read by recording `fillText`).
   * `e2e/codex.spec.ts` - the codex from the title (touch, keyboard, mocked pad) and from the pause menu; one screenshot per tab
     (`e2e-shots/codex_*.png`).
   * `e2e/settings.spec.ts` - settings by touch, virtual buttons with real multi-touch, a mocked `navigator.getGamepads`

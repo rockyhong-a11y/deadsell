@@ -294,7 +294,7 @@ export class StashModal extends Modal {
     // stash grid
     text(c, `보관함  ${save.stash.length}/${STASH.capacity}`, L.grid[0].x, L.gridLabelY, { color: stashFull(save) ? COL.amber : COL.dim });
     L.grid.forEach((r, i) => {
-      this.drawCell(c, r, save.stash[i] ?? null, this.zone === 'grid' && this.i === i, null, false, this.armed?.index === i);
+      this.drawCell(c, r, save.stash[i] ?? null, this.zone === 'grid' && this.i === i, null, this.pending === i, this.armed?.index === i);
       this.hit('stash-cell' + i, r, () => this.tapCell('grid', i));
     });
 

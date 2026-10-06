@@ -1,4 +1,4 @@
-import { ITEM_IDS, type AffixId, type ItemId } from '../items/types';
+import { ITEM_IDS, STARTER_UNLOCKS, UNIQUE_IDS, type AffixId, type ItemId } from '../items/types';
 import { AFFIX_NAMES, COLOR_NAMES, ITEMS, UNIQUE_COLOR, UNIQUE_TAG, affixPool, signatureText } from '../items/items';
 import { WEAPONS, type MeleeWeapon, type WeaponId } from '../player/weapons';
 import { BONE_SPIKES, CHAIN_HOOK, CORPSE_BOMB, SKILLS, SKILL_BASE, SOUL_LANTERN, type SkillId } from '../player/skills';
@@ -9,10 +9,11 @@ import {
 import { ABBESS, ARACHNE, MB, MINIBOSS_IDS, MINIBOSS_SPECS, VALKYRIE, WITCH, type MiniBossId } from '../miniboss';
 import { MATRON } from '../boss/matron';
 import { META_UPGRADES } from '../meta/progression';
+import { recipeText } from '../meta/craft';
 import { SCROLL_COLORS, SCROLL_SPRITE } from '../items/pickups';
 import { COLOR_HEX } from '../combat';
 import { LEVEL_SEQUENCE, type BiomeId } from '../run';
-import { AFFIX, AFFIX_ROLL, CORPSE, CRAFT, CRIT_MULT, ELITE, FLASK, FOODS, GOLEM, LOOP, LOOT, SCROLL, TIER2, TIER_DMG, enemyDmgMul, enemyHpMul, golemCost } from '../rules';
+import { AFFIX, AFFIX_ROLL, CORPSE, CRAFT, CRIT_MULT, ELITE, FLASK, FOODS, GOLEM, GRADES, GRADE_IDS, LOOP, LOOT, SCROLL, STASH, TIER2, TIER_DMG, enemyDmgMul, enemyHpMul, golemCost, type Grade } from '../rules';
 
 /**
  * 도감 (codex) data: one entry per weapon, skill, enemy, boss and item of the game, built from the game's own tables
@@ -89,6 +90,8 @@ export interface CodexEntry {
   nameColor?: string;
   /** small label right of the name */
   tag?: string;
+  /** unique items: their grade (drawn as the grade pill next to the name) */
+  grade?: Grade;
   /** 1-2 sentence description (non-empty Korean) */
   desc: string;
   /** list thumbnail */
@@ -101,6 +104,8 @@ export interface CodexEntry {
 // helpers
 
 const HEROINE = 'heroine';
+/** the colour of corpse pieces (`PIECE_COLOR` of items/pickups.ts is a UI-side constant; same value) */
+const COL_PIECE = '#e8d7c3';
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 const num = (v: number): string => String(Math.round(v * 100) / 100);
 const secs = (v: number): string => `${num(v)}초`;
@@ -114,21 +119,34 @@ const affixList = (id: ItemId): string => affixPool(id).map((a) => AFFIX_SHORT[a
 const scaling = (color: keyof typeof COLOR_NAMES): string =>
   `${COLOR_NAMES[color]} 레벨당 피해 +${pct(SCROLL.dmgPerLevel)} · 티어당 +${pct(TIER_DMG)}`;
 
-/** name colour / tag / list heading of a weapon or skill page: unique items get the bone-gold name and the 유니크 tag */
-function uniqueHead(id: ItemId, color: keyof typeof COLOR_NAMES, tag: string): Pick<CodexEntry, 'name' | 'nameColor' | 'tag' | 'group'> {
+/** list heading of the ordinary items of the weapon / skill tabs; the uniques follow under one heading per grade (`유니크 C` ...) */
+export const NORMAL_GROUP = '일반';
+export const uniqueGroup = (g: Grade): string => `${UNIQUE_TAG} ${g}`;
+
+/** name colour / tag / grade / list heading of a weapon or skill page: unique items get the bone-gold name, the 유니크 tag and their grade */
+function uniqueHead(id: ItemId, color: keyof typeof COLOR_NAMES, tag: string): Pick<CodexEntry, 'name' | 'nameColor' | 'tag' | 'group' | 'grade'> {
   const d = ITEMS[id];
-  return d.unique
-    ? { name: d.name, nameColor: UNIQUE_COLOR, tag: `${UNIQUE_TAG} · ${tag}`, group: UNIQUE_TAG }
-    : { name: d.name, nameColor: COLOR_HEX[color], tag };
+  return d.unique && d.grade
+    ? { name: d.name, nameColor: UNIQUE_COLOR, tag: `${UNIQUE_TAG} · ${tag}`, group: uniqueGroup(d.grade), grade: d.grade }
+    : { name: d.name, nameColor: COLOR_HEX[color], tag, group: NORMAL_GROUP };
 }
 
-/** a unique item's page starts with its signature and ends with where it is sold; no affix can roll on it */
+/** where an ordinary item comes from: the starting pool, an Alchemist blueprint, or (not yet obtainable) nothing */
+function unlockRow(id: ItemId): CodexRow[] {
+  if (STARTER_UNLOCKS.includes(id)) return [{ label: '해금', text: '기본' }];
+  const bp = META_UPGRADES.find((u) => u.item === id);
+  return bp ? [{ label: '해금', text: `연금술사 ${bp.cost}셀` }] : [];
+}
+
+/** a unique item's page starts with its signature and ends with its recipe; no affix can roll on it */
 function uniqueRows(id: ItemId, rows: CodexRow[]): CodexRow[] {
-  if (!ITEMS[id].unique) return rows;
+  const def = ITEMS[id];
+  if (!def.unique || !def.grade) return [...rows, ...unlockRow(id)];
   const out = rows.map((r) => (r.label === '접사' ? { ...r, text: '붙지 않음 (유니크는 접사가 없다)' } : r));
   return [
-    { label: '고유 효과', text: signatureText(id), color: UNIQUE_COLOR },
+    ...(signatureText(id) ? [{ label: '고유 효과', text: signatureText(id), color: UNIQUE_COLOR }] : []),
     ...out,
+    { label: '조합', text: `셀마의 조합 · ${recipeText(def.grade)}`, color: COL_PIECE },
   ];
 }
 
@@ -527,6 +545,41 @@ function itemEntries(): CodexEntry[] {
     preview: { sheet: 'corpse', steps: [{ anim: 'piece', dur: 1.2, hold: 0 }, { anim: 'piece_big', dur: 1.2, hold: 0 }], ground: false },
   });
   add({
+    id: 'bell_shard', group: '재화', name: '종탑의 파편', nameColor: '#ffd9a0', tag: '재료', icon: { sheet: 'icons', anim: 'bell_shard' },
+    desc: '강철 여교도관이 쓰러질 때 남는 종탑의 조각. 높은 등급의 유니크를 조합하는 데 쓴다. 쓰러뜨린 회차가 새겨진다.',
+    rows: [
+      { label: '획득', text: '강철 여교도관을 쓰러뜨릴 때마다 1개 (그 회차가 새겨지고, 다음 회차가 시작된다)' },
+      {
+        label: '쓰임',
+        text: GRADE_IDS.filter((g) => CRAFT[g].shards).map((g) => `${g}급 유니크: ${CRAFT[g].shards!.n}개 (${CRAFT[g].shards!.minLoop > 1 ? `${CRAFT[g].shards!.minLoop}회차 이상에서 얻은 것` : '어느 회차든'})`).join(' · '),
+      },
+      { label: '보관', text: '영구 보관: 죽어도 사라지지 않는다. 보관함 화면에 회차별로 표시된다' },
+    ],
+    preview: still('icons', 'bell_shard'),
+  });
+  add({
+    id: 'stash', group: '보관', name: '보관함', tag: '보관', icon: { sheet: 'icons', anim: 'stash' },
+    desc: '가라앉은 감옥의 시작 지점과 모든 쉼터에 놓인 관 모양의 보관함. 장비를 영구히 맡기고 꺼내 쓸 수 있다.',
+    rows: [
+      { label: '용량', text: `${STASH.capacity}칸 · 죽어도 그대로 남는다` },
+      { label: '장착', text: '보관함의 장비를 골라 장착한다. 두 칸이 모두 차 있으면 바꿀 칸을 고르고, 바뀐 장비는 보관함으로 돌아온다' },
+      { label: '맡기기', text: '장착 중인 장비를 맡긴다 (주무기 칸을 비워도 된다). 바닥의 장비를 주울 때 칸이 모두 차 있으면 "보관함으로 보내기"를 고를 수 있다' },
+      { label: '분해', text: `보관함의 장비를 분해하면 시체 조각을 얻는다: 일반 장비 1 + (티어 − 1) + 접사 1 · 유니크 ${GRADES.C.salvage}–${GRADES.SSS.salvage} (등급마다)` },
+      { label: '중간 보스', text: '중간 보스가 떨어뜨린 장비는 표시가 붙은 채 보관되며, 조합 재료로 따로 쓰인다' },
+    ],
+    preview: { sheet: 'stash', steps: [{ anim: 'idle', dur: 1.2, hold: 0.2 }, { anim: 'open', hold: 1 }], ground: true },
+  });
+  add({
+    id: 'crafting', group: '보관', name: '조합', tag: '셀마', icon: { sheet: 'icons', anim: 'stitch_needle' },
+    desc: '쉼터의 재봉사 셀마가 보관함의 장비와 시체 조각으로 유니크 장비를 꿰매 준다. 같은 유니크를 몇 번이든 만들 수 있다.',
+    rows: [
+      ...GRADE_IDS.map((g): CodexRow => ({ label: g, text: recipeText(g), color: GRADES[g].color })),
+      { label: '재료', text: '보관함에서 값싼 것부터 자동으로 쓰인다 (티어가 낮은 것, 접사가 없는 것, 중간 보스 장비가 아닌 것, 오래된 것 순). 조합 화면에서 쓰일 칸이 미리 강조된다' },
+      { label: '결과', text: '유니크가 보관함에 들어간다 (접사 없음). 쉼터를 두세 번 오가면 낮은 등급을 만들 수 있다' },
+    ],
+    preview: still('icons', 'stitch_needle'),
+  });
+  add({
     id: 'rag_golem', group: '조력자', name: '누더기 골렘', tag: '조력자', icon: { sheet: 'icons', anim: 'golem' },
     desc: '셀마가 시체 조각으로 꿰맨 누더기 거인. 신더 곁을 따라다니며 가까운 적을 내려친다. 쉼터의 누더기 더미에서 만든다.',
     rows: [
@@ -611,8 +664,11 @@ let cache: CodexEntry[] | null = null;
 /** Every codex entry, in display order (weapons, skills, enemies by family, bosses, items). Built once. */
 export function buildCodex(): CodexEntry[] {
   if (cache) return cache;
-  const weapons = ITEM_IDS.filter((i) => ITEMS[i].slot === 'weapon' && i in WEAPONS).map((i) => weaponEntry(i as WeaponId));
-  const skills = ITEM_IDS.filter((i) => ITEMS[i].slot === 'skill' && i in SKILL_BASE).map((i) => skillEntry(i as SkillId));
+  // ordinary items first, then the uniques grade by grade (UNIQUE_IDS order)
+  const listed = (slot: 'weapon' | 'skill', has: (i: ItemId) => boolean): ItemId[] =>
+    [...ITEM_IDS.filter((i) => !ITEMS[i].unique), ...UNIQUE_IDS].filter((i) => ITEMS[i].slot === slot && has(i));
+  const weapons = listed('weapon', (i) => i in WEAPONS).map((i) => weaponEntry(i as WeaponId));
+  const skills = listed('skill', (i) => i in SKILL_BASE).map((i) => skillEntry(i as SkillId));
   const enemies = BASE_KINDS.flatMap((b) => ALL_ENEMY_KINDS.filter((k) => ENEMY_DEFS[k].base === b)).map(enemyEntry);
   const bosses = [...MINIBOSS_IDS.map(miniBossEntry), matronEntry()];
   cache = [...weapons, ...skills, ...enemies, ...bosses, ...itemEntries()];

@@ -4,7 +4,7 @@ import { clamp } from '../../engine/math';
 import type { NavKey, ScrollKey } from '../../engine/gamepad';
 import type { AnimDef, SpriteSheet } from '../../engine/assets';
 import { ENEMY_DEFS } from '../enemies/variants';
-import { COL, SZ, button, dim, panel, rrect, text, textWidth, wrap } from './draw';
+import { COL, SZ, button, dim, gradeBadge, gradeBadgeW, panel, rrect, text, textWidth, wrap } from './draw';
 import { CODEX_TABS, codexEntries, type CodexEntry, type CodexPreview, type CodexTabId, type PreviewProp, type PreviewStep } from './codexData';
 
 /**
@@ -569,7 +569,9 @@ export class CodexScreen {
       this.drawThumb(c, e, row.x + 18, row.y + row.h / 2, 28);
       const tx = row.x + 36;
       const maxW = row.w - 40;
-      text(c, ellipsize(c, e.name, maxW, SZ.s, true), tx, row.y + 13, { size: SZ.s, bold: true, color: e.nameColor ?? (selected ? COL.cyan : COL.text) });
+      const gw = e.grade ? gradeBadgeW(c, e.grade) + 4 : 0;
+      text(c, ellipsize(c, e.name, maxW - gw, SZ.s, true), tx, row.y + 13, { size: SZ.s, bold: true, color: e.nameColor ?? (selected ? COL.cyan : COL.text) });
+      if (e.grade) gradeBadge(c, e.grade, row.x + row.w - 4 - (gw - 4) / 2, row.y + 13);
       if (e.tag) text(c, ellipsize(c, e.tag, maxW, SZ.s), tx, row.y + 26, { size: SZ.s, color: COL.dim });
       const vis = intersect(row, inner);
       if (vis) this.hit('codex-entry-' + e.id, vis, () => this.select(it.index), (_dx, dy) => this.onDrag('list', dy));
@@ -635,7 +637,14 @@ export class CodexScreen {
     const tl = this.textLayout(c, e, L);
     const drawHead = (x: number, y: number, w: number): void => {
       text(c, e.name, x, y + 9, { size: SZ.m, bold: true, color: e.nameColor ?? COL.text });
-      if (e.tag) text(c, e.tag, x + w - 4, y + 9, { size: SZ.s, align: 'right', color: COL.dim });
+      let used = textWidth(c, e.name, SZ.m, true);
+      if (e.grade) {
+        const bw = gradeBadgeW(c, e.grade);
+        gradeBadge(c, e.grade, x + used + 6 + bw / 2, y + 9);
+        used += 6 + bw;
+      }
+      // (a tag that would run into the name and the grade pill is left out: the list heading says the same)
+      if (e.tag && used + 8 + textWidth(c, e.tag, SZ.s) <= w - 4) text(c, e.tag, x + w - 4, y + 9, { size: SZ.s, align: 'right', color: COL.dim });
       tl.descLines.forEach((ln, i) => text(c, ln, x, y + 28 + i * LINE_H, { size: SZ.s, color: '#c9d6ee' }));
     };
     if (L.wide && L.head) drawHead(L.head.x, L.head.y, L.head.w);

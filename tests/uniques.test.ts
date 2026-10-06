@@ -831,7 +831,8 @@ describe('the codex pages of the unique items', () => {
     for (const e of uniques) {
       expect(e.tag, e.id).toMatch(/^유니크/);
       expect(e.nameColor, e.id).toBe(UNIQUE_COLOR);
-      expect(e.group, e.id).toBe('유니크');
+      expect(e.group, e.id).toBe(`유니크 ${ITEMS[e.id as ItemId].grade}`);
+      expect(e.grade, e.id).toBe(ITEMS[e.id as ItemId].grade);
       expect(e.rows[0], e.id).toMatchObject({ label: '고유 효과', text: signatureText(e.id as ItemId) });
       expect(e.rows.find((r) => r.label === '접사')!.text, e.id).toContain('붙지 않음');
       expect(e.icon, e.id).toEqual({ sheet: 'icons', anim: e.id });

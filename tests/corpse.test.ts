@@ -530,7 +530,7 @@ describe('쉼터: Selma and the golem pile', () => {
     it('she talks (6+ lore lines, never the same twice in a row) and shows the banked pieces', () => {
       expect(SELMA_LINES.length).toBeGreaterThanOrEqual(6);
       const a = talk(12);
-      expect(a.selma.promptText()).toBe('대화');
+      expect(a.selma.promptText()).toBe('조합');
       expect(a.selma.promptSub()).toBe('재봉사 셀마 · 시체 조각 12');
       const said = new Set<string>();
       let last = '';
@@ -547,11 +547,11 @@ describe('쉼터: Selma and the golem pile', () => {
     });
     it('while her banter line is up the prompt steps aside (it was drawn over the bubble), then comes back', () => {
       const a = talk();
-      expect(a.selma.promptText()).toBe('대화');
+      expect(a.selma.promptText()).toBe('조합');
       a.selma.interact();
       expect(a.selma.promptText()).toBe('');
       steps(a.world, 60 * 3 + 5);
-      expect(a.selma.promptText()).toBe('대화');
+      expect(a.selma.promptText()).toBe('조합');
     });
   });
 

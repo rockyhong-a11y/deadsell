@@ -2,7 +2,10 @@ import { TILE } from '../engine/config';
 import type { Game } from './game';
 import type { LevelScene } from './scenes/levelScene';
 import { LEVEL_SEQUENCE } from './run';
-import type { ItemId } from './items/types';
+import type { AffixId, ItemId, ItemInstance } from './items/types';
+import { GRADE_IDS, type Grade } from './rules';
+import { addToStash } from './meta/stash';
+import { craftUnique } from './meta/craft';
 import { ITEMS } from './items/items';
 import { Actor } from './entity';
 import { createEnemy } from './enemies/factory';
@@ -69,6 +72,25 @@ export function installDebug(game: Game): void {
     },
     /** carried 시체 조각 of the current run */
     pieces(n: number) { if (game.run) game.run.pieces = Math.max(0, Math.floor(n)); },
+    /** the banked 시체 조각 (save.pieces, saved) */
+    bank(n: number) { game.save.pieces = Math.max(0, Math.floor(n)); game.persist(); return game.save.pieces; },
+    /** the bell shards (종탑의 파편): one per loop number given, e.g. shards(1, 2, 3) (saved) */
+    shards(...loops: number[]) { game.save.shards = loops.map((l) => Math.max(1, Math.min(MAX_LOOP, Math.floor(l)))); game.persist(); return [...game.save.shards]; },
+    /** the stash (보관함) as plain data */
+    stash() { return game.save.stash.map((e) => ({ ...e })); },
+    /** put an item into the stash (false when it is full); `mb` = a mid-boss item */
+    stashAdd(id: ItemId, tier = 1, affix: AffixId | null = null, mb = false) {
+      const inst: ItemInstance = { id, tier, affix, ...(mb ? { mb: true as const } : {}) };
+      const ok = addToStash(game.save, inst);
+      if (ok) game.persist();
+      return ok;
+    },
+    /** craft the unique `id` of `grade` from the stash / bank / shards as Selma would (saved) */
+    craft(grade: Grade, id: ItemId) {
+      const r = GRADE_IDS.includes(grade) ? craftUnique(game.save, grade, id) : { ok: false as const, reason: 'unknown' as const };
+      if (r.ok) game.persist();
+      return r;
+    },
     /** the loop (회차, saved; also applied to the run in progress, so enemies spawned from now on are scaled) */
     loop(n: number) { const l = Math.max(1, Math.min(MAX_LOOP, Math.floor(n))); game.save.loop = l; if (game.run) game.run.loop = l; game.persist(); },
     /** spawn a rag golem for the current run next to the player (replaces the one that stands). Returns it. */

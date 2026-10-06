@@ -9,7 +9,7 @@ import { COLOR_HEX } from '../combat';
 import { touchView } from './touch';
 import { drawVButtons, vbLayout, type VSkillView } from './vbuttons';
 import { MapView } from './mapview';
-import { COL, SZ, atLeast, icon, panel, pie, pieceIcon, pulse, text, textWidth, wrap } from './draw';
+import { COL, SZ, atLeast, gradeBadge, gradeBadgeW, gradeLetter, icon, panel, pie, pieceIcon, pulse, text, textWidth, wrap } from './draw';
 
 /** Minimum size (virtual px) of anything tappable. */
 export const MIN_TAP = 40;
@@ -469,6 +469,7 @@ export class Hud {
       const def = ITEMS[wp.id];
       panel(c, r.x, r.y, r.w, r.h, { fill: '#07060b', alpha: i === 0 ? 0.55 : 0.4, stroke: COLOR_HEX[def.color], r: 4 });
       icon(game.assets, c, def.icon, r.x + r.w / 2, r.y + r.h / 2, 20, i === 0 ? 0.95 : 0.7);
+      if (def.grade) gradeLetter(c, def.grade, r.x + r.w, r.y + r.h - 4);
     });
   }
 
@@ -491,6 +492,7 @@ export class Hud {
       c.fill();
       c.globalAlpha = 1;
       icon(game.assets, c, def.icon, s.cx, s.cy, 24, onCd ? 0.5 : 1);
+      if (def.grade) gradeLetter(c, def.grade, s.cx + s.r - 2, s.cy + s.r - 6);
       if (onCd) {
         pie(c, s.cx, s.cy, s.r - 1, cd / cdMax, 'rgba(7,6,11,0.72)');
         text(c, String(Math.ceil(cd)), s.cx, s.cy + 1, { align: 'center', bold: true });
@@ -527,7 +529,7 @@ export class Hud {
       const sk = skills[i];
       if (!sk) return null;
       const def = ITEMS[sk.id];
-      return { icon: def.icon, color: COLOR_HEX[def.color], cd: p.skillCooldown?.[i] ?? 0, cdMax: Math.max(0.001, p.skillCooldownMax?.[i] ?? 1), flash: this.ready[i] / 0.5 };
+      return { icon: def.icon, color: COLOR_HEX[def.color], cd: p.skillCooldown?.[i] ?? 0, cdMax: Math.max(0.001, p.skillCooldownMax?.[i] ?? 1), flash: this.ready[i] / 0.5, grade: def.grade };
     };
     drawVButtons(c, L, { opacity: s.btnOpacity, isDown: (id) => game.vb.ctl.isDown(id), skills: [view(0), view(1)], assets: game.assets });
   }
@@ -592,6 +594,7 @@ export class Hud {
       const tx = x + 52 + Math.round(textWidth(c, name, SZ.s, true)) + 6;
       panel(c, tx, y + 5, tw, 15, { fill: '#2a2210', alpha: 0.9, stroke: accent, r: 3 });
       text(c, UNIQUE_TAG, tx + tw / 2, y + 12.5, { align: 'center', color: accent });
+      if (def.grade) gradeBadge(c, def.grade, tx + tw + 4 + gradeBadgeW(c, def.grade) / 2, y + 12.5);
     }
     lines.forEach((l, i) => text(c, l.s, x + 52, y + 27 + i * 13, { color: l.color }));
   }

@@ -51,7 +51,7 @@ export function makeTestWorld(map: TileMap = flatMap(), seed = 1) {
   };
   const world = new World(game, run, level);
   // minimal UI stand-in: picks the first option of any choice
-  (world as any).ui = { modal: false, toast() {}, openChoice: (_t: string, _o: unknown[], pick: (i: number) => void) => pick(0), openAlchemist() {}, openMap() {}, openPause() {}, boss: null };
+  (world as any).ui = { modal: false, toast() {}, openChoice: (_t: string, _o: unknown[], pick: (i: number) => void) => pick(0), openAlchemist() {}, openStash() {}, openCraft() {}, openMap() {}, openPause() {}, boss: null };
   game.run = run;
   return { world, game, input, run };
 }

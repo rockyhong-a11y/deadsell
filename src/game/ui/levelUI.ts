@@ -4,6 +4,8 @@ import type { Actor } from '../entity';
 import { Hud } from './hud';
 import { Modal, ChoiceModal, AlchemistModal, CodexModal, MapModal, PauseModal, SettingsModal, TutorialModal, type ModalKey } from './modals';
 import { StashModal } from './stashModal';
+import { CraftModal } from './craftModal';
+import type { ItemId } from '../items/types';
 import type { NavKey, ScrollKey } from '../../engine/gamepad';
 
 export interface ChoiceOption {
@@ -131,6 +133,13 @@ export class LevelUI {
     if (this.top instanceof StashModal) return;
     this.game.audio.play('ui_open');
     this.push(new StashModal(this));
+  }
+
+  /** Selma's 조합 screen (docs/CONTENT4.md §4); `onCraft` runs after every craft */
+  openCraft(onCraft?: (id: ItemId) => void): void {
+    if (this.top instanceof CraftModal) return;
+    this.game.audio.play('ui_open');
+    this.push(new CraftModal(this, onCraft));
   }
 
   openMap(): void {

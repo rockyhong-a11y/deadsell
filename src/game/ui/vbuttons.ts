@@ -3,7 +3,8 @@ import { pointIn } from '../../engine/math';
 import type { Btn } from '../../engine/input';
 import type { ButtonSize } from '../meta/save';
 import type { GestureAction } from './touch';
-import { COL, SZ, icon, pie, rrect, text } from './draw';
+import { COL, SZ, gradeLetter, icon, pie, rrect, text } from './draw';
+import type { Grade } from '../rules';
 import type { Assets } from '../../engine/assets';
 
 /**
@@ -229,6 +230,8 @@ export interface VSkillView {
   cdMax: number;
   /** 0..1 flash after the cooldown ends */
   flash: number;
+  /** the grade letter in the corner (unique items) */
+  grade?: Grade;
 }
 
 export interface VDrawOpts {
@@ -273,6 +276,7 @@ export function drawVButtons(c: CanvasRenderingContext2D, L: VLayout, o: VDrawOp
     c.globalAlpha = Math.min(1, op + 0.35);
     if (sv && o.assets) {
       icon(o.assets, c, sv.icon, b.cx, b.cy, 24, sv.cd > 0 ? 0.5 : 1);
+      if (sv.grade) gradeLetter(c, sv.grade, b.cx + b.r - 2, b.cy + b.r - 6);
       if (sv.cd > 0) {
         pie(c, b.cx, b.cy, b.r - 1, sv.cd / Math.max(0.001, sv.cdMax), 'rgba(7,6,11,0.72)');
         text(c, String(Math.ceil(sv.cd)), b.cx, b.cy + 1, { align: 'center', bold: true });

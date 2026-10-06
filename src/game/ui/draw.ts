@@ -82,7 +82,20 @@ export function textWidth(c: CanvasRenderingContext2D, s: string, size: number =
   return c.measureText(s).width;
 }
 
-/** Greedy line wrap (Korean wraps at any character, Latin at spaces when possible). */
+/**
+ * Is there no good place to break a line between these two glyphs? A number stays whole with what clings to it: its digits,
+ * decimal point, sign and unit ('1.5초', '-90%', '56px', '+15'). Used by `wrap`.
+ */
+function sticky(left: string, right: string): boolean {
+  if (right === ' ') return false;
+  if (left >= '0' && left <= '9') return true;
+  return '.,+-−–×'.includes(left) && right >= '0' && right <= '9';
+}
+
+/**
+ * Greedy line wrap: at spaces when there is one on the line (a word that does not fit moves down whole, Korean too), inside a
+ * word only when the word alone is wider than the line (Korean wraps at any character then); a number is never split.
+ */
 export function wrap(c: CanvasRenderingContext2D, s: string, maxW: number, size: number = SZ.s, bold = false): string[] {
   setFont(c, size, bold);
   const lines: string[] = [];
@@ -91,15 +104,21 @@ export function wrap(c: CanvasRenderingContext2D, s: string, maxW: number, size:
     for (const ch of [...para]) {
       const test = line + ch;
       if (line && c.measureText(test).width > maxW) {
-        // prefer breaking at the last space if there is one
-        const sp = line.lastIndexOf(' ');
-        if (ch !== ' ' && sp > 0 && /[A-Za-z0-9]/.test(ch) && /[A-Za-z0-9]/.test(line[line.length - 1])) {
-          lines.push(line.slice(0, sp));
-          line = line.slice(sp + 1) + ch;
-        } else {
-          lines.push(line);
-          line = ch === ' ' ? '' : ch;
+        if (ch === ' ') {
+          lines.push(line.trimEnd());
+          line = '';
+          continue;
         }
+        // where the line ends: before the word that does not fit (if the line has more than that word), else right here
+        let cut = line.length;
+        const sp = line.lastIndexOf(' ');
+        if (sp > 0 && line[line.length - 1] !== ' ') cut = sp + 1;
+        // ... and never inside a number: move the break back to before it
+        let p = cut;
+        while (p > 0 && sticky(line[p - 1], p === line.length ? ch : line[p])) p--;
+        if (p > 0 && line.slice(0, p).trim()) cut = p;
+        lines.push(line.slice(0, cut).trimEnd());
+        line = line.slice(cut) + ch;
       } else line = test;
     }
     lines.push(line);
@@ -186,37 +205,9 @@ export function icon(assets: Pick<Assets, 'sheet'>, c: CanvasRenderingContext2D,
   c.restore();
 }
 
-/**
- * The 시체 조각 icon centred at (cx, cy): `corpse_piece` of the `icons` sheet once the art has it, until then a small
- * stitched lump drawn with paths (the sheet would show an unrelated icon for an unknown name).
- */
+/** The 시체 조각 icon (`corpse_piece` of the `icons` sheet) centred at (cx, cy). */
 export function pieceIcon(assets: Pick<Assets, 'sheet'>, c: CanvasRenderingContext2D, cx: number, cy: number, size = 18, alpha = 1): void {
-  if (assets.sheet('icons').has('corpse_piece')) {
-    icon(assets, c, 'corpse_piece', cx, cy, size, alpha);
-    return;
-  }
-  const r = size / 2;
-  c.save();
-  c.globalAlpha *= alpha;
-  c.fillStyle = COL.bone;
-  c.strokeStyle = '#7a1f2a';
-  c.lineWidth = 1.5;
-  c.beginPath();
-  c.ellipse(cx, cy + 1, r * 0.85, r * 0.62, -0.35, 0, Math.PI * 2);
-  c.fill();
-  c.stroke();
-  c.strokeStyle = '#c8324a';
-  c.lineWidth = 1.2;
-  c.beginPath();
-  for (const k of [-0.45, 0, 0.45]) {
-    const x = cx + r * k;
-    c.moveTo(x - 1.6, cy - 2.2);
-    c.lineTo(x + 1.6, cy + 3);
-    c.moveTo(x + 1.6, cy - 2.2);
-    c.lineTo(x - 1.6, cy + 3);
-  }
-  c.stroke();
-  c.restore();
+  icon(assets, c, 'corpse_piece', cx, cy, size, alpha);
 }
 
 /** m:ss (or h:mm:ss) */

@@ -25,7 +25,9 @@ const HINT_H = 18;
 const ROW_H = 36;
 const GROUP_H = 20;
 const LINE_H = 14;
+/** the label column of a detail page: at least this wide, wider when one of the page's (bold) labels needs it */
 const LABEL_W = 44;
+const LABEL_GAP = 6;
 /** one `scrollUp` / `scrollDown` step (right stick, Shift+↑↓) = two text lines */
 const SCROLL_STEP = LINE_H * 2;
 /** taps are ignored for this long after the screen opens (the finger that opened it is still lifting) */
@@ -220,6 +222,8 @@ type ListItem = { kind: 'group'; label: string; y: number; h: number } | { kind:
 interface TextLayout {
   descLines: string[];
   headH: number;
+  /** width of the label column (the value text starts after it) */
+  labelW: number;
   rows: { label: string; color?: string; lines: string[]; y: number }[];
   rowsH: number;
 }
@@ -607,13 +611,15 @@ export class CodexScreen {
     const headH = 22 + descLines.length * LINE_H + 6;
     const rows: TextLayout['rows'] = [];
     let y = 0;
+    // a long label ('고유 효과' on the unique items' pages) must not run into its value text
+    const labelW = Math.max(LABEL_W, ...e.rows.map((r) => (r.label ? Math.ceil(textWidth(c, r.label, SZ.s, true)) + LABEL_GAP : 0)));
     for (const row of e.rows) {
-      const lines = wrap(c, row.text, rowsW - LABEL_W - 10, SZ.s);
+      const lines = wrap(c, row.text, rowsW - labelW - 10, SZ.s);
       rows.push({ label: row.label, color: row.color, lines, y });
       y += lines.length * LINE_H + 3;
     }
     // no gap after the last row: the scroll range ends exactly at its last line
-    t = { descLines, headH, rows, rowsH: rows.length ? y - 3 : 0 };
+    t = { descLines, headH, labelW, rows, rowsH: rows.length ? y - 3 : 0 };
     if (this.textCache.size > 80) this.textCache.clear();
     this.textCache.set(key, t);
     return t;
@@ -649,7 +655,7 @@ export class CodexScreen {
       const y = y0 + r.y;
       if (y + r.lines.length * LINE_H < B.y || y > B.y + B.h) continue;
       if (r.label) text(c, r.label, B.x, y + LINE_H / 2, { size: SZ.s, bold: true, color: COL.amber });
-      r.lines.forEach((ln, i) => text(c, ln, B.x + LABEL_W, y + LINE_H / 2 + i * LINE_H, { size: SZ.s, color: r.color ?? COL.text }));
+      r.lines.forEach((ln, i) => text(c, ln, B.x + tl.labelW, y + LINE_H / 2 + i * LINE_H, { size: SZ.s, color: r.color ?? COL.text }));
     }
     c.restore();
     const contentH = headH + tl.rowsH;

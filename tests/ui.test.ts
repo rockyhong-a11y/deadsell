@@ -114,6 +114,38 @@ describe('text helpers', () => {
     expect(lines.join('')).toBe('가나다라마바사아자차카타파하');
     expect(wrap(c, '가\n나', 100, 11)).toEqual(['가', '나']);
   });
+
+  it('wrap breaks at spaces first: a Korean word that fits moves down whole', () => {
+    const c = fakeCtx();
+    const text = '맞은 적을 끌어온다 · 넉백이 거의 없는 적은 끌려오지 않고 기절만 한다';
+    const longest = Math.max(...text.split(' ').map((w) => [...w].length)) * 6.05;
+    for (let w = Math.ceil(longest); w <= 300; w += 3) {
+      const lines = wrap(c, text, w, 11);
+      expect(lines.join(' '), `width ${w}`).toBe(text);
+      for (const l of lines) expect(l.length === 0 || l.trim() === l, `no stray spaces in "${l}"`).toBe(true);
+      for (const l of lines) expect([...l].length * 6.05, `width ${w}: "${l}"`).toBeLessThanOrEqual(w + 0.01);
+    }
+    // a word wider than the whole line still breaks inside (Korean wraps at any character then)
+    const lines = wrap(c, '가 나다라마바사아자차카타파하 거', 30, 11);
+    expect(lines.length).toBeGreaterThan(3);
+    expect(lines.join('').replace(/ /g, '')).toBe('가나다라마바사아자차카타파하거');
+  });
+
+  it('wrap never splits a number from its digits, decimal point, sign or unit', () => {
+    const c = fakeCtx();
+    // with spaces, every word fits: the lines break only at the spaces, so no number is ever cut
+    const text = '정면 피해 -90% · 패링 시 기절 1.5초 · 충격파 반경 72px, 피해 30, 기절 1.5초 +15 치명타';
+    for (let w = 40; w <= 320; w++) expect(wrap(c, text, w, 11).join(' '), `width ${w}`).toBe(text);
+    // glued to Korean text there is no space to break at: the number still stays whole (the break moves before it)
+    const bad = /[0-9]\n|[.,+\-]\n/;
+    for (let w = 31; w <= 150; w++) { // (a number wider than the whole line has to break)
+      const lines = wrap(c, '피해12.5초동안유지되고-90%만큼줄어든다', w, 11);
+      expect(lines.join('\n'), `width ${w}`).not.toMatch(bad);
+      expect(lines.join(''), `width ${w}`).toBe('피해12.5초동안유지되고-90%만큼줄어든다');
+    }
+    // a line of nothing but digits has to break somewhere
+    expect(wrap(c, '12345678901234567890', 30, 11).length).toBeGreaterThan(1);
+  });
 });
 
 describe('meta progression', () => {

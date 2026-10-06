@@ -136,7 +136,7 @@ export class Ghoul extends Enemy {
     const w = this.world;
     const fy = w.map.floorBelow(this.x, this.y - 6, 160) ?? this.y;
     w.particles.emit('smoke', this.x, this.y - this.h * 0.5, { count: 10 });
-    w.spawn(new PoisonCloud(this.x, fy, { radius: this.pr('cloudR', 40), life: this.pr('cloudLife', 3), dps: this.pr('cloudDps', 4) }));
+    w.spawn(new PoisonCloud(this.x, fy, { radius: this.pr('cloudR', 40), life: this.pr('cloudLife', 3), dps: this.dot(this.pr('cloudDps', 4)) }));
   }
 
   protected drawTelegraph(ctx: CanvasRenderingContext2D, p: number): void {

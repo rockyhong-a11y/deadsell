@@ -252,7 +252,7 @@ export class Harpy extends Enemy {
     if (fy === null) return;
     w.particles.emit('fire', this.x, fy - 4, { count: 8 });
     w.audio.play('explosion', { vol: 0.35, pitch: 1.6 });
-    w.spawn(new FirePatch(this.x, fy, { width: this.pr('fireW', 46), life: this.pr('fireLife', 2), dps: this.pr('fireDps', 6), source: this }));
+    w.spawn(new FirePatch(this.x, fy, { width: this.pr('fireW', 46), life: this.pr('fireLife', 2), dps: this.dot(this.pr('fireDps', 6)), source: this }));
   }
 
   protected onRecover(dt: number): void {

@@ -116,7 +116,7 @@ export class Bomber extends Enemy {
         break;
       case 'alchemist': {
         const r = this.pr('puddleR', 36);
-        o.puddle = { radius: r, life: this.pr('puddleLife', 2.5), dps: this.pr('puddleDps', 6) };
+        o.puddle = { radius: r, life: this.pr('puddleLife', 2.5), dps: this.dot(this.pr('puddleDps', 6)) };
         o.radius = r;
         o.fuse = 0.3;
         o.tint = '#7dff5a';

@@ -2,9 +2,10 @@
 
     blender -b --factory-startup -P tools/blender/asset_seamstress.py
 
-Tall gaunt corpse seamstress: bone-white skin with stitch lines on cheek and arms, long black hair in a
-messy bun pierced with big needles, a brass monocle, a patchwork dress of mismatched fabrics, a
-measuring-tape scarf, red thread spools on her belt and huge shears strapped to her back.  She holds a
+Tall gaunt corpse seamstress, unmistakably a woman at 1x: bone-white stitched skin (cheek and arms) with a soft
+narrow jaw, small chin, muted-rose lips and blush, lashes and plum eye makeup round the sunken eyes, long black
+hair in a messy bun pierced with big needles plus face-framing locks, a brass monocle, a modest bust on a laced
+bodice, a pinched waist over full hips and a patchwork dress of mismatched fabrics, a measuring-tape scarf, red thread spools on her belt and huge shears strapped to her back.  She holds a
 patch of cloth in the far hand and a needle in the near one; the red thread between them is rebuilt for every
 frame (a tube between the needle eye and the stitch).  Writes build/frames/seamstress/{idle,talk,sew}_###.png
 + spec.json (frame 128x128, anchor 64,124; packed to public/assets/sprites/seamstress.png by pack_all.py).
@@ -30,15 +31,19 @@ J = rig.joint
 # ---------------------------------------------------------------------------
 # materials
 M = {}
-M["skin"] = mat("se_skin", "#e7dfd0", "#7e6c8c", "#fffaf2")
-M["skin_f"] = mat("se_skin_f", "#cdc4b6", "#695a7a", "#ebe3d6")
-M["skin_sh"] = mat("se_skin_sh", "#a89aa4", "#5a4a68", "#cdc2c8", rim=False)
-M["socket"] = mat("se_socket", "#3a2844", "#1c1226", "#54405e", rim=False)
+M["skin"] = mat("se_skin", "#ebddd0", "#86708a", "#fff6ee")
+M["skin_f"] = mat("se_skin_f", "#d2c4b8", "#6e5a7c", "#eee0d4")
+M["skin_sh"] = mat("se_skin_sh", "#b9a3ab", "#64506c", "#d6c4c8", rim=False)
+M["socket"] = mat("se_socket", "#5c4470", "#2a1c3a", "#7a5c8c", rim=False)           # plum eye shadow round the sunken eye
+M["lash"] = mat("se_lash", "#1e1424", "#0c0810", "#2e2038", rim=False)
+M["blush"] = mat("se_blush", "#c98a96", "#8a5a72", "#e4aab4", rim=False)
+M["lip_in"] = mat("se_lip_in", "#3a1626", "#1c0a16", "#54243a", rim=False)
 M["stitch"] = mat("se_stitch", "#7a1f2a", "#3a0d1c", "#a8343e", rim=False)
 M["thread"] = mat("se_thread", "#d6384f", "#7a1530", "#ff6a7a")
 M["hair"] = mat("se_hair", "#201a2a", "#0c0912", "#473c5c")
 M["hair_d"] = mat("se_hair_d", "#16121e", "#08060c", "#352c46")
 M["wine"] = mat("se_wine", "#6e2536", "#32101e", "#a0425a", rim=False)
+M["bodice"] = mat("se_bodice", "#93385a", "#481a34", "#c9607e")                 # lighter rose-wine so the bust and waist read
 M["wine_d"] = mat("se_wine_d", "#4d1a2a", "#240c16", "#7a3046", rim=False)
 M["slate"] = mat("se_slate", "#41536a", "#1c2434", "#6a82a0", rim=False)
 M["mustard"] = mat("se_mustard", "#a8803a", "#523424", "#d8b062", rim=False)
@@ -59,12 +64,12 @@ M["steel_d"] = mat("se_steel_d", "#6f768c", "#383b54", "#aeb6cb")
 M["brass"] = mat("se_brass", "#d9a54a", "#7a4a22", "#ffe19a", rim=False)
 M["wood"] = mat("se_wood", "#8a6a46", "#40291f", "#b48a58")
 M["eye"] = glow("se_eye", "#c4ecff")
-M["mouth"] = mat("se_mouth", "#6a2a3c", "#38132a", "#8e4458", rim=False)
+M["mouth"] = mat("se_mouth", "#c4647e", "#762e4a", "#e592a8", rim=False)     # muted rose lips
 M["glint"] = glow("se_glint", "#e6fdff")
 M["pin"] = mat("se_pin", "#c8d0e0", "#6a728c", "#f4f7ff", rim=False)
 M["linen"] = mat("se_linen", "#b9b4c4", "#6a6078", "#e4e0ec", rim=False)
 
-body_mats = dict(pelvis=M["wine_d"], waist=M["wine"], top=M["wine"], shoulder=M["moss"],
+body_mats = dict(pelvis=M["wine_d"], waist=M["bodice"], top=M["bodice"], shoulder=M["moss"],
                  sleeve=M["moss"], sleeve_f=M["slate"], cuff=M["mustard"], glove=M["skin"], glove_f=M["skin_f"],
                  leg=M["leg"], leg_f=M["leg_f"], boot=M["boot"], boot_f=M["boot_f"], bootcuff=M["leather"],
                  sole=M["sole"], belt=M["leather"], buckle=M["brass"], skin=M["skin"], eye=M["eye"],
@@ -72,19 +77,39 @@ body_mats = dict(pelvis=M["wine_d"], waist=M["wine"], top=M["wine"], shoulder=M[
 E, B, L, C, Y, R, T, P = npc.E, npc.B, npc.L, npc.C, npc.Y, npc.R, npc.T, npc.P
 
 # ---------------------------------------------------------------------------
-# gaunt body: narrow ribs and hips, long thin bone-white arms with stitched seams, thin legs (same joint lengths)
-E("hips", "pelvis", (0.26, 0.27, 0.22), M["wine_d"], (-0.02, 0, 0.92))
-E("spine", "waist", (0.15, 0.18, 0.28), M["wine"], (0.0, 0, 1.07))
-E("chest", "ribs", (0.21, 0.24, 0.30), M["wine"], (-0.015, 0, 1.25))
-E("chest", "bust", (0.12, 0.2, 0.1), M["wine"], (0.055, 0, 1.225))
-E("hips", "belt", (0.255, 0.29, 0.06), M["leather"], (-0.005, 0, 0.985))
-B("hips", "buckle", (0.035, 0.06, 0.05), M["brass"], (0.126, 0, 0.985))
+# woman's figure under the gaunt look: modest bust, pinched waist, full hips; long thin bone-white arms with stitched
+# seams and thin legs (same joint lengths)
+TORSO = []                     # (cx, cy, cz, hx, hy, hz) half extents of the bodice ellipsoids -> front_x() for the lacing
+
+
+def torso(joint, name, size, m, loc):
+    TORSO.append((loc[0], loc[1], loc[2], size[0] / 2, size[1] / 2, size[2] / 2))
+    return E(joint, name, size, m, loc)
+
+
+def front_x(z, y=0.0):
+    """x of the bodice surface at (y, z) (rest pose)."""
+    best = -9.0
+    for cx, cy, cz, hx, hy, hz in TORSO:
+        q = 1.0 - ((y - cy) / hy) ** 2 - ((z - cz) / hz) ** 2
+        if q > 0:
+            best = max(best, cx + hx * math.sqrt(q))
+    return best
+
+
+torso("hips", "pelvis", (0.35, 0.36, 0.25), M["wine_d"], (-0.03, 0, 0.93))               # full hips
+torso("spine", "waist", (0.125, 0.165, 0.27), M["bodice"], (0.0, 0, 1.085))                # pinched waist
+torso("chest", "ribs", (0.19, 0.225, 0.27), M["bodice"], (-0.02, 0, 1.265))
+for s, y in (("n", -0.053), ("f", 0.053)):
+    torso("chest", "bust_" + s, (0.135, 0.125, 0.125), M["bodice"], (0.076, y, 1.232))      # modest bust line
+E("hips", "belt", (0.335, 0.36, 0.06), M["leather"], (-0.025, 0, 0.985))
+B("hips", "buckle", (0.035, 0.06, 0.05), M["brass"], (0.145, 0, 0.985))
 for s, y in (("n", -0.15), ("f", 0.15)):
     far = s == "f"
     sl = M["slate"] if far else M["moss"]
     sk = M["skin_f"] if far else M["skin"]
-    E("sh_" + s, "pauld_" + s, (0.14, 0.13, 0.12), sl, (0.0, y, 1.375))
-    L("sh_" + s, "sleeve_" + s, 0.17, 0.056, 0.05, sl, (0, y, 1.37))
+    E("sh_" + s, "pauld_" + s, (0.105, 0.1, 0.095), sl, (0.0, y, 1.372))                # small soft shoulder, not a pad
+    L("sh_" + s, "sleeve_" + s, 0.15, 0.048, 0.044, sl, (0, y, 1.37))
     L("sh_" + s, "ua_" + s, 0.26, 0.04, 0.034, sk, (0, y, 1.37))
     L("el_" + s, "fa_" + s, 0.22, 0.034, 0.029, sk, (0, y, 1.11))
     E("el_" + s, "elbow_" + s, (0.07, 0.07, 0.07), sk, (0, y, 1.11))
@@ -106,30 +131,61 @@ for s, y in (("n", -0.085), ("f", 0.085)):
     B("an_" + s, "foot_" + s, (0.2, 0.085, 0.08), bt, (0.05, y, 0.04), bevel=0.025)
     B("an_" + s, "sole_" + s, (0.205, 0.09, 0.025), M["sole"], (0.05, y, 0.012))
 
-# face: pale narrow head with sunken sockets, hollow cheeks, a stitched cheek line
-npc.face(body_mats)
-E("head", "sock_n", (0.055, 0.1, 0.115), M["socket"], (0.104, -0.074, 1.592))
-E("head", "sock_f", (0.055, 0.1, 0.115), M["socket"], (0.104, 0.074, 1.592))
-E("head", "cheek_n", (0.08, 0.04, 0.09), M["skin_sh"], (0.08, -0.103, 1.53))
-E("head", "cheek_f", (0.07, 0.035, 0.08), M["skin_sh"], (0.082, 0.104, 1.535))
-T("head", "cheek_stitch", [(0.118, -0.058, 1.532), (0.075, -0.094, 1.537), (0.03, -0.105, 1.545)],
-  [0.0075] * 3, M["stitch"], sides=5)
-for k, (cx, cy) in enumerate(((0.105, -0.07), (0.075, -0.093), (0.045, -0.103))):
-    B("head", "cheek_tick%d" % k, (0.012, 0.008, 0.045), M["stitch"], (cx, cy - 0.003, 1.538), rot=(0, 0, 40))
+# face: pale head with a soft narrow jaw and small chin, sunken eyes ringed by plum shadow and lashes, muted-rose lips
+# and blush, a stitched cheek line
+npc.face(body_mats, shape=dict(head=(0.224, 0.2, 0.25), head_loc=(0.02, 0, 1.607),
+                               chin=(0.082, 0.098, 0.078), chin_loc=(0.083, 0, 1.49),
+                               nose=(0.036, 0.026, 0.04), nose_loc=(0.137, 0, 1.58), eye=(0.05, 0.042, 0.054),
+                               mouth_c=(0.04, 0.078, 0.03), mouth_c_loc=(0.121, 0, 1.529),
+                               mouth_o=(0.04, 0.062, 0.05), mouth_o_loc=(0.12, 0, 1.524)))
+E("head", "jaw", (0.15, 0.158, 0.13), M["skin"], (0.04, 0, 1.535))                          # tapering jaw line
+E("head", "sock_n", (0.048, 0.088, 0.088), M["socket"], (0.104, -0.074, 1.595))
+E("head", "sock_f", (0.048, 0.088, 0.088), M["socket"], (0.104, 0.074, 1.595))
+for sg, y in ((-1, -0.074), (1, 0.074)):                                                  # upper lash line + outer flick
+    B("head", "lash_%d" % sg, (0.03, 0.082, 0.012), M["lash"], (0.112, y, 1.633), rot=(0, 0, 0), bevel=0.003)
+    B("head", "flick_%d" % sg, (0.034, 0.02, 0.012), M["lash"], (0.093, y + sg * 0.046, 1.64), rot=(0, -38, 0), bevel=0.002)
+    B("head", "lashlow_%d" % sg, (0.022, 0.06, 0.008), M["lash"], (0.112, y, 1.556), bevel=0.002)
+E("head", "blush_n", (0.05, 0.03, 0.05), M["blush"], (0.08, -0.098, 1.536), segs=8, rings=5)
+E("head", "blush_f", (0.044, 0.026, 0.044), M["blush"], (0.084, 0.098, 1.538), segs=8, rings=5)
+T("head", "cheek_stitch", [(0.122, -0.052, 1.514), (0.085, -0.088, 1.52), (0.04, -0.101, 1.527)],
+  [0.0072] * 3, M["stitch"], sides=5)
+for k, (cx, cy) in enumerate(((0.108, -0.064), (0.08, -0.088), (0.056, -0.098))):
+    B("head", "cheek_tick%d" % k, (0.012, 0.008, 0.04), M["stitch"], (cx, cy - 0.003, 1.521), rot=(0, 0, 40))
 T("neck", "neck_stitch", [(0.045, -0.025, 1.52), (0.052, -0.03, 1.48)], [0.007] * 2, M["stitch"], sides=4)
 R("neck", "neck_ring", 0.05, 0.0075, M["stitch"], (0, 0, 1.47), maj=10, mino=4)
 # brass monocle on the near eye with a chain down to the collar
-R("head", "monocle", 0.058, 0.0125, M["brass"], (0.13, -0.074, 1.598), (0, 90, 0), maj=14, mino=5)
-E("head", "monocle_glint", (0.012, 0.012, 0.03), M["glint"], (0.134, -0.098, 1.628), segs=6, rings=4)
-T("head", "monocle_chain", [(0.13, -0.078, 1.538), (0.122, -0.104, 1.48), (0.1, -0.124, 1.41), (0.075, -0.13, 1.35)],
-  [0.0065] * 4, M["brass"], sides=4)
+R("head", "monocle", 0.048, 0.0105, M["brass"], (0.13, -0.074, 1.598), (0, 90, 0), maj=14, mino=5)
+E("head", "monocle_glint", (0.012, 0.012, 0.026), M["glint"], (0.134, -0.098, 1.626), segs=6, rings=4)
+T("head", "monocle_chain", [(0.13, -0.078, 1.548), (0.122, -0.104, 1.48), (0.1, -0.124, 1.41), (0.075, -0.13, 1.35)],
+  [0.006] * 4, M["brass"], sides=4)
+# mouth: dark inside shown with the open lips only
+MOUTH_IN = E("head", "mouth_in", (0.02, 0.036, 0.026), M["lip_in"], (0.134, 0, 1.524), segs=8, rings=5)
+_mouth = npc.mouth
+
+
+def mouth_with_inside(frame, open_):
+    _mouth(frame, open_)
+    common.keyed_visibility(MOUTH_IN, frame, open_)
+
+
+npc.mouth = mouth_with_inside
 
 # ---------------------------------------------------------------------------
 # hair: cap + back + bangs + a long near lock, messy bun pierced with big needles
 E("head", "hair_cap", (0.27, 0.245, 0.22), M["hair"], (-0.05, 0, 1.69))
 E("head", "hair_back", (0.23, 0.23, 0.31), M["hair_d"], (-0.1, 0, 1.565))
+E("head", "hair_nape", (0.17, 0.2, 0.2), M["hair_d"], (-0.115, 0, 1.43))                  # hair falls past the nape
 E("head", "bangs", (0.1, 0.2, 0.055), M["hair"], (0.075, 0, 1.715), (0, 28, 0))
 E("head", "lock_f", (0.055, 0.045, 0.19), M["hair_d"], (0.045, 0.103, 1.53), (0, -6, 0))
+# face-framing strands: swept from the parting past the cheek and jaw to the collarbone (pendulum chains, one per side)
+for sg, nm in ((-1, "n"), (1, "f")):
+    J("frame_" + nm, "head", (0.035, sg * 0.112, 1.665))
+    T("frame_" + nm, "frame_a_" + nm, [(0.07, sg * 0.1, 1.675), (0.045, sg * 0.114, 1.61), (0.022, sg * 0.118, 1.545),
+                                       (0.012, sg * 0.12, 1.485), (0.012, sg * 0.122, 1.43), (0.02, sg * 0.123, 1.385)],
+      [0.014, 0.029, 0.031, 0.027, 0.02, 0.006], M["hair"] if sg < 0 else M["hair_d"], sides=6, flat=0.8)
+    T("frame_" + nm, "frame_b_" + nm, [(0.08, sg * 0.085, 1.688), (0.066, sg * 0.104, 1.63), (0.05, sg * 0.113, 1.57),
+                                       (0.05, sg * 0.117, 1.52)],
+      [0.01, 0.017, 0.015, 0.005], M["hair_d"], sides=5, flat=0.8)
 J("lockn1", "head", (-0.09, -0.115, 1.58))
 J("lockn2", "lockn1", (-0.10, -0.125, 1.40))
 J("lockn3", "lockn2", (-0.11, -0.125, 1.22))
@@ -154,7 +210,7 @@ for k, (ang, ln, dy) in enumerate(((40, 0.62, -0.03), (130, 0.56, 0.03))):      
 # patchwork dress: long skirt of mismatched sectors (own pivots so it can swing), stitched patches, ragged hem
 J("sk_f", "hips", (0, 0, 0.99))
 J("sk_b", "hips", (0, 0, 0.99))
-SK_TOP, SK_R0, SK_R1 = 0.99, 0.15, 0.335
+SK_TOP, SK_R0, SK_R1 = 0.99, 0.185, 0.345
 FRONT = ((-100, -58, "wine", 0.64), (-58, -20, "mustard", 0.69), (-20, 22, "slate", 0.62), (22, 62, "moss", 0.7),
          (62, 100, "wine_d", 0.65))
 BACK = ((80, 135, "slate", 0.68), (135, 190, "wine_d", 0.72), (190, 245, "charcoal", 0.66), (245, 282, "moss", 0.7))
@@ -183,13 +239,13 @@ patch("pat2", -8, 0.7, 0.1, 0.1, "wine")
 patch("pat3", 38, 0.58, 0.12, 0.12, "cream", rz=8)
 patch("pat4", 80, 0.66, 0.08, 0.14, "mustard")
 patch("pat5", -82, 0.7, 0.09, 0.11, "slate")
-# bodice details: lacing and a stitched seam down the front
-for k, z in enumerate((1.3, 1.24, 1.18, 1.12)):
+# bodice details: lacing down the front (placed on the computed bodice surface) and two patches
+for k, z in enumerate((1.31, 1.25, 1.19, 1.13, 1.07)):
     for sg in (-1, 1):
-        B("chest" if z > 1.18 else "spine", "lace%d_%d" % (k, sg), (0.016, 0.075, 0.012), M["thread"], (0.108 if z > 1.18 else 0.099, 0.0, z),
+        B("chest" if z > 1.18 else "spine", "lace%d_%d" % (k, sg), (0.016, 0.07, 0.012), M["cream"], (front_x(z) + 0.004, 0.0, z),
           rot=(sg * 28, 0, 0))
-B("chest", "bodice_patch", (0.02, 0.1, 0.1), M["mustard"], (0.095, -0.13, 1.2), rot=(0, 0, 18))
-B("chest", "bodice_patch2", (0.02, 0.09, 0.07), M["slate"], (0.08, -0.17, 1.31), rot=(0, 8, 24))
+B("chest", "bodice_patch", (0.02, 0.07, 0.07), M["mustard"], (front_x(1.15, -0.075) + 0.004, -0.075, 1.15), rot=(0, 0, 18))
+B("chest", "bodice_patch2", (0.02, 0.07, 0.06), M["slate"], (front_x(1.345, -0.1) + 0.004, -0.1, 1.345), rot=(0, 8, 24))
 
 # ---------------------------------------------------------------------------
 # measuring-tape scarf: wrap + a long front tail (ticks across every segment)
@@ -197,7 +253,7 @@ E("chest", "tape_wrap", (0.18, 0.25, 0.085), M["tape"], (-0.012, 0, 1.45))
 E("chest", "tape_wrap2", (0.17, 0.24, 0.05), M["tape"], (0.008, 0, 1.4))
 for k, z in enumerate((1.46, 1.44, 1.42)):
     B("chest", "tape_tick_w%d" % k, (0.2, 0.034, 0.008), M["tick"], (-0.01, 0.0, z))
-SC_A = [(0.075, -0.135, 1.37), (0.09, -0.135, 1.27), (0.095, -0.135, 1.17), (0.09, -0.135, 1.07)]
+SC_A = [(0.06, -0.135, 1.38), (0.07, -0.135, 1.335), (0.075, -0.135, 1.29), (0.075, -0.135, 1.245)]
 prev = "chest"
 for k, p in enumerate(SC_A):
     jn = "tpA%d" % k
@@ -207,9 +263,10 @@ for k, p in enumerate(SC_A):
         nxt = SC_A[k + 1]
         cz = (p[2] + nxt[2]) / 2
         B(jn, "tpA_seg%d" % k, (0.045, 0.13, abs(p[2] - nxt[2]) + 0.015), M["tape"], ((p[0] + nxt[0]) / 2, p[1], cz))
-        for t in range(4):
+        sh = abs(p[2] - nxt[2])
+        for t in range(3):
             B(jn, "tpA_tick%d_%d" % (k, t), (0.049, 0.134, 0.01 if t % 2 == 0 else 0.006), M["tick"],
-              ((p[0] + nxt[0]) / 2, p[1], cz + 0.045 - t * 0.03))
+              ((p[0] + nxt[0]) / 2, p[1], cz + sh * (0.3 - t * 0.3)))
 B("tpA2", "tpA_end", (0.05, 0.13, 0.03), M["mustard"], (SC_A[3][0], SC_A[3][1], SC_A[3][2] + 0.01))
 
 # ---------------------------------------------------------------------------
@@ -349,6 +406,8 @@ def sway(a, t, amp, w=1):
     a["lockn1"] = pend(t, 2.0 * amp, 0.3, w)
     a["lockn2"] = pend(t, 3.0 * amp, 0.45, w)
     a["lockn3"] = pend(t, 4.0 * amp, 0.6, w)
+    a["frame_n"] = pend(t, 2.5 * amp, 0.35, w)
+    a["frame_f"] = pend(t, 2.5 * amp, 0.5, w)
 
 
 def base_pose(t, mode, ik_n, ik_f, blink=0.0, w=1):

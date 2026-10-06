@@ -46,7 +46,8 @@ export interface HitReport {
  * Damage every opposing, targetable actor whose hurtbox overlaps `box`.
  * `info` may be a function to customise per target (crits from behind, etc.).
  * `already` (actor ids) prevents multi-hits across the frames of one swing.
- * Player attacks also break breakable tiles inside the box.
+ * Player-team attacks also break breakable tiles inside the box, unless `opts.breakTiles` is false (an ally's attack is not
+ * the heroine's: the rag golem does not open secret walls on its own).
  */
 export function hitArea(
   world: World,
@@ -54,6 +55,7 @@ export function hitArea(
   team: Team,
   info: DamageInfo | ((t: Actor) => DamageInfo | null),
   already?: Set<number>,
+  opts: { breakTiles?: boolean } = {},
 ): HitReport[] {
   const out: HitReport[] = [];
   for (const e of world.actors) {
@@ -66,7 +68,7 @@ export function hitArea(
     const result = e.takeDamage(di);
     out.push({ target: e, result });
   }
-  if (team === 'player') world.breakTilesIn(box);
+  if (team === 'player' && opts.breakTiles !== false) world.breakTilesIn(box);
   return out;
 }
 

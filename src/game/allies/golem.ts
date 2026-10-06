@@ -1,6 +1,7 @@
 import { Actor } from '../entity';
 import { hitArea, type DamageInfo } from '../combat';
 import { approach, overlaps, sign } from '../../engine/math';
+import { groundUnder } from '../physics';
 import type { RunState } from '../run';
 import type { World } from '../world';
 import type { Player } from '../player/player';
@@ -92,15 +93,21 @@ export class Golem extends Actor {
     return { x: f > 0 ? this.x + this.w / 2 - 4 : this.x - this.w / 2 + 4 - S.w, y: this.y - S.h, w: S.w, h: S.h };
   }
 
-  /** the nearest targetable enemy in sight within the aggro box around the golem */
+  /**
+   * the nearest targetable enemy in sight within the aggro box around the golem. One that hovers (or perches) so high that its
+   * hurtbox is out of the slam's reach from the floor is not worth a windup: it is left to the heroine until it comes down.
+   */
   private pickTarget(): Actor | null {
     const w = this.world;
+    const reachTop = this.y - GOLEM.slam.h - GOLEM.reachSlack;
     let best: Actor | null = null;
     let bd = Infinity;
     for (const a of w.actors) {
       if (a.team !== 'enemy' || !a.targetable) continue;
       const dx = Math.abs(a.x - this.x);
       if (dx > GOLEM.aggro.x || Math.abs(a.y - this.y) > GOLEM.aggro.y || dx >= bd) continue;
+      const hb = a.hurtbox();
+      if (hb.y + hb.h < reachTop) continue;
       if (!w.map.lineOfSight(this.x, this.y - this.h * 0.6, a.cx, a.cy)) continue;
       bd = dx;
       best = a;
@@ -154,10 +161,17 @@ export class Golem extends Actor {
     const dx = p.x - this.x;
     const dy = p.y - this.y;
     const d = Math.abs(dx);
-    // keep within the band behind her: far = come closer, close = stand still; a platform she stands on up to
-    // 80 px above is jumped to, one she is far above / below is walked toward (then the leash takes over)
+    // keep within the band behind her: far = come closer, inside the band = stand still, too close (she walked into it) =
+    // step out of her way (never over a ledge); a platform she stands on up to 80 px above is jumped to, one she is far
+    // above / below is walked toward (then the leash takes over)
     const level = Math.abs(dy) <= 80;
-    this.run(d > F.far || (!level && d > 6) ? sign(dx) : 0, dy < -8, dy < -30 && level && d < F.far * 1.6, dt);
+    let dir = 0;
+    if (d > F.far || (!level && d > 6)) dir = sign(dx);
+    else if (level && d < F.near && this.onGround) {
+      const away = d < 1 ? -p.facing : -sign(dx);
+      if (groundUnder(this, this.world.map, away * (this.w / 2 + 6))) dir = away;
+    }
+    this.run(dir, dir !== 0 && dir === sign(dx) && dy < -8, dy < -30 && level && d < F.far * 1.6, dt);
     // she is lower and we stand on a one-way platform: drop through it
     if (this.onPlatform && dy > 30 && this.dropT <= 0) {
       this.dropThrough = true;
@@ -237,7 +251,8 @@ export class Golem extends Actor {
         amount: golemDamage(w.run.loop, w.run.tier), dir: this.lockedFacing, kind: 'melee', source: this,
         knockback: S.knockback, stun: S.stun,
       };
-      const hits = hitArea(w, this.slamBox(), 'player', info, this.hitSet);
+      // its slam hurts enemies but is not the heroine's: it does not break secret walls
+      const hits = hitArea(w, this.slamBox(), 'player', info, this.hitSet, { breakTiles: false });
       if (hits.some((h) => h.result.applied)) {
         w.addHitstop(0.04);
         w.audio.play('hit_heavy', { vol: 0.8 });
@@ -321,14 +336,16 @@ export class Golem extends Actor {
     if (this.dying) return;
     this.world.lights.add(this.x, this.y - this.h * 0.7, 50, EMBER, 0.28);
     if (this.time - this.lastHit < GOLEM.barSecs && this.hp > 0) {
-      const bx = Math.round(this.x - 15);
-      const by = Math.round(this.y - this.h - 10);
+      // above her head (the sprite is taller than the hitbox), not across her face
+      const bw = GOLEM.barW;
+      const bx = Math.round(this.x - bw / 2);
+      const by = Math.round(this.y - GOLEM.barY);
       ctx.fillStyle = '#07060b';
-      ctx.fillRect(bx - 1, by - 1, 32, 5);
+      ctx.fillRect(bx - 1, by - 1, bw + 2, 5);
       ctx.fillStyle = '#2a1424';
-      ctx.fillRect(bx, by, 30, 3);
+      ctx.fillRect(bx, by, bw, 3);
       ctx.fillStyle = EMBER;
-      ctx.fillRect(bx, by, Math.max(1, Math.round((30 * this.hp) / this.maxHp)), 3);
+      ctx.fillRect(bx, by, Math.max(1, Math.round((bw * this.hp) / this.maxHp)), 3);
     }
   }
 }

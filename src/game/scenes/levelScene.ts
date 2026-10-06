@@ -5,6 +5,7 @@ import { buildLevel, populateLevel } from '../level/build';
 import { LevelRenderer } from '../level/render';
 import { Player } from '../player/player';
 import { spawnRunGolem } from '../allies/golem';
+import { collectAllPieces, collectCoinsInRange, homeAllPieces } from '../items/pickups';
 import { LevelUI } from '../ui/levelUI';
 import { DEBUG } from '../../engine/config';
 import type { Actor } from '../entity';
@@ -19,6 +20,8 @@ export class LevelScene implements Scene {
   readonly ui: LevelUI;
   private endTimer = -1;
   private endAction: (() => void) | null = null;
+  /** the exit was taken: the level is fading out, loot that still drops is collected on the spot */
+  private leaving = false;
 
   constructor(game: Game, run: RunState) {
     this.game = game;
@@ -40,10 +43,22 @@ export class LevelScene implements Scene {
     w.lights.setBiome(spec.biome, spec.kind);
     w.on((e) => {
       if (e.type === 'playerDied') this.endAfter(1.6, () => game.playerDied());
-      else if (e.type === 'levelExit') this.endAfter(0, () => game.nextLevel());
-      else if (e.type === 'bossDefeated') {
+      else if (e.type === 'levelExit') {
+        this.endAfter(0, () => {
+          this.leaving = true;
+          // loot that dropped moments before the exit (it only starts homing after a short delay) is not left behind
+          collectCoinsInRange(w);
+          game.nextLevel();
+        });
+      } else if (e.type === 'bossDefeated') {
         w.timeScale = 0.3;
-        this.endAfter(3.2, () => game.victory());
+        // her pieces fly to the heroine from anywhere on the map; whatever is still on the floor when the victory is
+        // called (slow motion slows them) is credited first, so a far-away killing blow never loses pieces
+        homeAllPieces(w);
+        this.endAfter(3.2, () => {
+          collectAllPieces(w);
+          game.victory();
+        });
       } else if (e.type === 'enemyKilled') run.kills++;
     });
   }
@@ -88,6 +103,7 @@ export class LevelScene implements Scene {
     if (this.ui.modal) return;
     this.run.time += dt;
     this.world.update(dt);
+    if (this.leaving) collectCoinsInRange(this.world);
   }
 
   render(): void {

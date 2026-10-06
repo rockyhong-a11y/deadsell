@@ -16,10 +16,11 @@ import type { Enemy } from '../src/game/enemies/base';
 import { ENEMY_DEFS } from '../src/game/enemies/variants';
 import { createMiniBoss, MINIBOSS_IDS, MINIBOSS_SPECS, type MiniBoss } from '../src/game/miniboss';
 import { createBoss, MATRON, type Matron } from '../src/game/boss/matron';
-import { dropLoot } from '../src/game/items/pickups';
+import { collectAllPieces, collectCoinsInRange, dropLoot, homeAllPieces } from '../src/game/items/pickups';
 import { ITEMS, rollItem, uniquePrice, UNIQUE_PRICE } from '../src/game/items/items';
 import { ITEM_IDS, UNIQUE_IDS, type ItemId, type ItemInstance } from '../src/game/items/types';
 import { Rng } from '../src/engine/rng';
+import { hitArea } from '../src/game/combat';
 import { Seamstress, SELMA_LINES, CorpseShopItem, corpseShopStock, GolemPile } from '../src/game/props';
 import { Golem, golemDamage, golemMaxHp, newGolemState, spawnRunGolem } from '../src/game/allies/golem';
 import { buildLevel, populateLevel } from '../src/game/level/build';
@@ -335,6 +336,49 @@ describe('drops: every kill drops corpse pieces', () => {
     expect(got).toBe(8);
   });
 
+  it('the boss fell: every piece still lying anywhere is credited at once, and the ones in flight make it too', () => {
+    const t = setup(flatMap(130, 18), 120);
+    // the heroine is 2800 px from the pile: far beyond the homing range, off screen (such coins are not even updated)
+    dropLoot(t.world, 2900, FLOOR, { pieces: CORPSE.drop.matron, cells: 6 });
+    steps(t.world, 90);
+    expect(piecesLying(t.world)).toBe(CORPSE.drop.matron);
+    expect(t.run.pieces).toBe(0);
+    // they fly to her from anywhere
+    homeAllPieces(t.world);
+    steps(t.world, 45);
+    const flying = piecesLying(t.world);
+    expect(flying).toBe(CORPSE.drop.matron);
+    steps(t.world, 600);
+    expect(t.run.pieces).toBe(CORPSE.drop.matron);
+    expect(t.run.cells).toBe(0); // cells keep the old rules: they stay where they fell
+    // ... and what is still on the floor when the victory is called is credited on the spot
+    const u = setup(flatMap(130, 18), 120);
+    dropLoot(u.world, 2900, FLOOR, { pieces: CORPSE.drop.matron, cells: 6 });
+    steps(u.world, 5);
+    expect(collectAllPieces(u.world)).toBe(CORPSE.drop.matron);
+    expect(u.run.pieces).toBe(CORPSE.drop.matron);
+    expect(u.run.cells).toBe(0);
+    steps(u.world, 2);
+    expect(piecesLying(u.world)).toBe(0);
+    expect(collectAllPieces(u.world)).toBe(0);
+  });
+
+  it('leaving the level: loot in range is collected at once, however young; loot far away stays', () => {
+    const t = setup(flatMap(60, 18), 300);
+    dropLoot(t.world, 340, FLOOR, { pieces: 3, cells: 2, gold: 5 }); // just dropped: it only starts homing after 0.4 s
+    dropLoot(t.world, 1100, FLOOR, { pieces: 4 }); // well out of range
+    steps(t.world, 3);
+    expect(t.run.pieces).toBe(0);
+    collectCoinsInRange(t.world);
+    expect(t.run.pieces).toBe(3);
+    expect(t.run.cells).toBe(2);
+    expect(t.run.gold).toBeGreaterThan(0);
+    steps(t.world, 2);
+    expect(piecesLying(t.world)).toBe(4);
+    collectCoinsInRange(t.world); // nothing twice
+    expect(t.run.pieces).toBe(3);
+  });
+
   it('cells and gold still drop beside the pieces', () => {
     const t = setup();
     dropLoot(t.world, 300, FLOOR, { cells: 4, gold: 10, pieces: 1 });
@@ -405,6 +449,52 @@ describe('loops make the world harder', () => {
     priv.onActive();
     expect(hits).toEqual([Math.round(MATRON.slam.dmg * loopDmgMul(4))]);
     expect(hits[0]).toBe(45);
+  });
+
+  it('the burn / poison / fire hazards enemies leave grow with the loop like their direct hits (+20 % per step)', () => {
+    const found = (t: ReturnType<typeof setup>, cls: string) => t.world.entities.find((e) => e.constructor.name === cls) as unknown as { dps?: number; burnDps?: number };
+    const cloud = (loop: number) => {
+      const t = setup();
+      t.run.loop = loop;
+      const e = createEnemy('ghoul_plague', 400, FLOOR, { tier: 1, elite: false }) as Enemy;
+      t.world.spawn(e);
+      steps(t.world, 2);
+      e.takeDamage({ amount: 99999, dir: 1, kind: 'melee' });
+      steps(t.world, 2);
+      return found(t, 'PoisonCloud').dps!;
+    };
+    const fire = (loop: number) => {
+      const t = setup();
+      t.run.loop = loop;
+      const e = createEnemy('harpy_ember', 400, FLOOR - 20, { tier: 1, elite: false }) as Enemy;
+      t.world.spawn(e);
+      steps(t.world, 2);
+      (e as unknown as { leaveFire(): void }).leaveFire();
+      steps(t.world, 1);
+      return found(t, 'FirePatch').dps!;
+    };
+    const arrow = (loop: number) => {
+      const t = setup();
+      t.run.loop = loop;
+      const e = createEnemy('archer_fire', 400, FLOOR, { tier: 1, elite: false }) as Enemy;
+      t.world.spawn(e);
+      steps(t.world, 2);
+      const a = e as unknown as { aimX: number; aimY: number; onActiveStart(): void };
+      a.aimX = 300;
+      a.aimY = FLOOR - 20;
+      e.facing = -1;
+      a.onActiveStart();
+      steps(t.world, 1);
+      return found(t, 'Arrow').burnDps!;
+    };
+    expect([cloud(1), fire(1), arrow(1)]).toEqual([4, 6, 5]);
+    for (const loop of [2, 3, 5, 9]) {
+      const k = loopDmgMul(loop);
+      expect(cloud(loop), `cloud loop ${loop}`).toBeCloseTo(4 * k);
+      expect(fire(loop), `fire loop ${loop}`).toBeCloseTo(6 * k);
+      expect(arrow(loop), `burning arrow loop ${loop}`).toBeCloseTo(5 * k);
+    }
+    expect(cloud(3)).toBeCloseTo(5.6);
   });
 
   it('elite chance rises by 5 points per loop step in biome levels', () => {
@@ -578,6 +668,18 @@ describe('쉼터: Selma, the 시체 상점 and the golem pile', () => {
       expect(a.events.some((e) => e.type === 'loopClear')).toBe(false);
       expect(a.selma.promptText()).toBe('대화');
     });
+    it('while her banter line is up the prompt steps aside (it was drawn over the bubble), then comes back', () => {
+      const a = talk(0, 12);
+      expect(a.selma.promptText()).toBe('대화');
+      a.selma.interact();
+      expect(a.selma.promptText()).toBe('');
+      steps(a.world, 60 * 3 + 5);
+      expect(a.selma.promptText()).toBe('대화');
+      // carrying pieces: the sew prompt is never hidden
+      const b = talk(5, 12);
+      (b.selma as unknown as { lineT: number }).lineT = 2;
+      expect(b.selma.promptText()).toBe('몸 꿰매기 · 5조각');
+    });
     it('the sew that completes the body says so, warns about the surplus, then clears the loop after the slow motion', () => {
       const a = talk(95, 80, 2);
       expect(a.selma.promptText()).toBe('몸 완성하기 · 20조각');
@@ -590,6 +692,8 @@ describe('쉼터: Selma, the 시체 상점 and the golem pile', () => {
       expect(a.run.pieces).toBe(0);
       expect(a.run.piecesSewn).toBe(20);
       expect(a.world.timeScale).toBeLessThan(1);
+      // from here on the run can only end with the loop-clear scene (see 'run flow')
+      expect(a.run.clearedLoop).toEqual({ loop: 2, runs: 0 });
       expect(a.events.find((e) => e.type === 'toast')?.text).toBe('시체 조각 20개를 꿰맸다 · 몸 100/100');
       expect(a.events.some((e) => e.type === 'loopClear')).toBe(false);
       expect(a.selma.canInteract()).toBe(false);
@@ -721,15 +825,96 @@ describe('누더기 골렘', () => {
     steps(t.world, 600);
     const d = Math.abs(t.p.x - t.g.x);
     expect(d).toBeLessThanOrEqual(GOLEM.follow.far + 4);
+    expect(d).toBeGreaterThanOrEqual(GOLEM.follow.near - 4);
     t.p.x = 900;
     t.p.vx = 0;
     steps(t.world, 400);
     expect(Math.abs(t.p.x - t.g.x)).toBeLessThanOrEqual(GOLEM.follow.far + 6);
+    expect(Math.abs(t.p.x - t.g.x)).toBeGreaterThanOrEqual(GOLEM.follow.near - 4);
     expect(t.g.x).toBeGreaterThan(700);
     // walks at 110 px/s
     t.p.x = t.g.x + 300;
     steps(t.world, 10);
     expect(t.g.vx).toBe(GOLEM.follow.speed);
+  });
+
+  it('backs off when she walks into it: it does not stand on top of her (the near edge of the 40..90 band)', () => {
+    for (const [gx, px] of [[400, 400], [410, 400], [430, 400], [390, 400]]) {
+      const t = arena({ gx, px });
+      steps(t.world, 90);
+      const d = Math.abs(t.p.x - t.g.x);
+      expect(d, `golem ${gx} / heroine ${px}`).toBeGreaterThanOrEqual(GOLEM.follow.near - 3);
+      expect(d, `golem ${gx} / heroine ${px}`).toBeLessThanOrEqual(GOLEM.follow.far);
+    }
+    // exactly on top of her it steps out behind her (the side she is not facing)
+    const t = arena({ gx: 400, px: 400 });
+    t.p.facing = 1;
+    steps(t.world, 90);
+    expect(t.g.x).toBeLessThan(t.p.x - GOLEM.follow.near + 3);
+    // inside the band it stands still
+    const u = arena({ gx: 340, px: 400 });
+    steps(u.world, 5);
+    const x = u.g.x;
+    steps(u.world, 60);
+    expect(Math.abs(u.g.x - x)).toBeLessThan(1);
+  });
+
+  it('never backs off over a ledge', () => {
+    const m = flatMap(80, 18);
+    for (let x = 41; x < 79; x++) { m.set(x, 16, T.Empty); m.set(x, 17, T.Empty); } // the floor ends at x = 984
+    const t = arena({ map: m, gx: 962, px: 950 });
+    steps(t.world, 120);
+    expect(t.g.y).toBe(FLOOR);
+    expect(t.g.x + GOLEM.w / 2).toBeLessThanOrEqual(984 + 1);
+  });
+
+  it('its slam does not break secret walls on its own, the heroine\'s attacks still do', () => {
+    const t = arena({ gx: 340, px: 330 });
+    const e = new Dummy(400, FLOOR);
+    t.world.spawn(e);
+    t.world.map.set(17, 15, T.Breakable); // x 408..432, inside the 72 x 56 slam box
+    steps(t.world, 150);
+    expect(e.log.length).toBeGreaterThanOrEqual(1); // it did slam
+    expect(t.world.map.get(17, 15)).toBe(T.Breakable);
+    // a player attack through the same function breaks it
+    hitArea(t.world, { x: 400, y: FLOOR - 40, w: 40, h: 40 }, 'player', { amount: 1, dir: 1, kind: 'melee' });
+    expect(t.world.map.get(17, 15)).not.toBe(T.Breakable);
+  });
+
+  it('does not wind up for a flyer hovering out of the slam\'s reach, but does for one it can hit', () => {
+    const t = arena({ gx: 340, px: 330 });
+    const high = new Dummy(400, FLOOR - GOLEM.aggro.y);
+    high.physics = false;
+    t.world.spawn(high);
+    steps(t.world, 80);
+    expect(t.g.target).toBeNull();
+    expect(high.log).toHaveLength(0);
+    const u = arena({ gx: 340, px: 330 });
+    const low = new Dummy(400, FLOOR - 40);
+    low.physics = false;
+    u.world.spawn(low);
+    steps(u.world, 80);
+    expect(u.g.target).toBe(low);
+    expect(low.log.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('draws its hp bar above its head (the sprite is taller than the hitbox), only after a hit', () => {
+    const t = arena();
+    (t.g as unknown as { drawSprite(): void }).drawSprite = () => {}; // (the sprite needs a real canvas; only the bar is looked at)
+    const rects: number[][] = [];
+    const ctx = new Proxy({}, {
+      get: (_o, k) => (k === 'fillRect' ? (...a: number[]) => { rects.push(a); } : () => undefined),
+      set: () => true,
+    }) as unknown as CanvasRenderingContext2D;
+    t.g.draw(ctx);
+    expect(rects).toHaveLength(0);
+    t.g.takeDamage({ amount: 90, dir: 1, kind: 'melee' });
+    t.g.draw(ctx);
+    expect(rects).toHaveLength(3);
+    for (const r of rects) expect(r[1]).toBeLessThanOrEqual(t.g.y - GOLEM.barY + 1);
+    expect(rects[1][2]).toBe(GOLEM.barW);
+    expect(rects[2][2]).toBe(Math.round((GOLEM.barW * (GOLEM.hp - 90)) / GOLEM.hp));
+    expect(GOLEM.barY).toBeGreaterThan(GOLEM.h + 20); // clear of the 64 px hitbox, above the ~96 px sprite
   });
 
   it('slams the nearest enemy: windup 0.45 s, then damage 26, knockback and stun 0.6 s, then cooldown 1.2 s', () => {
@@ -1037,6 +1222,36 @@ describe('run flow: the Game owns the save, the run and the scene changes', () =
     expect(lastScene(game)).toBeInstanceOf(LoopClearScene);
     // a won run's kills were counted by victory(), not again by the loop clear
     expect(game.save.totalKills).toBe(40);
+  });
+
+  it('giving up (or dying) in the slow motion after Selma completed the body still ends with the loop-clear scene', () => {
+    const game = fakeGame();
+    game.startRun(1);
+    game.save.loopRuns = 3;
+    game.save.body = 99;
+    game.run!.pieces = 5;
+    game.run!.kills = 12;
+    const sewn = sewPieces(game.run!, game.save);
+    expect(sewn.cleared).toEqual({ loop: 1, runs: 3 });
+    game.run!.clearedLoop = sewn.cleared; // what Selma does when she sews the last piece
+    expect(game.save.loop).toBe(2); // the save has moved on already
+    // the pause menu's "give up" inside the slow motion: playerDied()
+    game.playerDied();
+    expect(lastScene(game)).toBeInstanceOf(LoopClearScene);
+    expect(game.save.totalKills).toBe(12);
+    // the world then reaches the end of the slow motion as well: still one loop-clear, kills counted once
+    const scenes = game.made.length;
+    game.loopClear(sewn.cleared!);
+    game.playerDied();
+    expect(game.made.length).toBe(scenes);
+    expect(game.save.totalKills).toBe(12);
+    // an ordinary death is still a death
+    const g2 = fakeGame();
+    g2.startRun(2);
+    g2.run!.kills = 4;
+    g2.playerDied();
+    expect(lastScene(g2)).toBeInstanceOf(DeathScene);
+    expect(g2.save.totalKills).toBe(4);
   });
 
   it('Selma\'s loop clear counts the run\'s kills once and shows the cleared loop', () => {

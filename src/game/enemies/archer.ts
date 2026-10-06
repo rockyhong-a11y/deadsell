@@ -136,7 +136,7 @@ export class Archer extends Enemy {
         break;
       }
       case 'fire':
-        w.spawn(new Arrow(o.x, o.y, dx * ARROW_SPEED, dy * ARROW_SPEED, this.dmg(ATTACK_DMG.archer), this, { burn: this.pr('burn', 3), burnDps: this.pr('burnDps', 5), style: 'fire' }));
+        w.spawn(new Arrow(o.x, o.y, dx * ARROW_SPEED, dy * ARROW_SPEED, this.dmg(ATTACK_DMG.archer), this, { burn: this.pr('burn', 3), burnDps: this.dot(this.pr('burnDps', 5)), style: 'fire' }));
         w.audio.play('bow_shoot', { vol: 0.7 });
         break;
       default:

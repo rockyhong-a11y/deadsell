@@ -7,7 +7,7 @@ import { dropLoot, spawnItemDrop } from '../items/pickups';
 import { rollItem } from '../items/items';
 import { warnBang } from './telegraph';
 import type { BaseKind, EnemyDef, EnemyKind } from './variants';
-import { CORPSE, ELITE, LOOT, enemyDmgMul, enemyHpMul } from '../rules';
+import { CORPSE, ELITE, LOOT, enemyDmgMul, enemyHpMul, loopDmgMul } from '../rules';
 
 export type { BaseKind, EnemyKind } from './variants';
 
@@ -155,6 +155,14 @@ export abstract class Enemy extends Actor {
 
   protected dmg(base: number): number {
     return Math.max(1, Math.round(base * this.dmgMult));
+  }
+
+  /**
+   * Damage per second of a burn / poison / fire hazard this enemy leaves: grows with the loop like its direct hits
+   * (docs/CONTENT3.md §1), but not with tier or elite (hazards were never scaled by those).
+   */
+  protected dot(dps: number): number {
+    return dps * loopDmgMul(this.world.run.loop);
   }
 
   protected setState(s: EnemyState): void {

@@ -107,6 +107,8 @@ export const GOLEM = {
   slam: { windup: 0.45, active: 0.1, recover: 0.5, cooldown: 1.2, w: 72, h: 56, knockback: 180, stun: 0.6 },
   /** enemies this close (horizontally / vertically) to the golem are attacked */
   aggro: { x: 140, y: 70 },
+  /** ... unless their hurtbox is more than this many px above the top of the slam box (a flyer it could not hit) */
+  reachSlack: 12,
   /** speed (px/s), the band it keeps behind the heroine, jump speed */
   follow: { speed: 110, near: 40, far: 90, jump: 420 },
   /** teleports back when farther than `dist` from the heroine, or without progress for `stuck` s; reappears `behind` px behind her */
@@ -116,6 +118,9 @@ export const GOLEM = {
   /** seconds the rag pile stays after it fell; the hp bar shows this long after a hit */
   pileFade: 3,
   barSecs: 3,
+  /** the hp bar: width, and its height above the feet (just over the sprite's head, which is taller than the hitbox) */
+  barW: 36,
+  barY: 104,
 } as const;
 
 /** Ordinary loot: [min, max] per kill / chest. */

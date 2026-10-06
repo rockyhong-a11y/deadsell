@@ -51,6 +51,8 @@ export class Game {
   private fadeTarget = 0;
   private fadeSpeed = 3;
   private pendingScene: (() => Scene) | null = null;
+  /** the run whose loop-clear scene has been started (it is started once) */
+  private clearingRun: RunState | null = null;
   private acc = 0;
   private last = 0;
   /** measured frames per second (debug/tests) */
@@ -149,6 +151,12 @@ export class Game {
 
   playerDied(): void {
     const run = this.run!;
+    // the body was made whole a moment ago (Selma's slow motion): the save is already in the next loop, so this run ends
+    // with the loop-clear scene, not the death screen
+    if (run.clearedLoop) {
+      this.loopClear(run.clearedLoop);
+      return;
+    }
     this.save.totalKills += run.kills;
     this.persist();
     this.goto(() => new DeathScene(this, run));
@@ -172,6 +180,8 @@ export class Game {
    */
   loopClear(info: LoopInfo): void {
     const run = this.run!;
+    if (this.clearingRun === run) return; // already on its way (the pause menu's give-up during the slow motion)
+    this.clearingRun = run;
     // a won run was counted by victory() already
     if (!run.bossDefeated) this.save.totalKills += run.kills;
     this.persist();

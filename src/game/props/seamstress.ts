@@ -52,7 +52,8 @@ export class Seamstress extends Prop implements Interactable {
 
   promptText(): string {
     const w = this.world;
-    if (w.run.pieces <= 0) return '대화';
+    // while her line is up the bubble has the stage: the prompt (drawn over the same spot) steps aside, an empty label is not drawn
+    if (w.run.pieces <= 0) return this.lineT > 0 ? '' : '대화';
     const plan = this.plan;
     return plan.completes ? `몸 완성하기 · ${bodyNeed(w.game.save.body)}조각` : `몸 꿰매기 · ${w.run.pieces}조각`;
   }
@@ -86,7 +87,8 @@ export class Seamstress extends Prop implements Interactable {
     const body = cleared ? CORPSE.body : w.game.save.body;
     w.emit({ type: 'toast', text: `시체 조각 ${plan.n}개를 꿰맸다 · 몸 ${body}/${CORPSE.body}`, color: PIECE_COLOR });
     if (cleared) {
-      // the bell tolls: a flash and slow motion, then the loop-clear scene
+      // the bell tolls: a flash and slow motion, then the loop-clear scene (the run can only end with it from here on)
+      w.run.clearedLoop = cleared;
       w.fx.screenFlash(PIECE_COLOR, 0.5, 0.6);
       w.timeScale = 0.3;
       this.clearT = CLEAR_TIME;

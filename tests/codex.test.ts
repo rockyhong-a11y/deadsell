@@ -29,29 +29,14 @@ const files = import.meta.glob('../public/assets/sprites/*.json', { eager: true,
 const manifests = new Map<string, SheetManifest>(Object.entries(files).map(([path, m]) => [path.replace(/^.*\/|\.json$/g, ''), m]));
 const onDisk = (name: string): SheetManifest | null => manifests.get(name) ?? null;
 
-/**
- * The art of docs/CONTENT3.md §6 (corpse pieces, Selma, the golem and the new icons). The art lane may not have delivered it yet:
- * until a sheet / icon exists on disk the spec's animation names stand in for it, so the codex pages that use it are still checked
- * against the contract. Once the files exist, the real manifests are used.
- */
+/** the art of docs/CONTENT3.md §6 (corpse pieces, Selma, the golem and the new icons): required like every other sheet */
 const NEW_SHEETS: Record<string, string[]> = {
   corpse: ['piece', 'piece_big'],
   seamstress: ['idle', 'talk', 'sew'],
   golem: ['idle', 'walk', 'attack', 'hurt', 'jump', 'death', 'assemble', 'pile'],
 };
 const NEW_ICONS = ['corpse_piece', 'golem'];
-const standIn = (frameW: number, frameH: number, anchor: [number, number], names: string[]): SheetManifest => ({
-  image: '', frameW, frameH, anchor, animations: Object.fromEntries(names.map((n, row) => [n, { row, frames: 1, fps: 1, loop: true }])),
-});
-const manifest = (name: string): SheetManifest | null => {
-  const m = onDisk(name);
-  if (name in NEW_SHEETS) return m ?? standIn(name === 'corpse' ? 24 : 128, name === 'corpse' ? 24 : 128, name === 'corpse' ? [12, 22] : [64, 124], NEW_SHEETS[name]);
-  if (name === 'icons' && m) {
-    const missing = NEW_ICONS.filter((n) => !(n in m.animations));
-    return missing.length ? { ...m, animations: { ...m.animations, ...standIn(32, 32, [16, 16], missing).animations } } : m;
-  }
-  return m;
-};
+const manifest = (name: string): SheetManifest | null => onDisk(name);
 const sheets = new Map<string, SpriteSheet>();
 function realSheet(name: string): SpriteSheet {
   let s = sheets.get(name);
@@ -70,14 +55,14 @@ const byId = (tab?: CodexTabId) => new Map((tab ? codexEntries(tab) : buildCodex
 // ---------------------------------------------------------------------------
 // a 2D context that accepts everything (draw code runs in node)
 
-function fakeCtx(log?: string[]): CanvasRenderingContext2D {
+function fakeCtx(log?: string[], at?: { s: string; x: number; y: number; bold: boolean }[]): CanvasRenderingContext2D {
   const grad = { addColorStop() {} };
   const target: Record<string, unknown> = { font: '11px x' };
   return new Proxy(target, {
     get(t, k: string) {
       if (k === 'measureText') return (s: string) => ({ width: [...s].length * (parseInt(String(t.font).match(/(\d+)px/)?.[1] ?? '11', 10) * 0.9) });
       if (k === 'createRadialGradient' || k === 'createLinearGradient') return () => grad;
-      if (k === 'fillText' && log) return (s: string) => { log.push(s); };
+      if (k === 'fillText' && (log || at)) return (s: string, x: number, y: number) => { log?.push(s); at?.push({ s, x, y, bold: /bold/.test(String(t.font)) }); };
       if (k in t) return t[k];
       return () => {};
     },
@@ -100,11 +85,11 @@ function makeGame(device: 'keyboard' | 'gamepad' | 'touch' = 'keyboard') {
 }
 
 /** a screen that has been open for a while (taps unlocked) and drawn once */
-function open(W = 640, tab: CodexTabId = 'weapon', device: 'keyboard' | 'gamepad' | 'touch' = 'keyboard', log?: string[]) {
+function open(W = 640, tab: CodexTabId = 'weapon', device: 'keyboard' | 'gamepad' | 'touch' = 'keyboard', log?: string[], at?: { s: string; x: number; y: number; bold: boolean }[]) {
   const game = makeGame(device);
   const onClose = vi.fn();
   const sc = new CodexScreen(game, onClose, tab);
-  const ctx = fakeCtx(log);
+  const ctx = fakeCtx(log, at);
   const frame = (dt = 1 / 60) => {
     game.taps.clear();
     sc.update(dt);
@@ -222,16 +207,21 @@ describe('codex previews point at real sheets and animations (public/assets/spri
   const all = buildCodex();
 
   it('the sprite manifests of the game are all readable', () => {
-    for (const name of SHEETS) if (!(name in NEW_SHEETS)) expect(onDisk(name), name).not.toBeNull();
+    for (const name of SHEETS) expect(onDisk(name), name).not.toBeNull();
   });
 
-  it('the CONTENT3 art, once it exists, has the animations the codex and the props use', () => {
+  it('the CONTENT3 art (corpse, seamstress, golem, new icons) is there and has the animations the codex and the props use', () => {
     for (const [name, anims] of Object.entries(NEW_SHEETS)) {
       const m = onDisk(name);
-      if (m) for (const a of anims) expect(Object.keys(m.animations), `${name}/${a}`).toContain(a);
+      expect(m, `${name}.json`).not.toBeNull();
+      for (const a of anims) expect(Object.keys(m!.animations), `${name}/${a}`).toContain(a);
     }
     const icons = onDisk('icons');
-    if (icons) for (const n of NEW_ICONS) if (n in icons.animations) expect(icons.animations[n].frames).toBeGreaterThanOrEqual(1);
+    expect(icons, 'icons.json').not.toBeNull();
+    for (const n of NEW_ICONS) {
+      expect(Object.keys(icons!.animations), `icons/${n}`).toContain(n);
+      expect(icons!.animations[n].frames).toBeGreaterThanOrEqual(1);
+    }
   });
 
   it('every preview, prop and thumbnail uses an existing sheet and animation', () => {
@@ -647,6 +637,44 @@ describe('CodexScreen detail scrolling with keys and the pad (a page that does n
     sc.key('pageDown'); // never drawn: nothing to measure, nothing breaks
     sc.key('scrollEnd');
     expect(sc.bodyOffset).toBe(0);
+  });
+});
+
+describe('CodexScreen: row labels', () => {
+  // the label column grows with the widest (bold) label of the page; the fake measure is 0.9 em per glyph like the real font
+  for (const W of [480, 640, 800]) {
+    it(`a unique item's long label ("고유 효과") never runs into its value text (W=${W})`, () => {
+      const at: { s: string; x: number; y: number; bold: boolean }[] = [];
+      const { sc, frame } = open(W, 'weapon', 'keyboard', undefined, at);
+      const i = sc.entries().findIndex((e) => e.id === 'bone_cleaver');
+      expect(i).toBeGreaterThanOrEqual(0);
+      sc.select(i);
+      for (let k = 0; k < 4; k++) frame(0.7);
+      at.length = 0;
+      frame();
+      const row = sc.current.rows[0];
+      expect(row.label).toBe('고유 효과');
+      const label = at.find((t) => t.s === row.label);
+      expect(label, 'the label is drawn').toBeTruthy();
+      // its value starts on the same row (same baseline), to the right of it
+      const value = at.find((t) => t !== label && t.y === label!.y && t.x > label!.x);
+      expect(value, 'the value is drawn').toBeTruthy();
+      const labelW = [...row.label].length * 11 * 0.9;
+      expect(value!.x - label!.x, `label ${labelW}px wide`).toBeGreaterThanOrEqual(labelW + 4);
+    });
+  }
+
+  it('pages with short labels keep the narrow label column (nothing else grows)', () => {
+    const at: { s: string; x: number; y: number; bold: boolean }[] = [];
+    const { sc, frame } = open(640, 'weapon', 'keyboard', undefined, at);
+    const i = sc.entries().findIndex((e) => e.id === 'rusty_sword');
+    sc.select(i);
+    for (let k = 0; k < 4; k++) frame(0.7);
+    at.length = 0;
+    frame();
+    const label = at.find((t) => t.s === '콤보')!;
+    const value = at.find((t) => t !== label && t.y === label.y && t.x > label.x)!;
+    expect(value.x - label.x).toBe(44);
   });
 });
 

@@ -161,17 +161,24 @@ class NPC:
             B("an_" + s, "foot_" + s, (0.2, 0.09, 0.085), bt, (0.05, y, 0.042), bevel=0.025)
             B("an_" + s, "sole_" + s, (0.205, 0.095, 0.025), M["sole"], (0.05, y, 0.012))
 
-    def face(self, M, blush=False):
-        """Head (skin), neck, eyes (own joints so they can blink) and the two mouth states."""
+    def face(self, M, blush=False, shape=None):
+        """Head (skin), neck, eyes (own joints so they can blink) and the two mouth states.
+        `shape` optionally overrides any of the default sizes / locations below (keys: head head_loc chin chin_loc nose
+        nose_loc eye mouth_c mouth_c_loc mouth_o mouth_o_loc); the defaults keep the older NPC sheets unchanged."""
         E = self.E
-        E("head", "head_m", (0.235, 0.215, 0.265), M["skin"], (0.02, 0, 1.595))
-        E("head", "chin", (0.11, 0.13, 0.09), M["skin"], (0.075, 0, 1.505))
-        E("head", "nose", (0.04, 0.03, 0.045), M["skin"], (0.14, 0, 1.575))
+        s = dict(head=(0.235, 0.215, 0.265), head_loc=(0.02, 0, 1.595), chin=(0.11, 0.13, 0.09), chin_loc=(0.075, 0, 1.505),
+                 nose=(0.04, 0.03, 0.045), nose_loc=(0.14, 0, 1.575), eye=(0.052, 0.045, 0.058),
+                 mouth_c=(0.026, 0.065, 0.014), mouth_c_loc=(0.123, 0, 1.532),
+                 mouth_o=(0.03, 0.052, 0.04), mouth_o_loc=(0.123, 0, 1.526))
+        s.update(shape or {})
+        E("head", "head_m", s["head"], M["skin"], s["head_loc"])
+        E("head", "chin", s["chin"], M["skin"], s["chin_loc"])
+        E("head", "nose", s["nose"], M["skin"], s["nose_loc"])
         self.L("neck", "neck_m", 0.1, 0.045, 0.048, M["skin"], (0, 0, 1.50))
-        E("eye_n", "eye_n", (0.052, 0.045, 0.058), M["eye"], (0.11, -0.072, 1.595))
-        E("eye_f", "eye_f", (0.052, 0.045, 0.058), M["eye"], (0.11, 0.072, 1.595))
-        self.vis["mouth_c"] = E("head", "mouth_c", (0.026, 0.065, 0.014), M["mouth"], (0.123, 0, 1.532), segs=10, rings=6)
-        self.vis["mouth_o"] = E("head", "mouth_o", (0.03, 0.052, 0.04), M["mouth"], (0.123, 0, 1.526), segs=10, rings=6)
+        E("eye_n", "eye_n", s["eye"], M["eye"], (0.11, -0.072, 1.595))
+        E("eye_f", "eye_f", s["eye"], M["eye"], (0.11, 0.072, 1.595))
+        self.vis["mouth_c"] = E("head", "mouth_c", s["mouth_c"], M["mouth"], s["mouth_c_loc"], segs=10, rings=6)
+        self.vis["mouth_o"] = E("head", "mouth_o", s["mouth_o"], M["mouth"], s["mouth_o_loc"], segs=10, rings=6)
         if blush:
             E("head", "blush", (0.045, 0.014, 0.04), M["blush"], (0.108, -0.097, 1.548), segs=8, rings=5)
 

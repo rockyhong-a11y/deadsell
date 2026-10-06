@@ -1,5 +1,6 @@
 import type { ItemColor } from './combat';
 import type { ItemInstance } from './items/types';
+import type { LoopInfo } from './meta/body';
 import { SCROLL } from './rules';
 
 export type BiomeId = 'prison' | 'ramparts' | 'tower';
@@ -48,6 +49,11 @@ export class RunState {
   piecesSewn = 0;
   /** the rag golem fighting beside the heroine; null while there is none */
   golem: { hp: number; maxHp: number } | null = null;
+  /**
+   * Set the moment Selma sews the body whole: the save has already moved on to the next loop, so the run can only end with
+   * the loop-clear scene (even if the heroine gives up or falls in the short slow motion before it).
+   */
+  clearedLoop: LoopInfo | null = null;
 
   constructor(seed: number) {
     this.seed = seed >>> 0;

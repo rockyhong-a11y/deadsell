@@ -121,6 +121,24 @@ class Coin extends Drop {
     if (alive && this.age > 0.15 && this.touchingPlayer(6)) this.collect();
   }
 
+  /** From now on this coin flies to the heroine from anywhere (no delay, no range limit). */
+  homeFromAnywhere(): void {
+    this.alwaysActive = true; // coins far off screen are not updated otherwise
+    this.homing = true;
+    this.speed = Math.max(this.speed, 320);
+  }
+
+  /** Is it within homing range of the heroine (the range it would start flying from, ignoring its age)? */
+  inHomeRange(): boolean {
+    const p = this.world.player;
+    return !!p && !p.dying && !p.dead && Math.hypot(p.x - this.x, p.y - 14 - this.y) < HOME_RANGE;
+  }
+
+  /** Credit the coin to the run right away (what touching it does). */
+  collectNow(): void {
+    if (!this.dead) this.collect();
+  }
+
   private collect(): void {
     const w = this.world;
     const run = w.run;
@@ -147,6 +165,36 @@ class Coin extends Drop {
     const light = this.kind === 'cell' ? { r: 26, c: '#4fd8ff', a: 0.6 } : this.kind === 'piece' ? { r: 22, c: PIECE_COLOR, a: 0.45 } : { r: 20, c: '#ffd23f', a: 0.4 };
     this.world.lights.add(this.x, this.y - 6, light.r, light.c, light.a);
   }
+}
+
+/** every pickup coin (cells, gold, corpse pieces) still lying in the world */
+const coinsOf = (world: World): Coin[] => world.entities.filter((e): e is Coin => e instanceof Coin && !e.dead);
+
+/**
+ * The boss fell: every corpse piece still on the floor flies to the heroine from anywhere on the map, so the pieces of
+ * the Matron are never left behind however far away the last hit was struck (the victory sews what she carries).
+ */
+export function homeAllPieces(world: World): void {
+  for (const c of coinsOf(world)) if (c.kind === 'piece') c.homeFromAnywhere();
+}
+
+/** Credit every corpse piece still on the floor to the run at once. Returns how many pieces that was. */
+export function collectAllPieces(world: World): number {
+  let n = 0;
+  for (const c of coinsOf(world)) {
+    if (c.kind !== 'piece') continue;
+    n += c.value;
+    c.collectNow();
+  }
+  return n;
+}
+
+/**
+ * The level is being left: every coin within homing range of the heroine is collected now, however young it is (loot that
+ * dropped just before the exit would otherwise be lost to the fade; pieces are permanent progress).
+ */
+export function collectCoinsInRange(world: World): void {
+  for (const c of coinsOf(world)) if (c.inHomeRange()) c.collectNow();
 }
 
 function split(total: number, maxN: number, perCoin: number): number[] {

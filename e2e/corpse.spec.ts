@@ -420,6 +420,105 @@ test('a won run sews the carried pieces on the spot (victory rows); a body made 
   expect(c.errors).toEqual([]);
 });
 
+test('the Matron killed from far away still hands over her 12 pieces: the victory sews them all', async ({ page }) => {
+  const c = await boot(page, { query: '?seed=3&god=1' });
+  // (the last blow of a bow / grenade / turret lands far from her pile; the pieces only home within 260 px otherwise)
+  for (const dist of [60, 450, 700]) {
+    await startRun(page, 3);
+    await page.evaluate(() => { const ds = (window as any).__ds; ds.body(10); ds.pieces(7); });
+    await toLevel(page, 'boss');
+    const before = await page.evaluate((d) => {
+      const ds = (window as any).__ds, w = ds.world;
+      const m = w.entities.find((e: any) => e.constructor.name === 'Matron');
+      m.takeDamage({ amount: 1, dir: 1, kind: 'melee' }); // wake her
+      ds.step(300);
+      ds.teleport(m.x - d, m.y);
+      ds.step(30);
+      m.takeDamage({ amount: 999999, dir: 1, kind: 'melee' });
+      return { gap: Math.round(m.x - w.player.x), dying: m.dying };
+    }, dist);
+    expect(before.dying, 'the Matron is dying').toBe(true);
+    expect(before.gap, `the heroine stands ${dist} px from her`).toBeGreaterThanOrEqual(dist - 30);
+    // her pieces fly to the heroine from anywhere while the slow motion runs
+    await page.evaluate(() => (window as any).__ds.step(120));
+    if (dist > 260) {
+      const flying = await page.evaluate(() => (window as any).__ds.world.entities.some((e: any) => e.constructor.name === 'Coin' && e.kind === 'piece' && e.homing && !e.dead));
+      expect(flying, 'a far piece is already homing').toBe(true);
+    }
+    for (let i = 0; i < 60 && (await sceneName(page)) !== 'VictoryScene'; i++) await page.evaluate(() => (window as any).__ds.step(20));
+    expect(await sceneName(page)).toBe('VictoryScene');
+    const r = await run(page);
+    expect(r.sewn, `${dist} px: 7 carried + the Matron's 12`).toBe(7 + 12);
+    expect(r.pieces).toBe(0);
+    expect((await saved(page)).body, `${dist} px`).toBe(10 + 19);
+    await page.evaluate(() => { (window as any).__ds.game.save.body = 0; });
+  }
+  expect(c.errors).toEqual([]);
+});
+
+test('Selma: giving up in the slow motion after the body was made whole still shows the loop clear, not the death screen', async ({ page }) => {
+  const c = await boot(page, { query: '?seed=5&god=1' });
+  await startRun(page, 5);
+  await toLevel(page, 'passage');
+  await page.evaluate(() => { const ds = (window as any).__ds; ds.body(99); ds.pieces(5); ds.step(5); });
+  await page.evaluate(() => {
+    const ds = (window as any).__ds;
+    const selma = ds.world.entities.find((e: any) => e.constructor.name === 'Seamstress');
+    selma.interact(); // the body is whole: flash + slow motion, the save has moved on to loop 2
+    ds.game.scene.ui.openPause(); // she opens the pause menu within the slow motion ...
+    ds.game.scene.ui.giveUp(); // ... and gives up
+  });
+  await waitScene(page, 'LoopClearScene', 20_000);
+  const s = await saved(page);
+  expect([s.loop, s.body, s.loopRuns]).toEqual([2, 0, 0]);
+  await page.waitForTimeout(1500);
+  expect(await sceneName(page)).toBe('LoopClearScene');
+  expect(c.errors).toEqual([]);
+});
+
+test('loot that dropped just before the exit is not lost to the fade', async ({ page }) => {
+  const c = await boot(page, { query: '?seed=3&god=1' });
+  await startRun(page, 3);
+  await page.evaluate(() => {
+    const ds = (window as any).__ds;
+    const es = [ds.spawn('ghoul', 50), ds.spawn('ghoul', -50), ds.spawn('ghoul', 80)];
+    ds.step(2);
+    for (const e of es) e.takeDamage({ amount: 99999, dir: 1, kind: 'melee' }); // 3 pieces, brand new
+    ds.world.emit({ type: 'levelExit' }); // ... in the very same step the exit door fires
+    (window as any).__prev = ds.game.scene;
+  });
+  await page.waitForFunction(() => { const d = (window as any).__ds; return d.game.scene !== (window as any).__prev && d.game.scene?.constructor?.name === 'LevelScene' && d.game.fade < 0.3; }, null, { timeout: 30_000 });
+  const r = await run(page);
+  expect(r.kind).toBe('passage');
+  expect(r.pieces, '3 ordinary kills = 3 pieces, carried into the 쉼터').toBe(3);
+  expect(c.errors).toEqual([]);
+});
+
+test('쉼터 details: Selma\'s banter bubble is not covered by the prompt, the golem\'s hp bar sits above its head', async ({ page }) => {
+  const c = await boot(page, { query: '?seed=5&god=1' });
+  await recordText(page);
+  await startRun(page, 5);
+  await toLevel(page, 'passage');
+  await page.evaluate(() => { const ds = (window as any).__ds; ds.pieces(0); ds.step(5); });
+  await interact(page, 'Seamstress'); // nothing carried: she talks
+  await clearText(page);
+  await page.waitForTimeout(400);
+  const texts = await drawn(page);
+  expect(texts.some((t) => /[가-힣]/.test(t) && t.length > 8 && !t.startsWith('재봉사')), 'her line is drawn').toBe(true);
+  expect(texts, 'the prompt steps aside while she talks').not.toContain('대화');
+  await shot(page, '16_selma_banter');
+  // the prompt returns when the line is gone
+  await page.waitForTimeout(3300);
+  await clearText(page);
+  await page.waitForTimeout(300);
+  expect(await drawn(page)).toContain('대화');
+  // the golem's hp bar
+  await page.evaluate(() => { const ds = (window as any).__ds; const g = ds.golem(); ds.step(30); g.takeDamage({ amount: 90, dir: 1, kind: 'melee' }); ds.step(3); });
+  await page.waitForTimeout(300);
+  await shot(page, '17_golem_hpbar');
+  expect(c.errors).toEqual([]);
+});
+
 test('the HUD counters fit every control mode at 480 and 800 UI widths', async ({ page }) => {
   const c = await boot(page, { query: '?seed=2&god=1' });
   await recordText(page);

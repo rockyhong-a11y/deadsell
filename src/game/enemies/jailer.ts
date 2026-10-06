@@ -168,7 +168,7 @@ export class Jailer extends Enemy {
     const info: DamageInfo = { amount: this.dmg(ATTACK_DMG.jailer), dir: f, kind: 'melee', source: this, knockback: 280, hitstun: 0.3 };
     if (this.ab === 'torch') {
       info.burn = this.pr('burn', 3);
-      info.burnDps = this.pr('burnDps', 5);
+      info.burnDps = this.dot(this.pr('burnDps', 5));
     }
     const spear = this.ab === 'spear';
     hitArea(

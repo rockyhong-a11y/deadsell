@@ -221,7 +221,7 @@ describe('the 20 unique items of grades A to SSS (docs/CONTENT4.md §5.3): the c
     const b = wandOf('storm_staff').bolt;
     expect(b.damage / b.interval / (f.damage / f.interval)).toBeGreaterThan(1 + GRADES.S.power - 0.1);
     expect(b.damage / b.interval / (f.damage / f.interval)).toBeLessThan(1 + GRADES.S.power + 0.1);
-    // the grades order the power of the weapons of one family: war hammer < 장례 종 < 여교도관의 종철퇴
+    // the grades order the power of the weapons of one family: 사신의 낫 (B) < 장례 종 < 여교도관의 종철퇴 (SS)
     expect(dpsOf(melee('grave_bell'), false)).toBeGreaterThan(dpsOf(melee('reaper_scythe'), false));
     expect(dpsOf(melee('matron_flail'), false)).toBeGreaterThan(dpsOf(melee('grave_bell'), false));
   });

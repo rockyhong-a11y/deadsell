@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { boot, startRun, shot, saved } from './helpers';
+import { boot, startRun, toLevel, shot, saved } from './helpers';
 
 /**
  * The 20 unique items of grades A to SSS (docs/CONTENT4.md §5.3) in the real game (Chromium, real asset loading + real render loop, sound ON so
@@ -100,6 +100,7 @@ const useResult = (page: Page) =>
 test('craft one unique of each grade (C B A S SS SSS) with the debug hooks, equip it from the stash and use it: no console errors', async ({ page }) => {
   const c = await boot(page, { query: '?seed=6&god=1' });
   await startRun(page, 6);
+  await toLevel(page, 'passage'); // a calm, flat 쉼터: nothing wakes up and hurts her in the middle of a cast
   const home = await page.evaluate(() => { const p = (window as any).__ds.player; return { x: p.x as number, y: p.y as number }; });
 
   type Add = [id: string, tier?: number, affix?: string | null, mb?: boolean];
@@ -215,6 +216,7 @@ test('craft one unique of each grade (C B A S SS SSS) with the debug hooks, equi
 test('every unique of grades A to SSS can be equipped (__ds.give) and used once in the real game: its entities draw, no console errors', async ({ page }) => {
   const c = await boot(page, { query: '?seed=4&god=1' });
   await startRun(page, 4);
+  await toLevel(page, 'passage'); // a calm, flat 쉼터: no mid-boss wakes up and interrupts a cast
   const home = await page.evaluate(() => { const p = (window as any).__ds.player; return { x: p.x as number, y: p.y as number }; });
 
   for (const [id, want] of Object.entries(WEAPONS)) {

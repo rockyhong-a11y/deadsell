@@ -522,8 +522,62 @@ class Heroine:
         gb = ellipsoid("gr_body", (0.12, 0.12, 0.12), M["iron"])
         gf = ellipsoid("gr_fuse", (0.04, 0.04, 0.05), M["spark"], loc=(0, 0, 0.07))
         self._add_prop("grenade", [gb, gf], "ha_n", (0.03, -0.04, -0.07), (0, 0, 0))
+        # ---- leather whip: only the handle is a prop, the lash is a per-frame tube (lash_object)
+        wgrip = limb("wh_grip", 0.30, 0.034, 0.038, M["leather"])
+        place(wgrip, (0, 0, 0.22))
+        wcap = cone("wh_cap", 0.046, 0.032, 0.05, M["gold"], loc=(0, 0, 0.22))
+        wband = cyl("wh_band", 0.042, 0.022, M["gold"], loc=(0, 0, 0.07))
+        wpom = ellipsoid("wh_pom", (0.09, 0.09, 0.075), M["gold"], loc=(0, 0, -0.095))
+        wloop = torus("wh_loop", 0.07, 0.014, M["leather_f"], loc=(0, 0, -0.17), rot=(90, 0, 0))
+        self._add_prop("whip", [wgrip, wcap, wband, wpom, wloop], "ha_n", (0.0, -0.01, -0.04), (0, 90, 0))
+        self.tip_local["whip"] = (Vector((0, 0, 0.27)), Vector((0, 0, 0.1)))
+        # ---- greatsword (two-handed: near hand at the pommel end, the far hand grips 0.24 up)
+        hw = 0.075
+        hb = prism("hv_blade", [(-hw, 0.40), (-hw, 1.08), (-0.03, 1.31), (0.0, 1.38), (0.03, 1.31), (hw, 1.08), (hw, 0.40)],
+                   0.026, M["blade"])
+        hf = prism("hv_fuller", [(-0.017, 0.47), (-0.017, 1.04), (0.017, 1.04), (0.017, 0.47)], 0.031, M["steel_f"])
+        hnotch = [box("hv_tooth%d" % k, (0.035, 0.03, 0.045), M["steel_f"], loc=(hw - 0.004, 0, 0.62 + 0.14 * k), rot=(0, 35, 0))
+                  for k in range(3)]
+        hgrd = box("hv_guard", (0.36, 0.06, 0.055), M["iron"], loc=(0, 0, 0.37), bevel=0.012)
+        hcap = [ellipsoid("hv_cap%d" % k, (0.075, 0.075, 0.075), M["gold"], loc=(sx * 0.18, 0, 0.37)) for k, sx in enumerate((-1, 1))]
+        hgr = limb("hv_grip", 0.42, 0.032, 0.034, M["leather"])
+        place(hgr, (0, 0, 0.35))
+        hband = [cyl("hv_wrap%d" % k, 0.037, 0.022, M["leather_f"], loc=(0, 0, 0.08 + 0.1 * k)) for k in range(3)]
+        hpom = ellipsoid("hv_pom", (0.11, 0.085, 0.085), M["iron"], loc=(0, 0, -0.11))
+        hstud = ellipsoid("hv_stud", (0.05, 0.09, 0.05), M["gold"], loc=(0, 0, -0.11))
+        htas = ellipsoid("hv_tassel", (0.05, 0.045, 0.2), M["scarf"], loc=(-0.1, 0, 0.27), rot=(0, 18, 0))
+        self._add_prop("heavy", [hb, hf] + hnotch + [hgrd] + hcap + [hgr] + hband + [hpom, hstud, htas],
+                       "ha_n", (0.0, -0.01, -0.04), (0, 90, 0))
+        self.tip_local["heavy"] = (Vector((0, 0, 1.38)), Vector((0, 0, 0.9)))
+        # ---- gnarled staff (held mid-shaft; the glowing orb is the tip)
+        sp_pts = [(0.012 * math.sin(2.2 * k), 0.008 * math.cos(1.7 * k), -0.55 + 0.1 * k) for k in range(17)]
+        sp_rad = [0.036 + 0.007 * math.sin(1.9 * k) + (0.01 if k in (4, 10) else 0.0) for k in range(17)]
+        shaft = tube("st_shaft", sp_pts, sp_rad, M["wood"], sides=7)
+        claws = []
+        for k in range(3):
+            ph = 2 * math.pi * k / 3 + 0.5
+            cp = [(0.0, 0.0, 1.03), (0.075, 0.0, 1.10), (0.105, 0.0, 1.22), (0.075, 0.0, 1.34), (0.0, 0.0, 1.40)]
+            cp = [(r * math.cos(ph), r * math.sin(ph), z) for (r, _y, z) in cp]
+            claws.append(tube("st_claw%d" % k, cp, [0.03, 0.026, 0.022, 0.017, 0.012], M["wood_d"], sides=6))
+        orb = ellipsoid("st_orb", (0.15, 0.15, 0.15), M["glow2"], loc=(0, 0, 1.22))
+        core = ellipsoid("st_core", (0.08, 0.08, 0.08), M["glow1"], loc=(0, 0, 1.22))
+        swrap = limb("st_wrap", 0.16, 0.04, 0.04, M["leather"])
+        place(swrap, (0, 0, 0.08))
+        sbutt = cone("st_butt", 0.04, 0.02, 0.07, M["iron"], loc=(0, 0, -0.62))
+        sband = cyl("st_band", 0.044, 0.025, M["iron"], loc=(0, 0, 0.96))
+        sribbon = ellipsoid("st_ribbon", (0.05, 0.03, 0.18), M["scarf"], loc=(-0.05, 0, 0.82), rot=(0, 20, 0))
+        self._add_prop("staff", [shaft] + claws + [orb, core, swrap, sbutt, sband, sribbon],
+                       "ha_n", (0.0, -0.01, -0.04), (0, 90, 0))
+        self.tip_local["staff"] = (Vector((0, 0, 1.22)), Vector((0, 0, 0.6)))
         # ---- generic fx (world placed per frame)
         self.fx["puff"] = torus("puff", 0.16, 0.035, M["cyan"], scale=(1, 1, 0.35))
+        # cast burst: rings facing the camera and a cyan star
+        self.fx["ring"] = torus("ring", 0.2, 0.022, M["cyan"], rot=(90, 0, 0), maj=20, mino=5)
+        self.fx["flare"] = ellipsoid("flare", (0.3, 0.02, 0.3), M["cyan"])
+        self.fx["flare2"] = ellipsoid("flare2", (0.18, 0.3, 0.18), M["glow1"])
+        for k in range(3):
+            self.fx["bolt%d" % k] = prism("bolt%d" % k, [(0, 0.16), (0.035, 0.035), (0.16, 0), (0.035, -0.035), (0, -0.16),
+                                                         (-0.035, -0.035), (-0.16, 0), (-0.035, 0.035)], 0.02, M["glow1"])
         self.fx["dust_l"] = ellipsoid("dust_l", (0.22, 0.12, 0.09), M["dust"])
         self.fx["dust_r"] = ellipsoid("dust_r", (0.22, 0.12, 0.09), M["dust"])
         self.fx["spark"] = prism("spark", [(0, 0.12), (0.03, 0.03), (0.12, 0), (0.03, -0.03), (0, -0.12),
@@ -756,9 +810,15 @@ ARM_L1, ARM_L2 = 0.26, 0.22
 LEG_L1, LEG_L2 = 0.40, 0.41
 
 
-def _pose(rig, angles, offsets, scales=None):
-    rig.pose(angles, offsets, scales or {})
+def _pose(rig, angles, offsets, scales=None, twists=None):
+    rig.pose(angles, offsets, scales or {}, twists)
     update()
+
+
+def spec_twists(sp):
+    """`twist` (deg about the vertical axis through the cog, + = forward turns away from the camera) is applied
+    after the planar IK solve: arms, legs and props turn with the body as one rigid group."""
+    return {"cog": sp["twist"]} if "twist" in sp else None
 
 
 def solve_frame(h, spec):
@@ -879,7 +939,7 @@ def solve_frames(h, specs, fps, loop, pre=None, wind=(0.0, 0.0), seed_phase=0.0)
         sp["_i"] = _i
         a, off = solve_frame(h, sp)
         # measure chain anchors / refs / colliders on the solved pose
-        _pose(rig, a, off)
+        _pose(rig, a, off, None, spec_twists(sp))
         meas = {}
         chains = h.chains
         for ch in chains:
@@ -1029,7 +1089,7 @@ def render_frames(h, name, posed, specs, out_dir, fx_fn=None, extra_objs=()):
         if "sc" in sp:
             sx, sz = sp["sc"]
             scl["root"] = (sx, 1.0, sz)
-        rig.pose(a, off, scl)
+        rig.pose(a, off, scl, spec_twists(sp))
         rig.key(f)
         update()
         vis = set()
@@ -1158,6 +1218,18 @@ def pony_radius(u):
     if u < 0.75:
         return 0.064 - 0.022 * ((u - 0.35) / 0.4)
     return max(0.012, 0.042 * (1 - (u - 0.75) / 0.25) ** 0.8)
+
+
+def lash_radius(u):
+    return 0.034 - 0.015 * u
+
+
+def lash_object(h, tag, pts3):
+    """Whip lash: a tapering leather tube through pts3 (world Vectors, handle tip first) with a bone-white popper."""
+    M = h.M
+    sm = catmull(pts3, 4)
+    return strand("lash_%s" % tag, sm, lash_radius, [M["leather"], M["hair"]], lambda u: 0 if u < 0.94 else 1,
+                  flat=1.0, sides=6)
 
 
 def chain_objects(h, tag, pts, spec, phase=0.0, dim=False):

@@ -672,6 +672,226 @@ def a_deploy():
 
 
 # ---------------------------------------------------------------------------
+# CONTENT4: sprint (질주), whip, greatsword, staff.  Rows are appended after every older row.
+
+
+def ease(u):
+    u = max(0.0, min(1.0, u))
+    return u * u * (3 - 2 * u)
+
+
+def loop_cr(keys, p):
+    """Periodic Catmull-Rom through evenly spaced key tuples (any length); p in turns."""
+    n = len(keys)
+    x = (p % 1.0) * n
+    i = int(x)
+    u = x - i
+    p0, p1, p2, p3 = keys[(i - 1) % n], keys[i % n], keys[(i + 1) % n], keys[(i + 2) % n]
+    return tuple(0.5 * ((2 * b) + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u * u + (-a + 3 * b - 3 * c + d) * u ** 3)
+                 for a, b, c, d in zip(p0, p1, p2, p3))
+
+
+# near-foot key poses over one stride (x, lift, pitch), 10 evenly spaced keys: heel strike, load, push-off, heel kick,
+# knee drive, reach.  The far foot runs half a stride later.
+SPRINT_STRIDE = [(0.52, 0.0, 18), (0.22, 0.0, 2), (-0.12, 0.0, -14), (-0.46, 0.03, -42), (-0.64, 0.30, -58),
+                 (-0.42, 0.50, -34), (-0.02, 0.50, -8), (0.34, 0.34, 6), (0.56, 0.14, 16), (0.58, 0.04, 20)]
+
+
+def sprint_foot(p):
+    x, lift, pitch = loop_cr(SPRINT_STRIDE, p)
+    return plant(x, pitch, max(0.0, lift))
+
+
+@anim("sprint", 14, loop=True,
+      chain={"pony": dict(base=-58.0, base_stiff=0.3, flutter=3.0),
+             "sa": dict(base=-50.0, flutter=6.0), "sb": dict(base=-44.0, flutter=5.0)})
+def a_sprint():
+    out = []
+    n = 8
+    for i in range(n):
+        t = i / n
+        bob = C(2 * TAU * (t - 0.40))            # peaks in the flight phases
+        sw = S(TAU * t)
+        out.append({
+            "a": {"hips": -28, "spine": -10, "chest": -6, "neck": 26, "head": 20 + 2 * bob,
+                  "sh_n": -40 - 12 * sw, "el_n": 18 + 8 * sw, "ha_n": -10,
+                  "sh_f": -50 + 12 * sw, "el_f": 22 - 8 * sw, "ha_f": -10},
+            "hip": (0.18, -0.16),
+            "fn": sprint_foot(t), "ff": sprint_foot(t + 0.5),
+            "ground": max(0.0, 0.08 * bob),
+            "vel": (9.0, 0.0),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# WHIP (the lash is a per-frame tube: "lash" = explicit control points after the handle tip, or tip + sag/wave)
+
+WHIP = ["whip"]
+
+
+def crack(x, z, k=1.3):
+    """Spark where the popper snaps (same screen plane as the lash)."""
+    return ("obj", "spark", (x, -0.16, z), (k, 1, k), 0)
+
+
+@anim("whip_1", 16, phases=(3, 2, 2))
+def a_whip_1():
+    return [
+        # draw back: the lash trails behind along the floor
+        F(-8, hip=(-0.05, -0.08), fn=plant(0.14), ff=plant(-0.28, -8), hn=(-0.10, 1.28, 150), hf=(0.30, 1.20, 20), show=WHIP,
+          lash={"pts": [(-0.75, 1.0), (-1.15, 0.5), (-1.45, 0.15), (-1.75, 0.1)]}),
+        # hand swings up behind the head, lash lags below it
+        F(-12, hip=(-0.08, -0.05), fn=plant(0.12), ff=plant(-0.28, -10), hn=(-0.20, 1.62, 125), hf=(0.34, 1.30, 40), show=WHIP,
+          lash={"pts": [(-0.55, 1.48), (-0.85, 1.02), (-1.3, 0.98), (-1.55, 0.55)]}),
+        # peak: hand overhead, lash curls back behind her
+        F(-6, hip=(-0.02, -0.03), fn=plant(0.20), ff=plant(-0.26, -6), hn=(0.10, 1.82, 92), hf=(0.36, 1.40, 55), show=WHIP,
+          lash={"pts": [(-0.28, 2.05), (-0.75, 1.98), (-1.1, 1.65), (-1.25, 1.2)]}),
+        # snap: the loop rolls forward over her head
+        F(10, hip=(0.08, -0.10), fn=plant(0.38), ff=plant(-0.30, -22), hn=(0.46, 1.74, 38), hf=(-0.18, 1.30, -10), show=WHIP,
+          vel=(2.0, 0), lash={"pts": [(0.85, 2.15), (1.35, 2.3), (1.75, 2.1), (1.88, 1.75)]}),
+        # crack: lash straight out, popper snaps
+        F(16, hip=(0.14, -0.13), fn=plant(0.46), ff=plant(-0.30, -30), hn=(0.58, 1.46, 8), hf=(-0.25, 1.24, -25), show=WHIP,
+          vel=(3.0, 0), lash={"tip": (1.9, 1.26), "sag": 0.10, "wave": 0.03, "freq": 1.0},
+          fx=[crack(1.9, 1.26)]),
+        # recoil: the lash ripples back
+        F(10, hip=(0.10, -0.12), fn=plant(0.40), ff=plant(-0.28, -22), hn=(0.40, 1.22, -20), hf=(-0.12, 1.15, -10), show=WHIP,
+          vel=(1.0, 0), lash={"pts": [(0.75, 1.12), (1.0, 0.78), (1.35, 0.95), (1.5, 0.72)]}),
+        # settle: the lash hangs in front
+        F(4, hip=(0.04, -0.07), fn=plant(0.28), ff=plant(-0.22), hn=(0.26, 1.10, -40), show=WHIP,
+          lash={"pts": [(0.45, 0.82), (0.62, 0.48), (0.9, 0.22), (1.25, 0.12)]}),
+    ]
+
+
+@anim("whip_2", 16, phases=(2, 2, 3))
+def a_whip_2():
+    return [
+        # coil: hand back at the hip, lash dragging behind along the floor
+        F(-10, hip=(-0.08, -0.12), fn=plant(0.20), ff=plant(-0.30, -12), hn=(-0.28, 1.22, 175), hf=(0.34, 1.34, 30), show=WHIP,
+          lash={"pts": [(-0.75, 0.95), (-1.15, 0.45), (-1.5, 0.15), (-1.8, 0.1)]}),
+        # hip turns, hand cocked behind the shoulder, lash rises in an S
+        F(-14, hip=(-0.12, -0.10), fn=plant(0.18), ff=plant(-0.32, -14), hn=(-0.34, 1.46, 150), hf=(0.38, 1.38, 40), show=WHIP,
+          lash={"pts": [(-0.7, 1.55), (-1.05, 1.2), (-1.4, 1.25), (-1.65, 1.0)]}),
+        # lash sweeps flat forward, a ripple running down it
+        F(12, hip=(0.12, -0.12), fn=plant(0.42), ff=plant(-0.30, -30), hn=(0.52, 1.36, 8), hf=(-0.20, 1.30, -20), show=WHIP,
+          vel=(3.0, 0), lash={"tip": (1.85, 1.42), "sag": -0.04, "wave": 0.16, "freq": 1.5, "phase": 0.6}),
+        # full stretch: dead straight, popper cracks
+        F(16, hip=(0.18, -0.14), fn=plant(0.48), ff=plant(-0.30, -34), hn=(0.60, 1.38, 4), hf=(-0.28, 1.26, -28), show=WHIP,
+          vel=(3.4, 0), lash={"tip": (1.92, 1.36), "sag": 0.03, "wave": 0.02, "freq": 1.0},
+          fx=[crack(1.92, 1.36)]),
+        # snap back: lash whips into a curl
+        F(10, hip=(0.12, -0.12), fn=plant(0.42), ff=plant(-0.28, -22), hn=(0.42, 1.30, -15), hf=(-0.14, 1.20, -10), show=WHIP,
+          vel=(1.0, 0), lash={"pts": [(0.85, 1.22), (1.3, 1.55), (1.62, 1.35), (1.55, 1.05)]}),
+        F(6, hip=(0.07, -0.09), fn=plant(0.34), ff=plant(-0.24, -10), hn=(0.34, 1.18, -30), show=WHIP,
+          lash={"pts": [(0.6, 1.0), (0.85, 0.7), (1.15, 0.6), (1.4, 0.35)]}),
+        F(2, hip=(0.03, -0.06), fn=plant(0.24), ff=plant(-0.22), hn=(0.26, 1.08, -45), show=WHIP,
+          lash={"pts": [(0.42, 0.78), (0.58, 0.45), (0.8, 0.22), (1.1, 0.12)]}),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# GREATSWORD (two-handed; the far hand grips the hilt 0.2 above the near hand)
+
+HEAVY = ["heavy"]
+
+
+@anim("heavy_1", 14, phases=(3, 2, 3))
+def a_heavy_1():
+    g = grip("heavy", 0.2)
+    return [
+        # crouch, blade dragging low behind
+        F(-6, hip=(-0.05, -0.14), fn=plant(0.18), ff=plant(-0.32, -8), hn=(-0.05, 1.0, -150), hf=g, show=HEAVY),
+        F(-14, hip=(-0.10, -0.18), fn=plant(0.16), ff=plant(-0.36, -12), hn=(-0.20, 0.90, -160), hf=g, show=HEAVY),
+        F(-18, hip=(-0.12, -0.20), fn=plant(0.14, -6), ff=plant(-0.38, -15), hn=(-0.25, 0.88, -165), hf=g, show=HEAVY),
+        # rising slash: low front ...
+        F(10, hip=(0.14, -0.20), fn=plant(0.52), ff=plant(-0.30, -30), hn=(0.46, 0.95, -30), hf=g, show=HEAVY, vel=(3.0, 0)),
+        # ... up and through
+        F(18, hip=(0.20, -0.18), fn=plant(0.56), ff=plant(-0.28, -34), hn=(0.50, 1.42, 38), hf=g, show=HEAVY, vel=(3.2, 0),
+          smear=[SM("heavy", 3, dir=1, width=0.5, trim=0, frac=0.8)]),
+        F(8, hip=(0.12, -0.12), fn=plant(0.44), ff=plant(-0.28, -25), hn=(0.30, 1.60, 66), hf=g, show=HEAVY, vel=(1.0, 0),
+          smear=[SM("heavy", 4, dir=1, width=0.3, trim=0, frac=0.55)]),
+        F(0, hip=(0.06, -0.08), fn=plant(0.34), ff=plant(-0.24, -10), hn=(0.16, 1.50, 98), hf=g, show=HEAVY),
+        F(4, hip=(0.04, -0.07), fn=plant(0.26), ff=plant(-0.22), hn=(0.25, 1.10, 55), hf=g, show=HEAVY),
+    ]
+
+
+@anim("heavy_2", 12, phases=(4, 2, 3))
+def a_heavy_2():
+    g = grip("heavy", 0.2)
+    return [
+        F(2, hip=(0.0, -0.10), fn=plant(0.22), ff=plant(-0.26), hn=(0.18, 1.18, 70), hf=g, show=HEAVY),
+        F(-6, hip=(-0.04, -0.06), fn=plant(0.18), ff=plant(-0.28, -6), hn=(0.0, 1.62, 105), hf=g, show=HEAVY),
+        F(-14, hip=(-0.08, -0.02), fn=plant(0.14, -8), ff=plant(-0.30, -14), hn=(-0.10, 1.76, 135), hf=g, show=HEAVY),
+        F(-18, hip=(-0.10, 0.0), fn=plant(0.12, -10), ff=plant(-0.32, -18), hn=(-0.14, 1.72, 145), hf=g, show=HEAVY),
+        # chop: down through the front ...
+        F(20, hip=(0.20, -0.20), fn=plant(0.54), ff=plant(-0.30, -34), hn=(0.55, 1.35, -20), hf=g, show=HEAVY, vel=(3.4, -0.5),
+          smear=[SM("heavy", 3, dir=-1, width=0.5, trim=0, frac=0.42, center=(0.1, 1.3))]),
+        # ... and into the floor
+        F(30, hip=(0.26, -0.28), fn=plant(0.58), ff=plant(-0.32, -38), hn=(0.70, 0.82, -40), hf=g, show=HEAVY, vel=(2.0, -1.0),
+          fx=[dust(1.7, 0.04, 1.8, 1.4), ("obj", "spark", (1.8, -0.2, 0.12), (1.3, 1, 1.3), 10)]),
+        F(28, hip=(0.24, -0.26), fn=plant(0.56), ff=plant(-0.32, -36), hn=(0.68, 0.84, -40), hf=g, show=HEAVY,
+          fx=[dust(1.8, 0.06, 2.2, 1.8)]),
+        F(20, hip=(0.16, -0.18), fn=plant(0.46), ff=plant(-0.28, -26), hn=(0.52, 0.98, -28), hf=g, show=HEAVY,
+          fx=[dust(1.85, 0.08, 1.8, 2.0)]),
+        F(8, hip=(0.08, -0.10), fn=plant(0.32), ff=plant(-0.24, -10), hn=(0.34, 1.10, 15), hf=g, show=HEAVY),
+    ]
+
+
+@anim("heavy_3", 12, phases=(3, 3, 3))
+def a_heavy_3():
+    g = grip("heavy", 0.2)
+    fn, ff = plant(0.16), plant(-0.14, -6)
+    out = []
+    # (twist, lean, crouch, hand)  twist: + turns her away from the camera, - toward it.  Arms stay out in front, so
+    # the whole body, arms and blade turn as one: the blade sweeps flat around her.
+    seq = [(24, -6, -0.16, (0.20, 1.00, -30)), (54, -10, -0.22, (0.16, 1.14, -12)), (86, -12, -0.26, (0.16, 1.20, 0)),
+           (8, 10, -0.16, (0.46, 1.22, -3)), (-82, 10, -0.14, (0.46, 1.22, -3)), (-168, 10, -0.14, (0.46, 1.22, -3)),
+           (-236, 8, -0.12, (0.42, 1.12, -10)), (-306, 5, -0.10, (0.40, 1.04, -20)), (-360, 3, -0.07, (0.32, 1.02, -30))]
+    rings = {3: dict(a0=70, a1=8), 4: dict(a0=8, a1=-82), 5: dict(a0=-82, a1=-168), 6: dict(a0=-168, a1=-232, width=0.35)}
+    for i, (tw, lean, cr, hn) in enumerate(seq):
+        sp = F(lean, hip=(0.04, cr), fn=fn, ff=ff, hn=(hn[0], hn[1], hn[2]), hf=g, show=HEAVY, twist=tw)
+        if i in rings:
+            sp["ring"] = [merge(dict(c=(0.0, hn[1]), R=1.86, width=0.62, tilt=0.16), rings[i])]
+            sp["vel"] = (0.0, 0.0)
+        out.append(sp)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# STAFF CAST (one hand thrusts the staff, the off hand flares open)
+
+STAFF = ["staff"]
+
+
+def flare(halo, core=0.0, ring=0.0):
+    """Cast burst on the staff orb: a cyan halo, a white core and optionally an expanding ring facing the camera."""
+    out = [("tipfx", "staff", "flare", (halo, halo, halo))]
+    if core:
+        out.append(("tipfx", "staff", "flare2", (core, core, core)))
+    if ring:
+        out.append(("tipfx", "staff", "ring", (ring, ring, ring)))
+    return out
+
+
+@anim("cast", 14, phases=(2, 1, 3))
+def a_cast():
+    return [
+        F(-4, hip=(-0.03, -0.08), fn=plant(0.20), ff=plant(-0.26, -6), hn=(0.18, 1.02, 50), hf=(0.42, 1.52, 80), show=STAFF),
+        F(-10, hip=(-0.07, -0.08), fn=plant(0.16), ff=plant(-0.30, -12), hn=(-0.04, 1.30, 62), hf=(0.46, 1.60, 70), show=STAFF,
+          fx=flare(0.7)),
+        # release: staff thrust out, orb flares, off hand thrown open behind
+        F(14, hip=(0.12, -0.12), fn=plant(0.44), ff=plant(-0.30, -26), hn=(0.56, 1.36, 14), hf=(-0.30, 1.16, 195), show=STAFF,
+          vel=(2.0, 0), fx=flare(1.3, 1.0) + [("tipfx", "staff", "bolt0", (1.0, 1.0, 1.0), 0), ("obj", "bolt1", (1.6, -0.16, 1.9), (0.8, 1, 0.8), 0),
+                                              ("obj", "bolt2", (1.85, -0.16, 1.05), (0.7, 1, 0.7), 0)]),
+        F(12, hip=(0.10, -0.12), fn=plant(0.42), ff=plant(-0.30, -24), hn=(0.52, 1.34, 16), hf=(-0.34, 1.12, 200), show=STAFF,
+          vel=(1.0, 0), fx=flare(1.6, 0.9, 1.1)),
+        F(8, hip=(0.07, -0.10), fn=plant(0.36), ff=plant(-0.26, -14), hn=(0.42, 1.24, 26), hf=(-0.10, 1.30, 120), show=STAFF,
+          fx=flare(0.9, 0.0, 1.8)),
+        F(3, hip=(0.03, -0.07), fn=plant(0.26), ff=plant(-0.22), hn=(0.30, 1.10, 45), show=STAFF),
+    ]
+
+
+# ---------------------------------------------------------------------------
 # main
 
 
@@ -697,7 +917,7 @@ def measure(h, posed, specs):
         scl = {}
         if "sc" in sp:
             scl["root"] = (sp["sc"][0], 1.0, sp["sc"][1])
-        rig.pose(a, off, scl)
+        rig.pose(a, off, scl, L.spec_twists(sp))
         L.update()
         m = {}
         for j in ("sh_n", "sh_f", "el_n", "el_f", "ha_n", "ha_f", "an_n", "an_f", "head", "chest", "hips"):
@@ -763,6 +983,44 @@ def make_smear(h, name, meas, sm, frame):
     return L.smear_mesh(name, outer, inner, h.M[sm.get("mat", "smear")])
 
 
+def lash_points(p0, lz):
+    """World points of a whip lash from the handle tip p0.  lz: {"pts": [(x, z), ...]} explicit control points, or
+    {"tip": (x, z), "sag", "wave", "freq", "phase"} = a straight line bent by a droop and a travelling ripple."""
+    a = Vector((p0.x, p0.z))
+    if "pts" in lz:
+        P = [a] + [Vector(q) for q in lz["pts"]]
+    else:
+        t = Vector(lz["tip"])
+        d = t - a
+        perp = Vector((-d.y, d.x)).normalized()
+        P = []
+        n = 9
+        for k in range(n + 1):
+            u = k / n
+            off = -lz.get("sag", 0.0) * 4 * u * (1 - u)
+            off += lz.get("wave", 0.0) * S(TAU * lz.get("freq", 1.0) * u + lz.get("phase", 0.0)) * S(math.pi * u) ** 0.7
+            P.append(a.lerp(t, u) + perp * off)
+    return [Vector((q.x, p0.y, q.y)) for q in P]
+
+
+def make_ring(h, name, rg):
+    """Flat ribbon swept around the body in the horizontal plane (spin attacks), tilted toward the camera so it reads
+    as an ellipse: centre (x, z), radius R, angles a0..a1 (deg, 0 = +X, 90 = away from the camera)."""
+    cx, cz = rg["c"]
+    R, w = rg["R"], rg.get("width", 0.3)
+    a0, a1 = math.radians(rg["a0"]), math.radians(rg["a1"])
+    k = rg.get("tilt", 0.3)
+    K = 18
+    outer, inner = [], []
+    for i in range(K + 1):
+        u = i / K
+        ang = a0 + (a1 - a0) * u
+        env = 0.1 + 0.9 * u ** 1.3
+        for pts, r in ((outer, R), (inner, R - w * env)):
+            pts.append((cx + r * math.cos(ang), r * math.sin(ang), cz + k * r * math.sin(ang)))
+    return L.smear_mesh(name, outer, inner, h.M[rg.get("mat", "smear")])
+
+
 def fx_builder(h, meas, specs, smears):
     def fx(i, n, sp):
         out = {}
@@ -792,6 +1050,11 @@ def fx_builder(h, meas, specs, smears):
                 rot = f[4] if len(f) > 4 else 0.0
                 q = Quaternion((0, 1, 0), -math.radians(rot))
                 out[ob] = (Vector(f[2]), q, f[3])
+            elif kind == "tipfx":
+                # ("tipfx", prop, fxname, scale[, rot_deg_about_Y]): fx object centred on a prop's tip
+                ob = h.fx[f[2]]
+                rot = f[4] if len(f) > 4 else 0.0
+                out[ob] = (m[f[1]][0].copy(), Quaternion((0, 1, 0), -math.radians(rot)), f[3])
             elif kind == "streak":
                 ob = h.fx[f[1]]
                 p0 = Vector(f[2])
@@ -849,6 +1112,13 @@ def render_anim(h, entry):
     for i, sp in enumerate(specs):
         for k, sm in enumerate(sp.get("smear", [])):
             smears.append((i, make_smear(h, "smear_%s_%d_%d" % (name, i, k), meas, sm, i)))
+    for i, sp in enumerate(specs):
+        if "lash" in sp:
+            pts = lash_points(meas[i]["whip"][0], sp["lash"])
+            smears.append((i, L.lash_object(h, "%s_%d" % (name, i), pts)))
+            print("LASH %s %d tip x=%5.1f z=%5.1f px" % (name, i, pts[-1].x * 32, pts[-1].z * 32))
+        for k, rg in enumerate(sp.get("ring", [])):
+            smears.append((i, make_ring(h, "ring_%s_%d_%d" % (name, i, k), rg)))
     # ponytail + scarf meshes per frame (ponytail ember dims at the end of death)
     dim = opts.get("dim_from")
     for i, (a, off, pts) in enumerate(posed):

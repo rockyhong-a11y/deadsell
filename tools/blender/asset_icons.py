@@ -271,6 +271,330 @@ def i_golem():
     return [r]
 
 
+# ---- CONTENT4: 14 normal weapons, 8 normal skills, 20 uniques, bell shard, stash --------------------------
+
+def i_broadsword():
+    r = L.m_broadsword()
+    orient(r, 40, twist=-10)
+    return [r]
+
+
+def i_frantic_sword():
+    r = L.m_frantic_sword()
+    orient(r, 45, twist=-12)
+    return [r]
+
+
+def i_rapier():
+    r = L.m_rapier()
+    orient(r, 50, twist=-8)
+    return [r]
+
+
+def i_sadist_stiletto():
+    r = L.m_sadist_stiletto()
+    orient(r, 42, twist=-10)
+    return [r]
+
+
+def i_grave_shovel():
+    r = L.m_grave_shovel()
+    orient(r, 38, twist=-10)
+    return [r]
+
+
+def i_torch():
+    r = L.m_torch()
+    orient(r, 25, twist=-8)
+    bpy.context.view_layer.update()
+    top = r.matrix_world @ Vector((0, 0, 0.8))
+    fl = L.flame("tc_fl", 0.62, 0.17, layers=("#a8201c", "#ff5a1e", "#ffb43a", "#fff2b0"), seed=4, sway=0.15)
+    fg = L.group("tc_flg", fl, loc=top)
+    h = halo("tc_h", "disc", top + Vector((0, 0, 0.22)), dist=0.3, r=0.3, col="#7a1c14")
+    return [r, fg, h]
+
+
+def i_leather_whip():
+    r = L.m_leather_whip()
+    orient(r, 18, twist=-10)
+    return [r]
+
+
+def i_iron_katana():
+    r = L.m_iron_katana()
+    orient(r, 52, twist=-8)
+    return [r]
+
+
+def i_multi_bow():
+    r = L.m_multi_bow()
+    orient(r, 45, twist=0)
+    return [r]
+
+
+def i_ice_bow():
+    r = L.m_ice_bow()
+    orient(r, 45, twist=0)
+    h = halo("ib_h", "star", (0, 0, 0.0), dist=0.35, r=0.34, r_in=0.09, n=6, col="#2a78d8")
+    h2 = halo("ib_h2", "star", (0, 0, 0.0), dist=0.3, r=0.26, r_in=0.07, n=6, col="#a8ecff", phase=math.pi / 6)
+    return [r, h, h2]
+
+
+def i_heavy_crossbow():
+    r = L.m_heavy_crossbow()
+    orient(r, 40, twist=-8, loc=(0, 0, -0.3))
+    return [r]
+
+
+def i_throwing_knives():
+    ks = []
+    for i, tilt in enumerate((4, 42, 80)):
+        k = L.m_throwing_knife("tk%d" % i)
+        orient(k, tilt, twist=-8, loc=(0.1 * (i - 1), -0.05 * i, 0.0))
+        ks.append(k)
+    return ks
+
+
+def i_fire_staff():
+    r = L.m_fire_staff()
+    orient(r, 32, twist=-8)
+    bpy.context.view_layer.update()
+    top = r.matrix_world @ Vector((0, 0, 1.0))
+    fgs = []
+    for k, (ang, h, sw) in enumerate(((-40, 0.62, -0.25), (0, 0.85, 0.1), (40, 0.62, 0.3))):
+        fl = L.flame("fst_fl%d" % k, h, 0.15, layers=("#a8201c", "#ff5a1e", "#ffb43a", "#fff2b0"), seed=7 + k, sway=sw)
+        fg = L.group("fst_flg%d" % k, fl, loc=top + Vector((0.0, -0.02 * k, 0.0)), rot=(0, ang, 0))
+        fgs.append(fg)
+    h = halo("fst_h", "disc", top + Vector((0, 0, 0.12)), dist=0.3, r=0.34, col="#7a1c14")
+    return [r, h] + fgs
+
+
+def i_spiked_shield():
+    r = L.m_spiked_shield()
+    orient(r, 0, twist=-24, lean=-8)
+    return [r]
+
+
+def i_stun_grenade():
+    r = L.m_stun_grenade()
+    orient(r, 22, twist=-12, loc=(0, 0, -0.1), scale=1.25)
+    h1 = halo("sg_h1", "star", (0.0, 0, 0.25), dist=0.4, r=0.52, r_in=0.15, n=8, col="#c89a20")
+    h2 = halo("sg_h2", "star", (0.0, 0, 0.25), dist=0.35, r=0.36, r_in=0.1, n=8, col="#fff2a0", phase=math.pi / 8)
+    return [r, h1, h2]
+
+
+def i_magnet_grenade():
+    r = L.m_magnet_grenade()
+    orient(r, 0, twist=-14)
+    return [r]
+
+
+def i_cluster_grenade():
+    r = L.m_cluster_grenade()
+    orient(r, 0, twist=-14)
+    sp = L.spark("cg_sp", 0.18, 0.3, Vector((-0.02, -0.05, 0.36)))
+    for i, (x, z) in enumerate(((-0.34, 0.35), (0.38, 0.39), (-0.3, -0.18), (0.34, -0.15))):
+        sp += L.spark("cg_sp%d" % i, 0.07, 0.2 * i, Vector((x, -0.08, z)))
+    return [r] + sp
+
+
+def i_tesla_coil():
+    r = L.m_tesla_coil()
+    orient(r, 0, twist=-14)
+    bs = []
+    for k, (p1, seed) in enumerate((((0.62, 1.1), 3), ((-0.6, 1.14), 5), ((0.1, 1.5), 9), ((0.5, 0.45), 4))):
+        bs.append(L.zap("tc_z%d" % k, (0.0, 0.88), p1, "#4fe3ff", w=0.05, n=4, jitter=0.16, seed=seed, y=-0.1))
+        bs.append(L.zap("tc_zc%d" % k, (0.0, 0.88), p1, "#e6fdff", w=0.02, n=4, jitter=0.16, seed=seed, y=-0.12))
+    return [r] + bs
+
+
+def i_flame_turret():
+    r = L.m_flame_turret()
+    orient(r, 0, twist=-10)
+    fl = L.flame("ft_fl", 0.75, 0.2, layers=("#a8201c", "#ff5a1e", "#ffb43a", "#fff2b0"), seed=2, sway=0.1)
+    fg = L.group("ft_flg", fl, loc=(0.4, -0.03, 0.1), rot=(0, 90, 0))
+    return [r, fg]
+
+
+def i_phaser():
+    r = L.m_phaser()
+    orient(r, 0, twist=-10)
+    return [r]
+
+
+def i_wave_of_denial():
+    r = L.m_wave_of_denial()
+    orient(r, 0, twist=-10)
+    return [r]
+
+
+def i_tornado():
+    r = L.m_tornado()
+    orient(r, 0, twist=-10)
+    return [r]
+
+
+def i_grave_bell():
+    r = L.m_grave_bell()
+    orient(r, 22, twist=-8)
+    return [r]
+
+
+def i_leech_whip():
+    r = L.m_leech_whip()
+    orient(r, 20, twist=-8)
+    return [r]
+
+
+def i_bone_rampart():
+    r = L.m_bone_rampart()
+    orient(r, 0, twist=-14, lean=-6)
+    return [r]
+
+
+def i_plague_censer():
+    r = L.m_plague_censer()
+    orient(r, 0, twist=-10)
+    return [r]
+
+
+def i_bone_turret():
+    r = L.m_bone_turret()
+    orient(r, 0, twist=0)
+    return [r]
+
+
+def i_executioner_blade():
+    r = L.m_executioner_blade()
+    orient(r, 40, twist=-10)
+    return [r]
+
+
+def i_storm_staff():
+    r = L.m_storm_staff()
+    orient(r, 30, twist=-8)
+    bpy.context.view_layer.update()
+    top = r.matrix_world @ Vector((0, 0, 1.0))
+    bs = []
+    for k, (dx, dz, seed) in enumerate(((0.5, 0.3, 3), (-0.45, 0.4, 5), (0.15, 0.62, 9), (0.4, -0.2, 4))):
+        a, b = (top.x, top.z), (top.x + dx, top.z + dz)
+        bs.append(L.zap("ss_z%d" % k, a, b, "#4fe3ff", w=0.05, n=4, jitter=0.16, seed=seed, y=-0.1))
+        bs.append(L.zap("ss_zc%d" % k, a, b, "#e6fdff", w=0.02, n=4, jitter=0.16, seed=seed, y=-0.12))
+    return [r] + bs
+
+
+def i_moon_glaives():
+    a = L.m_moon_glaive("mga", 1.0)
+    b = L.m_moon_glaive("mgb", 1.0)
+    orient(a, 28, twist=-6, loc=(-0.2, 0, -0.1))
+    orient(b, -12, twist=6, loc=(0.22, -0.08, 0.14), scale=0.9)
+    return [a, b]
+
+
+def i_death_orb():
+    r = L.m_death_orb()
+    orient(r, 0, twist=-8)
+    h = halo("do_h", "disc", (0, 0, 0.0), dist=0.35, r=0.5, col="#0f4a78")
+    return [r, h]
+
+
+def i_chain_prison():
+    r = L.m_chain_prison()
+    orient(r, 0, twist=-12)
+    return [r]
+
+
+def i_matron_flail():
+    r = L.m_matron_flail()
+    orient(r, 32, twist=-8)
+    return [r]
+
+
+def i_soulfire_bow():
+    r, tu, td = L.m_soulfire_bow()
+    orient(r, 45, twist=0)
+    bpy.context.view_layer.update()
+    mw = r.matrix_world
+    objs = [r]
+    cy = ("#1a6aa8", "#2fb4e8", "#8af0ff", "#e6fdff")
+    for k, tip in enumerate((tu, td)):
+        w = mw @ tip
+        fl = L.flame("sf_tip%d" % k, 0.34, 0.1, layers=cy, seed=3 + k, sway=0.2 - 0.4 * k)
+        objs.append(L.group("sf_tipg%d" % k, fl, loc=w + Vector((0, 0, 0.02))))
+    fwd = mw.to_3x3() @ Vector((1, 0, 0))
+    for k, off in enumerate((0.0, 0.22)):
+        c = mw @ Vector((0.62 + off, 0, 0.0)) + Vector((0.0, -0.05 * k, 0.17 * (1 - 2 * k)))
+        fl = L.flame("sf_wisp%d" % k, 0.2, 0.06, layers=cy, seed=8 + k, sway=0.3)
+        objs.append(L.group("sf_wispg%d" % k, fl, loc=c))
+    return objs
+
+
+def i_bell_aegis():
+    r = L.m_bell_aegis()
+    orient(r, 0, twist=-24, lean=-8)
+    return [r]
+
+
+def i_rag_doll():
+    r = L.m_rag_doll()
+    orient(r, 0, twist=-14)
+    return [r]
+
+
+def i_crimson_rain():
+    r = L.m_crimson_rain()
+    orient(r, 0, twist=-10)
+    return [r]
+
+
+def i_selma_shears():
+    r = L.m_selma_shears()
+    orient(r, 36, twist=-8)
+    return [r]
+
+
+def i_ember_blade():
+    r = L.m_ember_blade()
+    orient(r, 42, twist=-10)
+    bpy.context.view_layer.update()
+    mw = r.matrix_world
+    sp = []
+    for k, (z, x) in enumerate(((0.35, -0.2), (0.62, 0.2), (0.88, -0.17))):
+        sp += L.spark("eb_sp%d" % k, 0.08, 0.2 * k, mw @ Vector((x, -0.05, z)), cols=("#4fe3ff", "#e6fdff"))
+    return [r] + sp
+
+
+def i_ninefold_whip():
+    r = L.m_ninefold_whip()
+    orient(r, 12, twist=-6)
+    return [r]
+
+
+def i_last_bell():
+    r = L.m_last_bell()
+    orient(r, 0, twist=-12)
+    h = halo("lb_h", "disc", (0, 0, -0.05), dist=0.4, r=0.3, col="#0f4a78")
+    return [r, h]
+
+
+def i_requiem():
+    r = L.m_requiem()
+    orient(r, 10, twist=-14)
+    return [r]
+
+
+def i_bell_shard():
+    r = L.m_bell_shard()
+    orient(r, 14, twist=-20, lean=-10)
+    return [r]
+
+
+def i_stash():
+    root, P = L.m_stash()
+    orient(root, 0, twist=0)
+    return [root]
+
+
 ICONS = [
     # id, builder, yaw, pitch
     ("rusty_sword", i_rusty_sword, 15, 10),
@@ -301,6 +625,55 @@ ICONS = [
     ("chain_hook", i_chain_hook, 15, 10),
     ("corpse_piece", i_corpse_piece, 15, 22),
     ("golem", i_golem, 10, 8),
+    # CONTENT4: normal weapons
+    ("broadsword", i_broadsword, 15, 10),
+    ("frantic_sword", i_frantic_sword, 15, 10),
+    ("rapier", i_rapier, 15, 10),
+    ("sadist_stiletto", i_sadist_stiletto, 15, 10),
+    ("grave_shovel", i_grave_shovel, 15, 10),
+    ("torch", i_torch, 15, 10),
+    ("leather_whip", i_leather_whip, 15, 10),
+    ("iron_katana", i_iron_katana, 15, 10),
+    ("multi_bow", i_multi_bow, 20, 10),
+    ("ice_bow", i_ice_bow, 20, 10),
+    ("heavy_crossbow", i_heavy_crossbow, 15, 10),
+    ("throwing_knives", i_throwing_knives, 10, 10),
+    ("fire_staff", i_fire_staff, 15, 10),
+    ("spiked_shield", i_spiked_shield, 15, 10),
+    # CONTENT4: normal skills
+    ("stun_grenade", i_stun_grenade, 15, 12),
+    ("magnet_grenade", i_magnet_grenade, 15, 10),
+    ("cluster_grenade", i_cluster_grenade, 15, 12),
+    ("tesla_coil", i_tesla_coil, 15, 10),
+    ("flame_turret", i_flame_turret, 35, 14),
+    ("phaser", i_phaser, 15, 10),
+    ("wave_of_denial", i_wave_of_denial, 15, 10),
+    ("tornado", i_tornado, 15, 22),
+    # CONTENT4: uniques, grade A and S (weapons, then skills)
+    ("grave_bell", i_grave_bell, 15, 10),
+    ("leech_whip", i_leech_whip, 15, 10),
+    ("bone_rampart", i_bone_rampart, 15, 10),
+    ("plague_censer", i_plague_censer, 15, 10),
+    ("bone_turret", i_bone_turret, 35, 14),
+    ("executioner_blade", i_executioner_blade, 15, 10),
+    ("storm_staff", i_storm_staff, 15, 10),
+    ("moon_glaives", i_moon_glaives, 10, 10),
+    ("death_orb", i_death_orb, 15, 10),
+    ("chain_prison", i_chain_prison, 15, 10),
+    # CONTENT4: uniques, grade SS and SSS (weapons, then skills), bell shard
+    ("matron_flail", i_matron_flail, 15, 10),
+    ("soulfire_bow", i_soulfire_bow, 20, 10),
+    ("bell_aegis", i_bell_aegis, 15, 10),
+    ("rag_doll", i_rag_doll, 15, 10),
+    ("crimson_rain", i_crimson_rain, 15, 10),
+    ("selma_shears", i_selma_shears, 15, 10),
+    ("ember_blade", i_ember_blade, 15, 10),
+    ("ninefold_whip", i_ninefold_whip, 15, 10),
+    ("last_bell", i_last_bell, 15, 10),
+    ("requiem", i_requiem, 15, 10),
+    ("bell_shard", i_bell_shard, 15, 10),
+    # CONTENT4: codex icon of the stash (same model as the stash prop sheet)
+    ("stash", i_stash, 20, 8),
 ]
 
 

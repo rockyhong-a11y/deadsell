@@ -1386,3 +1386,1091 @@ def m_golem_head():
     parts.append(sphere("gh_patch", 0.1, mat("flesh_pale"), loc=(-0.3, -0.27, 0.27), segs=10, rings=6, scale=(1, 0.3, 1)))
     parts.append(torus("gh_patch_st", 0.09, 0.012, dark, loc=(-0.3, -0.31, 0.27), rot=(90, 0, 0), segs=14, rsegs=4))
     return group("golem_head", parts)
+
+
+# --------------------------------------------------------------------------
+# CONTENT4 (docs/CONTENT4.md 5.1-5.3): 14 normal weapons, 8 normal skills, 20 uniques, bell shard, stash.
+# Same conventions as above (weapons along +Z, hilt at the origin).  Normal items are plain steel / wood /
+# leather; uniques carry the bone / blood-red thread / cyan ember motifs.
+
+PAL.update({
+    "red_enamel": ("#c8283a", "#6a1030", "#ff6a70", True),
+    "yellow_enamel": ("#e8c43a", "#8a6a20", "#fff09a", True),
+    "dirt": ("#6e4a32", "#33211f", "#946a46", False),
+    "ice_steel": ("#8fd0ee", "#3a6aa0", "#eefaff", True),
+    "storm_a": ("#c4d8ea", "#6c8ab0", "#f4fbff", True),
+    "storm_b": ("#7e9cc0", "#3e5478", "#bcd4e8", True),
+    "bell_bronze": ("#b07a30", "#52302a", "#e0aa5c", True),
+    "bell_dark": ("#7a4e24", "#3a2024", "#a8742e", True),
+    "smoke_green": ("#7cc24a", "#3a6a36", "#b8ee7a", False),
+})
+
+
+def bone_skull(name, s=1.0, eyes="#4fe3ff", loc=(0, 0, 0), rot=(0, 0, 0), glint=1.0):
+    """Small skull facing +X (cranium, jaw, two eye sockets with an ember glint)."""
+    b, hole = mat("bone_w"), mat("bone_black")
+    parts = [sphere(name + "_cran", 0.13, b, loc=(0, 0, 0.13), segs=12, rings=8, scale=(1.0, 0.92, 0.9)),
+             sphere(name + "_face", 0.085, mat("bone"), loc=(0.06, 0, 0.07), segs=10, rings=6, scale=(0.9, 0.85, 0.9)),
+             box(name + "_jaw", (0.1, 0.14, 0.05), b, loc=(0.065, 0, 0.02), bevel=0.012)]
+    for sy in (-1, 1):
+        parts.append(sphere(name + "_eye%d" % sy, 0.036, hole, loc=(0.11, sy * 0.05, 0.12), segs=8, rings=5))
+        if eyes:
+            parts.append(sphere(name + "_ember%d" % sy, 0.016 * glint, glow(eyes), loc=(0.135, sy * 0.05, 0.125), segs=6, rings=4))
+    parts.append(box(name + "_nose", (0.03, 0.03, 0.04), hole, loc=(0.145, 0, 0.075)))
+    return group(name, parts, loc=loc, rot=rot, scale=s)
+
+
+def zap_pts(p0, p1, w=0.035, n=5, jitter=0.12, seed=0):
+    """Closed XZ polygon of a lightning bolt from p0 to p1 (a tapering zigzag ribbon)."""
+    rng = random.Random(seed)
+    a, b = Vector((p0[0], p0[1])), Vector((p1[0], p1[1]))
+    d = b - a
+    nrm = Vector((-d.y, d.x)).normalized()
+    mid = []
+    for i in range(n + 1):
+        t = i / n
+        off = 0.0 if i in (0, n) else rng.choice((-1, 1)) * jitter * d.length * rng.uniform(0.6, 1.0)
+        mid.append(a + d * t + nrm * off)
+    left, right = [], []
+    for i, p in enumerate(mid):
+        ww = w * (1.0 - 0.6 * i / n)
+        left.append((p + nrm * ww)[:])
+        right.append((p - nrm * ww)[:])
+    return [tuple(p) for p in left] + [tuple(p) for p in reversed(right)]
+
+
+def zap(name, p0, p1, col, w=0.035, n=5, jitter=0.12, seed=0, y=0.0):
+    return prism(name, zap_pts(p0, p1, w, n, jitter, seed), 0.01, glow(col), y0=y)
+
+
+def moon_pts(R, r, d, n=16):
+    """Closed XZ polygon of a crescent opening toward +X: outer circle R at the origin minus a circle r at (d, 0)."""
+    x0 = (R * R - r * r + d * d) / (2 * d)
+    y0 = math.sqrt(max(0.0, R * R - x0 * x0))
+    a0 = math.atan2(y0, x0)
+    pt = math.atan2(y0, x0 - d)
+    outer = [(R * math.cos(a), R * math.sin(a)) for a in (a0 + (2 * math.pi - 2 * a0) * i / n for i in range(n + 1))]
+    inner = [(d + r * math.cos(p), r * math.sin(p)) for p in ((2 * math.pi - pt) - (2 * math.pi - 2 * pt) * i / n
+                                                              for i in range(n + 1))]
+    return outer + inner[1:-1]
+
+
+def bow_model(tag, limb, grip, tip, string, curve=1.25, thick=1.15, wrap=None, string_r=0.016, knobs=None):
+    """Recurve bow facing +X (see m_hunter_bow) with caller-chosen materials.
+    Returns (root, upper tip, lower tip) with the tips in root space."""
+    up = [(0.0, 0.0), (-0.03, 0.15), (-0.09, 0.3), (-0.15, 0.43), (-0.19, 0.53), (-0.2, 0.58),
+          (-0.185, 0.64), (-0.145, 0.68)]
+    up = [(x * curve, z) for x, z in up]
+    curve_pts = [Vector((x, 0, -z)) for x, z in reversed(up[1:])] + [Vector((x, 0, z)) for x, z in up]
+    pts = catmull(curve_pts, per=4)
+    n = len(pts)
+    radii = []
+    for i in range(n):
+        s = abs(i - (n - 1) / 2) / ((n - 1) / 2)
+        radii.append((0.05 * (1 - s) + 0.02 * s) * thick)
+    parts = [tube(tag + "_limbs", pts, radii, limb, segs=8)]
+    parts.append(cyl(tag + "_grip", 0.056 * thick, 0.18, grip, loc=(0, 0, -0.09)))
+    for z in (-0.07, -0.02, 0.03, 0.08):
+        parts.append(torus(tag + "_wrap", 0.058 * thick, 0.011, wrap or grip, loc=(0, 0, z), segs=12, rsegs=4))
+    if knobs:
+        for i in range(3, n - 2, 4):
+            parts.append(sphere("%s_knob%d" % (tag, i), radii[i] * 1.15, knobs, loc=pts[i] + Vector((-0.012, -0.02, 0)),
+                                segs=8, rings=5))
+    cu = Vector((up[5][0] - 0.012, 0, up[5][1]))
+    cd = Vector((cu.x, 0, -cu.z))
+    tip_u = Vector((up[-1][0], 0, up[-1][1]))
+    tip_d = Vector((tip_u.x, 0, -tip_u.z))
+    for i, tp in enumerate((tip_u, tip_d)):
+        parts.append(sphere("%s_tip%d" % (tag, i), 0.028 * thick, tip, loc=tp, segs=8, rings=6))
+    parts.append(tube(tag + "_string", [tip_u, cu, cd, tip_d], string_r, string, segs=6))
+    return group(tag, parts), tip_u, tip_d
+
+
+# ---- 14 normal weapons ---------------------------------------------------------------------------------------
+
+def m_broadsword():
+    """Plain two-handed broadsword: very wide parallel blade, straight iron cross, long wrapped grip."""
+    st, sd = mat("steel"), mat("steel_dark")
+    stations = [(0.04, 0.105, 0.105), (0.72, 0.11, 0.11), (0.84, 0.105, 0.105), (0.92, 0.08, 0.08),
+                (0.98, 0.045, 0.045), (1.03, 0.0, 0.0)]
+    parts = [ridged_blade("bsw_blade", stations, st, sd, t=0.034)]
+    parts.append(box("bsw_guard", (0.5, 0.085, 0.065), mat("iron"), loc=(0, 0, 0.0), bevel=0.014))
+    for sx in (-1, 1):
+        parts.append(sphere("bsw_cap%d" % sx, 0.05, mat("iron_dark"), loc=(sx * 0.25, 0, 0.0), segs=8, rings=6))
+    parts.append(cyl("bsw_grip", 0.034, 0.34, mat("leather"), loc=(0, 0, -0.38)))
+    for i in range(6):
+        parts.append(torus("bsw_wrap%d" % i, 0.036, 0.008, mat("wood_dark"), loc=(0, 0, -0.35 + 0.055 * i), segs=12, rsegs=4))
+    parts.append(sphere("bsw_pommel", 0.058, mat("iron"), loc=(0, 0, -0.42)))
+    return group("broadsword", parts)
+
+
+def m_frantic_sword():
+    """Jagged saw-toothed sword with a bat-wing guard and a blood-stained red grip."""
+    st, sd = mat("steel"), mat("steel_dark")
+    stations = [(0.02, 0.06, 0.06), (0.14, 0.06, 0.055)]
+    for i in range(5):
+        z0 = 0.16 + i * 0.125
+        stations += [(z0, 0.05, 0.05), (z0 + 0.012, 0.125 - 0.008 * i, 0.05), (z0 + 0.1, 0.05, 0.047)]
+    stations += [(0.82, 0.04, 0.04), (0.98, 0.0, 0.0)]
+    parts = [ridged_blade("fs_blade", stations, st, sd, t=0.024)]
+    for i, (x, z, s) in enumerate([(0.012, 0.3, 1.0), (0.012, 0.52, 0.8), (0.012, 0.7, 0.7)]):
+        parts.append(ellipsoid("fs_blood%d" % i, (0.04 * s, 0.012, 0.09 * s), mat("blood_dry"), loc=(x, -0.028, z)))
+    wing = [(-0.22, 0.1), (-0.14, 0.02), (0.0, 0.0), (0.14, 0.02), (0.22, 0.1), (0.18, -0.02),
+            (0.07, -0.05), (-0.07, -0.05), (-0.18, -0.02)]
+    parts.append(prism("fs_guard", wing, 0.07, mat("iron_dark"), bevel=0.008))
+    parts.append(cyl("fs_grip", 0.032, 0.2, mat("leather_red"), loc=(0, 0, -0.22)))
+    for i in range(4):
+        parts.append(torus("fs_wrap%d" % i, 0.034, 0.008, mat("thread"), loc=(0, 0, -0.2 + 0.05 * i), segs=12, rsegs=4))
+    parts.append(cone("fs_pommel", 0.05, 0.0, 0.1, mat("iron_dark"), loc=(0, 0, -0.22), rot=(180, 0, 0)))
+    return group("frantic_sword", parts)
+
+
+def m_rapier():
+    """Long thin blade, brass cup guard with a knuckle bow, red-leather grip."""
+    st, sd, brass = mat("steel"), mat("steel_dark"), mat("brass")
+    stations = [(0.02, 0.036, 0.036), (0.2, 0.034, 0.034), (0.95, 0.018, 0.018), (1.1, 0.0, 0.0)]
+    parts = [ridged_blade("rp_blade", stations, st, sd, t=0.016)]
+    parts.append(lathe("rp_cup", [(0.0, -0.04), (0.06, -0.035), (0.115, 0.0), (0.145, 0.05), (0.15, 0.1), (0.0, 0.1)],
+                       brass, segs=18))
+    parts.append(cyl("rp_cross", 0.017, 0.46, brass, loc=(-0.23, 0, 0.0), rot=(0, 90, 0), segs=8))
+    for sx in (-1, 1):
+        parts.append(sphere("rp_cross%d" % sx, 0.03, brass, loc=(sx * 0.23, 0, 0.0), segs=8, rings=5))
+    bow = [(0.2, 0, 0.0), (0.2, 0, -0.1), (0.14, 0, -0.2), (0.03, 0, -0.27)]
+    parts.append(tube("rp_bow", catmull(bow, 4), 0.016, brass, segs=6))
+    parts.append(cyl("rp_grip", 0.028, 0.22, mat("leather_red"), loc=(0, 0, -0.26)))
+    for i in range(4):
+        parts.append(torus("rp_wrap%d" % i, 0.03, 0.007, mat("gold"), loc=(0, 0, -0.24 + 0.05 * i), segs=10, rsegs=4))
+    parts.append(sphere("rp_pommel", 0.05, brass, loc=(0, 0, -0.29), segs=10, rings=6))
+    return group("rapier", parts)
+
+
+def m_sadist_stiletto():
+    """Needle-thin triangular blade with barbed hooks along one edge, black grip, a bead of blood on the point."""
+    st, sd = mat("steel"), mat("steel_dark")
+    stations = [(0.02, 0.034, 0.034), (0.14, 0.034, 0.034), (0.62, 0.014, 0.014), (0.8, 0.0, 0.0)]
+    parts = [ridged_blade("sd_blade", stations, st, sd, t=0.02)]
+    for i, z in enumerate((0.26, 0.4, 0.54)):
+        w = 0.034 - 0.02 * (z - 0.14) / 0.48
+        parts.append(cone("sd_barb%d" % i, 0.03, 0.0, 0.11, st, loc=(-w, 0, z + 0.04), rot=(0, -125, 0), segs=5))
+    parts.append(cyl("sd_guard", 0.075, 0.03, mat("iron_dark"), loc=(0, 0, -0.01), segs=10, depth_scale=0.5))
+    parts.append(cyl("sd_grip", 0.03, 0.2, mat("bone_black"), loc=(0, 0, -0.23)))
+    for i in range(4):
+        parts.append(torus("sd_wrap%d" % i, 0.032, 0.008, mat("thread"), loc=(0, 0, -0.2 + 0.05 * i), segs=10, rsegs=4))
+    parts.append(cone("sd_pommel", 0.045, 0.0, 0.09, mat("iron_dark"), loc=(0, 0, -0.23), rot=(180, 0, 0), segs=6))
+    parts.append(sphere("sd_drop", 0.032, glow("#ff3a55"), loc=(-0.012, -0.02, 0.8), segs=8, rings=5, scale=(1, 1, 1.3)))
+    return group("sadist_stiletto", parts)
+
+
+def m_grave_shovel():
+    """Gravedigger's shovel: T-grip, wooden haft, broad steel spade with a lump of grave dirt and a bone sliver."""
+    haft = 0.9
+    parts = [cyl("gs_haft", 0.036, haft, mat("wood_light"), loc=(0, 0, 0.0))]
+    parts.append(box("gs_grip", (0.26, 0.055, 0.055), mat("wood_dark"), loc=(0, 0, 0.0), bevel=0.012))
+    for sx in (-1, 1):
+        parts.append(sphere("gs_gripcap%d" % sx, 0.04, mat("iron"), loc=(sx * 0.13, 0, 0.0), segs=8, rings=5))
+    parts.append(cyl("gs_cuff", 0.052, 0.14, mat("iron"), loc=(0, 0, haft - 0.02), r_top=0.045))
+    spade = [(-0.05, 0.98), (-0.12, 1.02), (-0.21, 1.1), (-0.23, 1.32), (-0.14, 1.52), (0.0, 1.64), (0.14, 1.52),
+             (0.23, 1.32), (0.21, 1.1), (0.12, 1.02), (0.05, 0.98)]
+    parts.append(prism("gs_spade", spade, 0.034, mat("iron_dark"), bevel=0.01))
+    face = [(-0.04, 1.02), (-0.17, 1.12), (-0.19, 1.31), (-0.11, 1.49), (0.0, 1.58), (0.11, 1.49), (0.19, 1.31),
+            (0.17, 1.12), (0.04, 1.02)]
+    parts.append(prism("gs_face", face, 0.036, mat("steel"), y0=-0.004))
+    parts.append(box("gs_rib", (0.05, 0.04, 0.46), mat("steel_dark"), loc=(0.0, -0.02, 1.3)))
+    parts.append(box("gs_step", (0.34, 0.07, 0.04), mat("iron"), loc=(0, 0, 1.06), bevel=0.01))
+    parts.append(sphere("gs_dirt", 0.085, mat("dirt"), loc=(0.1, -0.04, 1.5), segs=8, rings=6, scale=(1.3, 0.6, 0.9)))
+    parts.append(sphere("gs_dirt2", 0.05, mat("dirt"), loc=(-0.11, -0.045, 1.2), segs=8, rings=6, scale=(1.2, 0.6, 0.9)))
+    parts.append(cyl("gs_bone", 0.018, 0.13, mat("bone_w"), loc=(0.1, -0.06, 1.38), rot=(0, 50, 0), segs=6))
+    return group("grave_shovel", parts)
+
+
+def m_torch():
+    """Wooden stave with a rag-wrapped, tar-soaked head (the flame is added by the icon)."""
+    parts = [cyl("tc_haft", 0.034, 0.74, mat("wood"), loc=(0, 0, -0.1), r_top=0.045)]
+    parts.append(cyl("tc_head", 0.1, 0.2, mat("burlap"), loc=(0, 0, 0.56), r_top=0.13, segs=12))
+    parts.append(sphere("tc_top", 0.12, mat("sack"), loc=(0, 0, 0.77), segs=12, rings=8, scale=(1, 1, 0.55)))
+    for z in (0.6, 0.7):
+        parts.append(torus("tc_band%d" % int(z * 10), 0.115 + (z - 0.6) * 0.3, 0.014, mat("iron_dark"),
+                           loc=(0, 0, z), segs=14, rsegs=4))
+    for i, (x, z) in enumerate(((-0.06, 0.64), (0.07, 0.72), (0.0, 0.8))):
+        parts.append(sphere("tc_ember%d" % i, 0.03, glow("#ff8a1e"), loc=(x, -0.1, z), segs=6, rings=4))
+    parts.append(torus("tc_wrap", 0.04, 0.012, mat("leather"), loc=(0, 0, 0.1), segs=10, rsegs=4))
+    parts.append(torus("tc_wrap2", 0.04, 0.012, mat("leather"), loc=(0, 0, 0.0), segs=10, rsegs=4))
+    return group("torch", parts)
+
+
+def m_leather_whip():
+    """Wrapped wooden handle with a long leather lash thrown into a loop with a flicking tip."""
+    parts = [cyl("lw_handle", 0.04, 0.42, mat("wood_dark"), loc=(0, 0, -0.2))]
+    for i in range(6):
+        parts.append(torus("lw_wrap%d" % i, 0.043, 0.01, mat("leather"), loc=(0, 0, -0.16 + 0.055 * i), segs=10, rsegs=4))
+    parts.append(sphere("lw_cap", 0.052, mat("brass"), loc=(0, 0, -0.21), segs=8, rings=6))
+    path = [(0.0, 0.2), (0.0, 0.36), (0.1, 0.52), (0.26, 0.6), (0.44, 0.56), (0.5, 0.4), (0.4, 0.27), (0.25, 0.3),
+            (0.2, 0.46), (0.32, 0.58), (0.52, 0.64), (0.7, 0.58), (0.78, 0.42)]
+    pts = [Vector((x, -0.015 * i, z)) for i, (x, z) in enumerate(path)]
+    cur = catmull(pts, per=5)
+    n = len(cur)
+    radii = [0.045 - 0.032 * (i / (n - 1)) ** 0.8 for i in range(n)]
+    parts.append(tube("lw_lash", cur, radii, mat("leather"), segs=7))
+    parts.append(tube("lw_tip", [cur[-1], cur[-1] + Vector((0.07, 0, -0.1))], [0.013, 0.006], mat("cloth_cream"), segs=5))
+    return group("leather_whip", parts)
+
+
+def m_iron_katana():
+    """Single-edged curved blade (hamon edge strip), round iron tsuba, red cord-wrapped hilt."""
+    L_ = 1.0
+    N = 14
+
+    def xc(z):
+        return 0.16 * (z / L_) ** 2
+
+    def width(z, side):
+        u = z / L_
+        base = 0.042 if side < 0 else 0.03
+        return base * (1.0 - u ** 6) if u < 0.93 else base * max(0.0, (1.0 - u) / 0.07) * 0.9
+    left = [(xc(z) - width(z, -1), z) for z in [0.02 + (L_ - 0.02) * i / N for i in range(N + 1)]]
+    right = [(xc(z) + width(z, 1), z) for z in [0.02 + (L_ - 0.02) * i / N for i in range(N + 1)]]
+    tip = (xc(L_ + 0.02) + 0.0, L_ + 0.02)
+    body = left + [tip] + list(reversed(right))
+    parts = [prism("ik_blade", body, 0.026, mat("steel_dark"))]
+    mid = [(xc(z) - width(z, -1) * 0.1, z) for z in [0.02 + (L_ - 0.02) * i / N for i in range(N + 1)]]
+    edge = left + [tip] + list(reversed(mid))
+    parts.append(prism("ik_edge", edge, 0.03, mat("steel"), y0=-0.004))
+    parts.append(cyl("ik_tsuba", 0.095, 0.03, mat("iron_dark"), loc=(0, 0, -0.01), segs=14, depth_scale=0.8))
+    parts.append(torus("ik_tsubarim", 0.092, 0.012, mat("brass"), loc=(0, 0, 0.005), segs=14, rsegs=4, scale=(1, 0.8, 1)))
+    parts.append(cyl("ik_hilt", 0.034, 0.34, mat("cloth_dark_red"), loc=(0, 0, -0.37)))
+    for i in range(7):
+        parts.append(torus("ik_wrap%d" % i, 0.037, 0.009, mat("thread"), loc=(0, 0, -0.35 + 0.046 * i), segs=10, rsegs=4))
+    parts.append(sphere("ik_kashira", 0.045, mat("brass"), loc=(0, 0, -0.38), segs=10, rings=6))
+    return group("iron_katana", parts)
+
+
+def _arrow_fan(root, tag, nock, angles, length=1.0, **kw):
+    """Parent arrows to `root`, all nocked at `nock` (root space) and fanned about the screen-plane axis."""
+    out = []
+    for i, a in enumerate(angles):
+        ar = m_arrow(length=length, **kw)
+        ar.location = (length / 2, 0, 0)
+        pv = group("%s_pv%d" % (tag, i), [ar], rot=(0, a, 0))
+        pv.location = Vector(nock) + Vector((0, -0.012 * i, 0))
+        pv.parent = root
+        out.append(pv)
+    return out
+
+
+def m_multi_bow():
+    """Plain wooden bow with three arrows nocked in a fan (full draw fires all three).  Returns (root, nock)."""
+    root, tu, td = bow_model("mu", mat("wood_light"), mat("leather"), mat("iron"), mat("cloth_cream"), curve=1.25,
+                             thick=1.2, wrap=mat("wood_dark"))
+    nock = Vector((-0.27, 0, 0.0))
+    _arrow_fan(root, "mu", nock, (9, 0, -9), length=1.0)
+    return root
+
+
+def m_ice_bow():
+    """Frost-blue bow of ice-hardened wood with rime spikes on the limbs, an ice arrow nocked."""
+    root, tu, td = bow_model("ib", mat("ice_steel"), mat("leather"), mat("steel"), mat("cloth_cream"), curve=1.25,
+                             thick=1.25, wrap=mat("steel_dark"))
+    for i, (x, z, a, ln) in enumerate(((-0.2, 0.35, -50, 0.16), (-0.27, 0.52, -70, 0.2), (-0.2, -0.38, -125, 0.16),
+                                       (-0.26, -0.55, -105, 0.2), (-0.3, 0.1, -95, 0.12))):
+        sp = cone("ib_spike%d" % i, 0.035, 0.0, ln, mat("ice"), loc=(x, -0.03, z), rot=(0, a, 0), segs=5)
+        sp.parent = root
+    _arrow_fan(root, "ib", Vector((-0.27, 0, 0.0)), (0,), length=1.0, fletch="cloth_cream")
+    return root
+
+
+def m_heavy_crossbow():
+    """Heavy steel-prod crossbow, axis along +Z (butt at the origin, prod near the top), three bolts nocked."""
+    wood, iron = mat("wood"), mat("iron")
+    parts = [box("hc_stock", (0.13, 0.11, 1.05), wood, loc=(0, 0, 0.5), bevel=0.02),
+             box("hc_rail", (0.045, 0.05, 0.8), mat("wood_dark"), loc=(0, -0.05, 0.62)),
+             box("hc_butt", (0.19, 0.14, 0.07), iron, loc=(0, 0, 0.0), bevel=0.014)]
+    for z in (0.3, 0.72):
+        parts.append(box("hc_band%d" % int(z * 10), (0.155, 0.13, 0.05), mat("iron_dark"), loc=(0, 0, z), bevel=0.01))
+    pz = 0.98
+    pts = [Vector((x, 0, pz + 0.22 * (abs(x) / 0.62) ** 2)) for x in (-0.62, -0.46, -0.3, -0.15, 0, 0.15, 0.3, 0.46, 0.62)]
+    radii = [0.036, 0.046, 0.056, 0.064, 0.068, 0.064, 0.056, 0.046, 0.036]
+    parts.append(tube("hc_prod", catmull(pts, 3), [radii[min(8, i // 3)] for i in range(len(catmull(pts, 3)))],
+                      mat("steel_dark"), segs=8))
+    for sx in (-1, 1):
+        parts.append(box("hc_wrap%d" % sx, (0.05, 0.1, 0.09), iron, loc=(sx * 0.2, 0, pz + 0.03), bevel=0.01))
+        parts.append(sphere("hc_tip%d" % sx, 0.04, mat("brass"), loc=(sx * 0.62, 0, pz + 0.22), segs=8, rings=5))
+    parts.append(torus("hc_stirrup", 0.1, 0.022, iron, loc=(0, 0, 1.12), rot=(90, 0, 0), segs=14, rsegs=5,
+                       scale=(0.85, 1, 1.15)))
+    parts.append(tube("hc_string", [Vector((-0.62, 0, pz + 0.22)), Vector((0, 0, 0.52)), Vector((0.62, 0, pz + 0.22))],
+                      0.02, mat("cloth_cream"), segs=5))
+    parts.append(box("hc_trigger", (0.035, 0.05, 0.14), iron, loc=(0, 0.06, 0.38), bevel=0.008))
+    root = group("heavy_crossbow", parts)
+    for i, a in enumerate((12, 0, -12)):                    # the spread: three of the five bolts show
+        bolt = [cyl("hb%d_shaft" % i, 0.022, 0.62, mat("wood_dark"), loc=(0, 0, 0.0), segs=6),
+                cone("hb%d_head" % i, 0.05, 0.0, 0.14, mat("steel"), loc=(0, 0, 0.62), segs=5),
+                prism("hb%d_fl" % i, [(0, 0), (0.05, -0.02), (0.05, 0.1), (0, 0.13)], 0.012, mat("cloth_red"),
+                      loc=(0, 0, 0.0))]
+        bg = group("hb%d" % i, bolt, rot=(0, a, 0))
+        bg.location = (0, -0.07 - 0.02 * i, 0.5)
+        bg.parent = root
+    return root
+
+
+def m_throwing_knife(tag="tk"):
+    """Short leaf-bladed throwing knife: leather grip with a ring pommel, hilt at the origin."""
+    st, sd = mat("steel"), mat("steel_dark")
+    stations = [(0.02, 0.036, 0.036), (0.12, 0.046, 0.046), (0.22, 0.04, 0.04), (0.3, 0.022, 0.022), (0.38, 0.0, 0.0)]
+    parts = [ridged_blade(tag + "_blade", stations, st, sd, t=0.016)]
+    parts.append(box(tag + "_guard", (0.1, 0.045, 0.03), mat("iron"), loc=(0, 0, 0.0), bevel=0.008))
+    parts.append(cyl(tag + "_grip", 0.026, 0.13, mat("leather"), loc=(0, 0, -0.15)))
+    for i in range(3):
+        parts.append(torus("%s_wrap%d" % (tag, i), 0.028, 0.007, mat("thread"), loc=(0, 0, -0.13 + 0.04 * i), segs=10, rsegs=4))
+    parts.append(torus(tag + "_ring", 0.045, 0.014, mat("iron"), loc=(0, 0, -0.21), rot=(90, 0, 0), segs=12, rsegs=4))
+    return group(tag, parts)
+
+
+def m_fire_staff():
+    """Gnarled staff ending in a brass claw cage around a big burning orb (flame tongues are added by the icon)."""
+    parts = [cyl("fst_haft", 0.034, 1.1, mat("wood_dark"), loc=(0, 0, -0.35), r_top=0.04)]
+    for i, z in enumerate((-0.2, -0.12, 0.45)):
+        parts.append(torus("fst_wrap%d" % i, 0.04, 0.011, mat("leather_red"), loc=(0, 0, z), segs=10, rsegs=4))
+    parts.append(cyl("fst_collar", 0.07, 0.1, mat("brass"), loc=(0, 0, 0.66), r_top=0.055))
+    parts.append(sphere("fst_orb", 0.19, glow("#ff6a1e"), loc=(0, 0, 0.93), segs=14, rings=8))
+    parts.append(sphere("fst_core", 0.11, glow("#ffd04a"), loc=(-0.03, -0.1, 0.96), segs=10, rings=6))
+    parts.append(sphere("fst_hot", 0.05, glow("#fff6c8"), loc=(-0.05, -0.18, 0.99), segs=8, rings=5))
+    for sx in (-1, 1):
+        claw = [(sx * 0.04, -0.03, 0.72), (sx * 0.25, -0.03, 0.8), (sx * 0.29, -0.03, 1.0), (sx * 0.17, -0.03, 1.15)]
+        cur = catmull(claw, 4)
+        parts.append(tube("fst_claw%d" % sx, cur, [0.034 - 0.02 * i / (len(cur) - 1) for i in range(len(cur))],
+                          mat("brass"), segs=6))
+    return group("fire_staff", parts)
+
+
+def m_spiked_shield(R=0.4):
+    """Round steel buckler bristling with rim spikes, a big central spike and riveted iron straps (faces -Y)."""
+    iron, steel, dark = mat("iron"), mat("steel"), mat("iron_dark")
+    parts = [lathe("ssh_back", [(0, 0.0), (R, 0.0), (R, 0.05), (0, 0.05)], mat("mortar"), segs=28, rot=(90, 0, 0),
+                   loc=(0, 0.04, 0)),
+             cyl("ssh_disc", R * 0.97, 0.06, iron, loc=(0, 0.03, 0), rot=(90, 0, 0), segs=28),
+             torus("ssh_rim", R, 0.045, steel, rot=(90, 0, 0), segs=36, rsegs=8)]
+    for k in range(10):                                    # radial spikes round the rim
+        a = 2 * math.pi * k / 10 + 0.15
+        parts.append(cone("ssh_spike%d" % k, 0.065, 0.0, 0.2, steel, loc=(R * math.cos(a), -0.03, R * math.sin(a)),
+                          rot=(0, 90 - math.degrees(a), 0), segs=6))
+    parts.append(box("ssh_barh", (2 * R * 0.92, 0.03, 0.09), dark, loc=(0, -0.05, 0.0), bevel=0.008))
+    parts.append(box("ssh_barv", (0.09, 0.03, 2 * R * 0.92), dark, loc=(0, -0.052, 0.0), bevel=0.008))
+    parts.append(cone("ssh_boss", 0.14, 0.0, 0.3, steel, loc=(0, -0.06, 0.0), rot=(90, 0, 0), segs=10))
+    parts.append(torus("ssh_bossring", 0.14, 0.03, dark, loc=(0, -0.07, 0.0), rot=(90, 0, 0), segs=16, rsegs=5))
+    for k in range(4):
+        a = math.pi / 4 + math.pi * k / 2
+        parts.append(sphere("ssh_rivet%d" % k, 0.03, mat("gold"), loc=(0.26 * math.cos(a), -0.075, 0.26 * math.sin(a)),
+                            segs=8, rings=5))
+    return group("spiked_shield", parts)
+
+
+# ---- 8 normal skills ---------------------------------------------------------------------------------------
+
+def m_stun_grenade():
+    """Steel flash-bang canister with a yellow band, safety lever and pull ring."""
+    st = mat("steel_dark")
+    parts = [lathe("sg_body", [(0, 0.0), (0.12, 0.0), (0.145, 0.03), (0.145, 0.33), (0.12, 0.37), (0.075, 0.39), (0, 0.39)],
+                   st, segs=16),
+             cyl("sg_band", 0.149, 0.09, mat("yellow_enamel"), loc=(0, 0, 0.13), segs=16),
+             cyl("sg_band2", 0.149, 0.03, mat("black"), loc=(0, 0, 0.2), segs=16),
+             cyl("sg_cap", 0.07, 0.09, mat("iron"), loc=(0, 0, 0.38), r_top=0.055, segs=10),
+             box("sg_lever", (0.04, 0.045, 0.34), mat("steel"), loc=(0.15, 0, 0.26), bevel=0.01),
+             torus("sg_ring", 0.07, 0.014, mat("brass"), loc=(-0.07, 0, 0.5), segs=12, rsegs=4)]
+    parts.append(torus("sg_pin", 0.05, 0.01, mat("brass"), loc=(-0.02, 0, 0.45), rot=(90, 0, 0), segs=10, rsegs=4))
+    for i in range(3):
+        parts.append(box("sg_vent%d" % i, (0.05, 0.02, 0.012), glow("#fff6c8"), loc=(-0.05 + 0.05 * i, -0.15, 0.3 + 0.01 * i)))
+    return group("stun_grenade", parts)
+
+
+def m_magnet_grenade():
+    """Red horseshoe magnet with silver pole tips clamped over a small black bomb."""
+    R, th = 0.3, 0.17
+    outer = [(math.cos(a) * (R + 0.1), math.sin(a) * (R + 0.1)) for a in (math.pi * i / 14 for i in range(15))]
+    inner = [(math.cos(a) * (R - 0.1), math.sin(a) * (R - 0.1)) for a in (math.pi * i / 14 for i in range(14, -1, -1))]
+    body = outer + [(-(R + 0.1), -0.34), (-(R - 0.1), -0.34)] + inner + [(R - 0.1, -0.34), (R + 0.1, -0.34)]
+    body = outer + [(-(R + 0.1), -0.3)] + [(-(R - 0.1), -0.3)] + inner + [(R - 0.1, -0.3)] + [(R + 0.1, -0.3)]
+    parts = [prism("mg_body", body, th, mat("red_enamel"), bevel=0.012)]
+    for sx in (-1, 1):
+        parts.append(box("mg_pole%d" % sx, (0.2, th + 0.02, 0.17), mat("steel"), loc=(sx * R, 0, -0.26), bevel=0.012))
+        parts.append(box("mg_polestripe%d" % sx, (0.2, th + 0.03, 0.03), mat("steel_dark"), loc=(sx * R, 0, -0.2)))
+    parts.append(sphere("mg_bomb", 0.14, mat("black"), loc=(0, 0.02, -0.12), segs=14, rings=8))
+    parts.append(sphere("mg_shine", 0.04, mat("steel_dark"), loc=(-0.05, -0.08, -0.07), segs=8, rings=5))
+    parts.append(tube("mg_fuse", catmull([(0, 0.02, 0.01), (0.02, 0.02, 0.07), (-0.03, 0.02, 0.1)], 3), 0.012,
+                      mat("straw"), segs=5))
+    return group("magnet_grenade", parts)
+
+
+def m_cluster_grenade():
+    """Fat grooved iron grenade ringed by four small bomblets."""
+    iron, dark = mat("iron"), mat("iron_dark")
+    parts = [sphere("cg_body", 0.2, dark, loc=(0, 0, 0.0), segs=16, rings=10, scale=(1, 0.9, 1.1))]
+    for z in (-0.1, 0.0, 0.1):
+        r = math.sqrt(max(0.0, 0.2 ** 2 - z ** 2 / 1.21)) * 1.0
+        parts.append(torus("cg_lat%d" % int(z * 100), r, 0.016, iron, loc=(0, 0, z), segs=16, rsegs=4))
+    for a in (0, 60, 120):
+        parts.append(torus("cg_mer%d" % a, 0.21, 0.016, iron, rot=(90, 0, a), segs=16, rsegs=4, scale=(1, 1, 1.1)))
+    parts.append(cyl("cg_cap", 0.06, 0.08, mat("brass"), loc=(0, 0, 0.2), segs=10))
+    parts.append(box("cg_lever", (0.035, 0.04, 0.3), mat("steel"), loc=(0.17, 0, 0.1), bevel=0.008))
+    for i, (x, z) in enumerate(((-0.34, 0.26), (0.38, 0.3), (-0.3, -0.27), (0.34, -0.24))):
+        parts.append(sphere("cg_bl%d" % i, 0.09, mat("iron"), loc=(x, -0.04, z), segs=10, rings=6))
+        parts.append(torus("cg_blband%d" % i, 0.086, 0.012, mat("iron_dark"), loc=(x, -0.04, z), rot=(90, 0, 0),
+                           segs=12, rsegs=4))
+        parts.append(cyl("cg_blcap%d" % i, 0.03, 0.04, mat("brass"), loc=(x, -0.04, z + 0.07), segs=6))
+    return group("cluster_grenade", parts)
+
+
+def m_tesla_coil():
+    """Brass-wound tesla coil on an iron plinth, steel toroid on top (the arcs are added by the icon)."""
+    parts = [cyl("tc_base", 0.36, 0.1, mat("iron_dark"), loc=(0, 0, 0.0), r_top=0.3, segs=12),
+             cyl("tc_plinth", 0.26, 0.14, mat("iron"), loc=(0, 0, 0.1), r_top=0.2, segs=12),
+             cyl("tc_core", 0.17, 0.5, mat("bronze_dark"), loc=(0, 0, 0.24), r_top=0.12, segs=12)]
+    for i in range(8):
+        z = 0.28 + 0.058 * i
+        r = 0.18 - 0.0075 * i
+        parts.append(torus("tc_wind%d" % i, r, 0.03, mat("bronze"), loc=(0, 0, z), segs=12, rsegs=5))
+    parts.append(torus("tc_topring", 0.17, 0.065, mat("steel"), loc=(0, 0, 0.8), segs=16, rsegs=6))
+    parts.append(sphere("tc_ball", 0.16, mat("steel"), loc=(0, 0, 0.86), segs=14, rings=8))
+    parts.append(sphere("tc_ballhot", 0.07, glow("#e6fdff"), loc=(0, -0.1, 0.9), segs=8, rings=5))
+    for sx in (-1, 1):
+        parts.append(box("tc_leg%d" % sx, (0.07, 0.07, 0.2), mat("iron"), loc=(sx * 0.3, 0, 0.08), rot=(0, sx * 20, 0)))
+    return group("tesla_coil", parts)
+
+
+def m_flame_turret():
+    """Tripod-mounted brass nozzle fed from a red fuel tank (faces +X; the jet is added by the icon)."""
+    iron, brass = mat("iron"), mat("brass")
+    P = []
+    for i, (x, y, tilt) in enumerate(((0.0, -0.1, -28), (0.0, 0.12, 28), (-0.2, 0.0, 0))):
+        pass
+    P.append(box("ft_legl", (0.06, 0.06, 0.42), mat("wood"), loc=(-0.12, 0, -0.24), rot=(0, 25, 0), bevel=0.01))
+    P.append(box("ft_legr", (0.06, 0.06, 0.42), mat("wood"), loc=(0.12, 0, -0.24), rot=(0, -25, 0), bevel=0.01))
+    P.append(box("ft_legb", (0.06, 0.06, 0.4), mat("wood_dark"), loc=(-0.02, 0.06, -0.24), rot=(0, 5, 0), bevel=0.01))
+    P.append(cyl("ft_mount", 0.09, 0.12, iron, loc=(0, 0, -0.04), segs=10))
+    P.append(cyl("ft_barrel", 0.065, 0.62, iron, loc=(-0.3, 0, 0.1), rot=(0, 90, 0), segs=10))
+    for x in (-0.15, 0.05, 0.2):
+        P.append(torus("ft_band%d" % int(x * 100), 0.07, 0.014, brass, loc=(x, 0, 0.1), rot=(0, 90, 0), segs=12, rsegs=4))
+    P.append(cone("ft_nozzle", 0.1, 0.055, 0.14, brass, loc=(0.32, 0, 0.1), rot=(0, 90, 0), segs=10))
+    P.append(cyl("ft_tank", 0.12, 0.34, mat("red_enamel"), loc=(-0.45, 0.02, 0.42), rot=(0, 90, 0), segs=14))
+    for sx in (-0.45, -0.11):
+        P.append(sphere("ft_tankend%d" % int(sx * 100), 0.12, mat("red_enamel"), loc=(sx, 0.02, 0.42), segs=12, rings=6,
+                        scale=(0.5, 1, 1)))
+    for x in (-0.37, -0.19):
+        P.append(torus("ft_tankband%d" % int(x * 100), 0.123, 0.018, brass, loc=(x, 0.02, 0.42), rot=(0, 90, 0), segs=14,
+                       rsegs=4))
+    P.append(cyl("ft_tankcap", 0.04, 0.05, brass, loc=(-0.28, 0.02, 0.52), segs=8))
+    P.append(tube("ft_hose", catmull([(-0.12, 0, 0.36), (-0.02, 0, 0.3), (0.02, 0, 0.2), (0.05, 0, 0.14)], 3), 0.022,
+                  mat("black"), segs=6))
+    P.append(box("ft_pilot", (0.05, 0.05, 0.05), glow("#ffd04a"), loc=(0.1, -0.06, 0.18)))
+    return group("flame_turret", P)
+
+
+def m_wave_of_denial():
+    """A palm-sized rune disc releasing three expanding arcs of force (flat glow shapes, face the camera)."""
+    parts = [star("wd_core", 0.14, 0.05, 8, glow("#e6fffa")),
+             star("wd_core2", 0.09, 0.035, 8, glow("#ffffff"), phase=math.pi / 8, loc=(0, -0.01, 0))]
+    for i, (R, w, col) in enumerate(((0.3, 0.08, "#8affc8"), (0.5, 0.075, "#4fd8a0"), (0.7, 0.07, "#2a9c78"))):
+        outer = [(R + w) * 1.0]
+        pts = []
+        n = 12
+        for k in range(n + 1):
+            a = math.radians(-52 + 104 * k / n)
+            pts.append(((R + w) * math.cos(a), (R + w) * math.sin(a)))
+        for k in range(n, -1, -1):
+            a = math.radians(-52 + 104 * k / n)
+            pts.append(((R - w) * math.cos(a), (R - w) * math.sin(a)))
+        parts.append(prism("wd_arc%d" % i, pts, 0.01, glow(col), loc=(0, -0.012 * i, 0)))
+    return group("wave_of_denial", parts)
+
+
+def m_tornado():
+    """Funnel of stacked storm-grey rings, widening upward, with debris caught in the spiral."""
+    parts = []
+    n = 8
+    for k in range(n):
+        u = k / (n - 1)
+        R = 0.07 + 0.42 * u ** 0.85
+        x = 0.07 * math.sin(k * 1.2)
+        parts.append(torus("tn_ring%d" % k, R, 0.07 + 0.03 * u, mat("storm_a" if k % 2 == 0 else "storm_b"),
+                           loc=(x, 0, 0.14 * k), segs=16, rsegs=6, scale=(1, 0.7, 0.55)))
+    for i, (x, z, s, m) in enumerate(((0.42, 0.55, 1.0, "wood_light"), (-0.45, 0.9, 0.8, "stone"), (0.3, 1.05, 0.7, "wood"),
+                                      (-0.2, 0.35, 0.6, "stone_light"))):
+        parts.append(box("tn_deb%d" % i, (0.09 * s, 0.06, 0.05 * s), mat(m), loc=(x, -0.2, z), rot=(0, 25 * i, 20 * i)))
+    return group("tornado", parts)
+
+
+def m_phaser():
+    """Violet portal ring with a cyan inner ring and a dark void, blink chevrons shooting through it."""
+    parts = [torus("ph_ring", 0.34, 0.07, glow("#a45cff"), rot=(90, 0, 0), segs=24, rsegs=6),
+             torus("ph_ring2", 0.22, 0.04, glow("#4fe3ff"), loc=(0, -0.01, 0), rot=(90, 0, 0), segs=24, rsegs=6),
+             cyl("ph_void", 0.2, 0.01, glow("#2a1060"), loc=(0, 0.0, 0), rot=(90, 0, 0), segs=20)]
+    for i, x in enumerate((-0.86, -0.66)):
+        ch = [(0.0, 0.17), (0.17, 0.0), (0.0, -0.17), (-0.07, -0.17), (0.1, 0.0), (-0.07, 0.17)]
+        parts.append(prism("ph_chev%d" % i, [(x + a + 0.1, b) for a, b in ch], 0.01, glow("#e6fdff" if i else "#8ae8ff"),
+                           y0=-0.05))
+    for i, (x, z, r) in enumerate(((0.3, 0.38, 0.07), (0.46, -0.2, 0.05), (-0.1, -0.42, 0.06))):
+        parts.append(star("ph_sp%d" % i, r, r * 0.35, 4, glow("#e6fdff"), loc=(x, -0.06, z)))
+    return group("phaser", parts)
+
+
+# ---- 20 uniques (A .. SSS), crafted only -----------------------------------------------------------------------
+
+def femur(name, p0, p1, r=0.045):
+    """Bone with a knobbed head at each end, drawn in the XZ plane."""
+    p0, p1 = Vector(p0), Vector(p1)
+    b = mat("bone_w")
+    d = (p1 - p0).normalized()
+    side = Vector((-d.z, 0, d.x))
+    parts = [tube(name + "_s", [p0, p1], [r, r], b, segs=7)]
+    for p in (p0, p1):
+        for sg in (-1, 1):
+            parts.append(sphere(name + "_k", r * 1.4, mat("bone"), loc=p + side * r * 0.85 * sg, segs=8, rings=5))
+    return group(name, parts)
+
+
+def m_grave_bell():
+    """Funeral bell for a hammer head: a bone-collared pole with a hook arm from which a cracked bell-bronze bell
+    hangs mouth-down, skull relief on the shoulder, bone clapper trailing a cyan ember."""
+    bone = mat("bone_w")
+    parts = [cyl("gb_haft", 0.042, 1.3, mat("wood_dark"), loc=(0, 0, -0.35))]
+    for i in range(4):
+        parts.append(torus("gb_wrap%d" % i, 0.045, 0.011, mat("thread"), loc=(0, 0, -0.3 + 0.06 * i), segs=10, rsegs=4))
+    parts.append(sphere("gb_pommel", 0.06, bone, loc=(0, 0, -0.37), segs=10, rings=6))
+    parts.append(cyl("gb_collar", 0.07, 0.12, bone, loc=(0, 0, 0.8), r_top=0.052))
+    arm = [(0.0, 0, 0.92), (0.02, 0, 1.02), (0.12, 0, 1.1), (0.3, 0, 1.1), (0.42, 0, 1.04), (0.44, 0, 0.98)]
+    cur = catmull(arm, 4)
+    parts.append(tube("gb_arm", cur, [0.04 - 0.008 * i / (len(cur) - 1) for i in range(len(cur))], mat("wood_dark"), segs=7))
+    parts.append(sphere("gb_hook", 0.05, bone, loc=(0.44, 0, 0.97), segs=8, rings=5))
+    cx, top = 0.44, 0.96
+    prof = [(0.34, 0.0), (0.335, 0.04), (0.3, 0.09), (0.24, 0.18), (0.19, 0.3), (0.15, 0.4), (0.11, 0.47), (0.06, 0.52),
+            (0.0, 0.54)]
+    prof = [(r, z + top - 0.54) for r, z in prof]
+    parts.append(lathe("gb_bell", prof, mat("bell_bronze"), segs=18, loc=(cx, 0, 0)))
+    parts.append(torus("gb_lip", 0.34, 0.034, mat("bell_dark"), loc=(cx, 0, top - 0.54), segs=18, rsegs=5))
+    parts.append(torus("gb_band", 0.2, 0.022, mat("bell_dark"), loc=(cx, 0, top - 0.3), segs=18, rsegs=4))
+    parts.append(sphere("gb_clapper", 0.075, bone, loc=(cx, 0, top - 0.6), segs=10, rings=6))
+    parts.append(sphere("gb_ember", 0.04, glow("#4fe3ff"), loc=(cx, -0.05, top - 0.63), segs=8, rings=5))
+    parts.append(bone_skull("gb_skull", 0.95, loc=(cx, -0.2, top - 0.3), rot=(0, 0, -90)))
+    parts.append(prism("gb_crack", [(0.1, 0.0), (0.14, 0.0), (0.1, 0.1), (0.15, 0.2), (0.12, 0.2), (0.07, 0.1)], 0.01,
+                       mat("black"), y0=-0.325, loc=(cx, 0, top - 0.52)))
+    for i in range(5):
+        a = math.radians(-90 + 30 * (i - 2))
+        parts.append(sphere("gb_stud%d" % i, 0.03, bone, loc=(cx + 0.325 * math.cos(a), 0.325 * math.sin(a), top - 0.48),
+                            segs=6, rings=4))
+    return group("grave_bell", parts)
+
+
+def m_leech_whip():
+    """Bone grip and a fat segmented blood-red lash ending in a toothed leech mouth."""
+    bone = mat("bone_w")
+    parts = [cyl("lh_grip", 0.04, 0.46, bone, loc=(0, 0, -0.22))]
+    for i in range(5):
+        parts.append(torus("lh_wrap%d" % i, 0.043, 0.011, mat("thread"), loc=(0, 0, -0.18 + 0.065 * i), segs=10, rsegs=4))
+    parts.append(sphere("lh_cap", 0.06, mat("blood_dry"), loc=(0, 0, -0.24), segs=8, rings=6))
+    path = [(0.0, 0.22), (0.02, 0.42), (0.14, 0.62), (0.36, 0.72), (0.56, 0.62), (0.52, 0.42), (0.64, 0.26), (0.84, 0.22)]
+    pts = [Vector((x, -0.01 * i, z)) for i, (x, z) in enumerate(path)]
+    cur = catmull(pts, per=5)
+    n = len(cur)
+    radii = [0.035 + 0.05 * math.sin(math.pi * min(1.0, i / (n - 1) * 1.15)) for i in range(n)]
+    parts.append(tube("lh_body", cur, radii, mat("thread"), segs=8))
+    for i in range(3, n - 3, 3):
+        t = cur[i + 1] - cur[i - 1]
+        parts.append(torus("lh_seg%d" % i, radii[i] * 1.06, 0.014, mat("blood_dry"), loc=cur[i], segs=10, rsegs=4,
+                           rot=(0, math.degrees(math.atan2(t.x, t.z)), 0)))
+    tip = cur[-1]
+    tdir = (cur[-1] - cur[-3]).normalized()
+    ang = math.degrees(math.atan2(tdir.x, tdir.z))
+    parts.append(cone("lh_mouth", 0.07, 0.11, 0.1, mat("blood_dry"), loc=tip - tdir * 0.02, rot=(0, ang, 0), segs=10))
+    parts.append(torus("lh_teeth", 0.1, 0.022, bone, loc=tip + tdir * 0.075, rot=(0, ang, 0), segs=10, rsegs=4))
+    parts.append(sphere("lh_throat", 0.06, glow("#2a0a14"), loc=tip + tdir * 0.09, segs=8, rings=5))
+    return group("leech_whip", parts)
+
+
+def m_bone_rampart():
+    """Tower shield with a battlemented top, built of rib bones across a dark plate, skull boss with ember eyes."""
+    bone, dark = mat("bone_w"), mat("bone_black")
+    W, top, low = 0.4, 0.4, 0.32
+    pts = [(0.0, -0.5), (W, -0.18), (W, top), (0.27, top), (0.27, low), (0.09, low), (0.09, top), (-0.09, top),
+           (-0.09, low), (-0.27, low), (-0.27, top), (-W, top), (-W, -0.18)]
+    parts = [prism("br_plate", pts, 0.07, dark, bevel=0.01)]
+    for i, z in enumerate((0.22, 0.04, -0.14, -0.3)):
+        w = min(W, (z + 0.5) / 0.32 * W) * 0.97
+        arc = [Vector((x * w, -0.05 - 0.025 * (1 - x * x), z - 0.06 * (1 - x * x))) for x in (-1, -0.5, 0, 0.5, 1)]
+        parts.append(tube("br_rib%d" % i, catmull(arc, 3), 0.045, bone, segs=7))
+        for sg, p in ((-1, arc[0]), (1, arc[-1])):
+            parts.append(sphere("br_ribknob%d_%d" % (i, sg), 0.058, mat("bone"), loc=p, segs=8, rings=5))
+    parts.append(bone_skull("br_skull", 1.5, eyes="#4fe3ff", loc=(0, -0.1, 0.08), rot=(0, 0, -90), glint=1.8))
+    for i, z in enumerate((0.34, -0.08)):
+        for sx in (-1, 1):
+            parts.append(box("br_st%d_%d" % (i, sx), (0.07, 0.014, 0.016), mat("thread"), loc=(sx * 0.3, -0.07, z), rot=(0, 35, 0)))
+    return group("bone_rampart", parts)
+
+
+def m_plague_censer():
+    """Hanging brass censer on three chains: dark bands, perforations glowing cyan, red-thread tassel and a plume
+    of sickly green smoke."""
+    br, dk = mat("bell_bronze"), mat("bell_dark")
+    parts = [sphere("pc_body", 0.3, br, loc=(0, 0, 0), segs=18, rings=12),
+             torus("pc_band", 0.302, 0.03, dk, segs=18, rsegs=5),
+             torus("pc_band2", 0.3, 0.024, dk, rot=(90, 0, 0), segs=18, rsegs=5),
+             sphere("pc_lid", 0.13, br, loc=(0, 0, 0.28), segs=12, rings=6, scale=(1, 1, 0.7)),
+             cyl("pc_foot", 0.1, 0.06, dk, loc=(0, 0, -0.36), r_top=0.07, segs=10)]
+    holes = ((0.5, -0.5), (-0.5, -0.1), (0.1, -0.8), (0.55, 0.3), (-0.45, 0.5), (0.0, 0.1), (0.3, -0.25), (-0.2, -0.5))
+    for i, (hx, hz) in enumerate(holes):
+        hy = -math.sqrt(max(0.01, 1 - hx * hx - hz * hz))
+        p = Vector((hx, hy, hz)).normalized() * 0.3
+        parts.append(sphere("pc_hole%d" % i, 0.06, glow("#4fe3ff") if i % 3 == 0 else mat("black"), loc=p, segs=6,
+                            rings=4, scale=(1, 0.5, 1)))
+    for sx in (-1, 1):
+        parts += chain("pc_chain%d" % sx, 7, 0.17, mat("steel"), start=(sx * 0.22, 0, 0.27), direction=(-sx * 0.22, 0, 0.64),
+                       r_wire=0.034, twist0=0, width_ratio=0.7)
+    parts.append(torus("pc_top", 0.08, 0.035, mat("steel"), loc=(0, 0, 0.88), rot=(90, 0, 0), segs=12, rsegs=4))
+    for i, (x, a) in enumerate(((-0.07, 8), (0.0, 0), (0.07, -8))):
+        parts.append(prism("pc_tail%d" % i, [(0, 0), (0.035, 0), (0.045, -0.22), (0.0, -0.18), (-0.035, -0.22)], 0.012,
+                           mat("thread"), loc=(x, -0.14, -0.4), rot=(0, a, 0)))
+    for i, (x, z, r) in enumerate(((0.36, 0.28, 0.1), (0.46, 0.45, 0.12), (0.4, 0.63, 0.1))):
+        parts.append(sphere("pc_smoke%d" % i, r, mat("smoke_green"), loc=(x, 0.06, z), segs=10, rings=6))
+    return group("plague_censer", parts)
+
+
+def m_bone_turret():
+    """Skull-headed tripod of femurs spitting a long bone shard (faces +X)."""
+    bone = mat("bone_w")
+    parts = [femur("bt_legl", (0.0, 0, 0.0), (-0.44, 0, -0.62)), femur("bt_legr", (0.0, 0, 0.0), (0.44, 0, -0.62)),
+             femur("bt_legb", (0.0, 0, 0.0), (-0.02, 0.05, -0.64), 0.04)]
+    parts.append(sphere("bt_hub", 0.1, mat("bone"), loc=(0, 0, 0.0), segs=10, rings=6))
+    parts.append(bone_skull("bt_skull", 2.4, eyes="#4fe3ff", loc=(-0.06, 0, 0.04), glint=2.0))
+    parts.append(sphere("bt_jaw_gap", 0.07, mat("black"), loc=(0.33, 0, 0.12), segs=8, rings=5, scale=(0.5, 1.3, 1)))
+    parts.append(cone("bt_shard", 0.09, 0.0, 0.8, bone, loc=(0.22, 0, 0.14), rot=(0, 90, 0), segs=6))
+    parts.append(cone("bt_shardtip", 0.04, 0.0, 0.26, mat("blood_dry"), loc=(0.76, 0, 0.14), rot=(0, 90, 0), segs=6))
+    for i, x in enumerate((0.34, 0.45)):
+        parts.append(torus("bt_vert%d" % i, 0.062 - 0.012 * i, 0.016, mat("bone"), loc=(x, 0, 0.14), rot=(0, 90, 0), segs=8,
+                           rsegs=4))
+    parts.append(box("bt_band", (0.04, 0.4, 0.04), mat("thread"), loc=(-0.1, 0, 0.0)))
+    return group("bone_turret", parts)
+
+
+def m_executioner_blade():
+    """Heavy squared-off executioner's greatsword: dark steel, blood-red fuller, bone cross, skull pommel."""
+    st, sd = mat("iron"), mat("iron_dark")
+    stations = [(0.04, 0.1, 0.1), (0.78, 0.105, 0.105), (0.92, 0.105, 0.105), (0.97, 0.093, 0.093), (1.0, 0.055, 0.055),
+                (1.025, 0.0, 0.0)]
+    parts = [ridged_blade("ex_blade", stations, st, sd, t=0.034)]
+    parts.append(box("ex_fuller", (0.04, 0.012, 0.66), mat("thread"), loc=(0.0, -0.036, 0.42)))
+    parts.append(box("ex_edge", (0.012, 0.01, 0.8), mat("steel"), loc=(-0.1, -0.012, 0.5)))
+    for i, (x, z, s) in enumerate(((0.05, 0.86, 1.0), (0.07, 0.76, 0.7))):
+        parts.append(prism("ex_drip%d" % i, [(x, z), (x + 0.04, z), (x + 0.03, z - 0.12 * s), (x + 0.02, z - 0.08 * s),
+                                              (x, z - 0.14 * s)], 0.008, mat("blood_dry"), y0=-0.04))
+    parts.append(box("ex_cross", (0.5, 0.085, 0.07), mat("bone_w"), loc=(0, 0, 0.0), bevel=0.016))
+    for sx in (-1, 1):
+        parts.append(sphere("ex_cap%d" % sx, 0.052, mat("bone"), loc=(sx * 0.25, 0, 0.0), segs=8, rings=6))
+    parts.append(cyl("ex_grip", 0.034, 0.38, mat("bone_black"), loc=(0, 0, -0.42)))
+    for i in range(6):
+        parts.append(torus("ex_wrap%d" % i, 0.037, 0.009, mat("thread"), loc=(0, 0, -0.4 + 0.06 * i), segs=12, rsegs=4))
+    parts.append(bone_skull("ex_pommel", 0.9, loc=(0, 0, -0.5), rot=(0, 0, -90), glint=1.4))
+    return group("executioner_blade", parts)
+
+
+def m_storm_staff():
+    """Wooden staff with bone prongs holding a cyan storm crystal (arcs are added by the icon)."""
+    parts = [cyl("sts_haft", 0.034, 1.1, mat("wood_dark"), loc=(0, 0, -0.4), r_top=0.04)]
+    for z in (-0.25, -0.18, 0.4):
+        parts.append(torus("sts_wrap%d" % int(z * 100), 0.042, 0.011, mat("thread"), loc=(0, 0, z), segs=10, rsegs=4))
+    parts.append(cyl("sts_collar", 0.07, 0.1, mat("bone_w"), loc=(0, 0, 0.64), r_top=0.05))
+    parts.append(cone("sts_crys_u", 0.15, 0.0, 0.32, glow("#4fe3ff"), loc=(0, 0, 0.9), segs=6))
+    parts.append(cone("sts_crys_d", 0.15, 0.0, 0.2, glow("#1a8ac8"), loc=(0, 0, 0.9), rot=(180, 0, 0), segs=6))
+    parts.append(cone("sts_crys_hot", 0.07, 0.0, 0.2, glow("#e6fdff"), loc=(-0.03, -0.1, 0.9), segs=4))
+    for sx in (-1, 1):
+        prong = [(sx * 0.03, 0, 0.7), (sx * 0.2, 0, 0.78), (sx * 0.22, 0, 0.95), (sx * 0.12, 0, 1.12)]
+        cur = catmull(prong, 4)
+        parts.append(tube("sts_prong%d" % sx, cur, [0.03 - 0.018 * i / (len(cur) - 1) for i in range(len(cur))],
+                          mat("bone_w"), segs=6))
+    return group("storm_staff", parts)
+
+
+def m_moon_glaive(tag="mg", sg=1.0):
+    """One crescent blade (opens toward +X, -X when sg < 0): pale steel body, cyan edge, short wrapped bone grip."""
+    R, r, d = 0.5, 0.45, 0.13
+    body = [(sg * x, z) for x, z in moon_pts(R, r, d)]
+    parts = [prism(tag + "_body", body, 0.04, mat("steel"), bevel=0.006)]
+    x0 = (R * R - r * r + d * d) / (2 * d)
+    a0 = math.atan2(math.sqrt(R * R - x0 * x0), x0)
+    edge = []
+    for k in range(13):
+        a = a0 + (2 * math.pi - 2 * a0) * k / 12
+        edge.append((sg * R * math.cos(a), R * math.sin(a)))
+    for k in range(12, -1, -1):
+        a = a0 + (2 * math.pi - 2 * a0) * k / 12
+        edge.append((sg * (R - 0.055) * math.cos(a), (R - 0.055) * math.sin(a)))
+    parts.append(prism(tag + "_edge", edge, 0.046, glow("#4fe3ff"), y0=-0.004))
+    inner = (d - r)
+    parts.append(cyl(tag + "_grip", 0.032, 0.3, mat("bone_w"), loc=(sg * (inner - 0.02), 0, 0), rot=(0, sg * 90, 0), segs=8))
+    for i in range(3):
+        parts.append(torus("%s_wrap%d" % (tag, i), 0.035, 0.009, mat("thread"), loc=(sg * (inner + 0.05 + 0.07 * i), 0, 0),
+                           rot=(0, 90, 0), segs=10, rsegs=4))
+    parts.append(sphere(tag + "_pom", 0.045, mat("bone"), loc=(sg * (inner + 0.3), 0, 0), segs=8, rings=5))
+    return group(tag, parts)
+
+
+def m_death_orb():
+    """Black orb with a cyan slit eye cradled in bone fingers."""
+    bone = mat("bone_w")
+    parts = [sphere("do_orb", 0.3, mat("bone_black"), loc=(0, 0, 0), segs=18, rings=12),
+             cyl("do_iris", 0.17, 0.01, glow("#4fe3ff"), loc=(0, -0.285, 0.02), rot=(90, 0, 0), segs=18),
+             cyl("do_iris2", 0.11, 0.01, glow("#c8f6ff"), loc=(0, -0.292, 0.02), rot=(90, 0, 0), segs=18),
+             prism("do_pupil", [(0, 0.15), (0.04, 0.0), (0, -0.15), (-0.04, 0.0)], 0.01, mat("black"), y0=-0.3, loc=(0, 0, 0.02)),
+             sphere("do_shine", 0.04, glow("#ffffff"), loc=(-0.12, -0.26, 0.17), segs=6, rings=4)]
+    for k, (ang, ln) in enumerate(((-70, 1.0), (-20, 0.9), (30, 0.95), (80, 0.8), (130, 0.9))):
+        a = math.radians(ang)
+        base = Vector((0.12 * math.cos(a), 0.12 * math.sin(a) - 0.0, -0.46))
+        mid = Vector((0.4 * math.cos(a), 0.4 * math.sin(a) * 0.9, -0.22))
+        top = Vector((0.36 * math.cos(a), 0.36 * math.sin(a) * 0.9, 0.12 * ln))
+        cur = catmull([base, mid, top], 5)
+        parts.append(tube("do_claw%d" % k, cur, [0.05 - 0.034 * i / (len(cur) - 1) for i in range(len(cur))], bone, segs=6))
+        parts.append(cone("do_claw_tip%d" % k, 0.022, 0.0, 0.09, mat("blood_dry"), loc=top, rot=(0, math.degrees(math.atan2(
+            top.x - mid.x, top.z - mid.z)), 0), segs=5))
+    parts.append(sphere("do_palm", 0.15, bone, loc=(0, 0.02, -0.5), segs=10, rings=6, scale=(1, 0.8, 0.6)))
+    return group("death_orb", parts)
+
+
+def m_chain_prison():
+    """Dark iron padlock with a glowing cyan keyhole, bound across with two heavy steel chains."""
+    dark, steel = mat("iron_dark"), mat("steel")
+    parts = [box("cpz_body", (0.58, 0.2, 0.44), dark, loc=(0, 0, -0.04), bevel=0.04),
+             box("cpz_plate", (0.46, 0.03, 0.34), mat("iron"), loc=(0, -0.105, -0.04), bevel=0.01)]
+    sh = [(-0.18, 0, 0.18), (-0.18, 0, 0.3)] + [(0.18 * math.cos(math.pi - math.pi * k / 8), 0, 0.3 + 0.2 * math.sin(math.pi * k / 8))
+                                                  for k in range(1, 8)] + [(0.18, 0, 0.3), (0.18, 0, 0.18)]
+    parts.append(tube("cpz_shackle", catmull(sh, 2), 0.05, steel, segs=8))
+    parts.append(cyl("cpz_key", 0.075, 0.014, glow("#4fe3ff"), loc=(0, -0.12, 0.0), rot=(90, 0, 0), segs=14))
+    parts.append(box("cpz_slot", (0.04, 0.012, 0.14), mat("black"), loc=(0, -0.13, -0.1)))
+    parts.append(sphere("cpz_glint", 0.02, glow("#ffffff"), loc=(-0.025, -0.135, 0.03), segs=6, rings=4))
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            parts.append(sphere("cpz_rivet%d%d" % (sx, sz), 0.025, mat("gold"), loc=(sx * 0.22, -0.12, -0.04 + sz * 0.14),
+                                segs=6, rings=4))
+    parts += chain("cpz_chA", 9, 0.17, steel, start=(-0.5, -0.22, 0.46), direction=(1.0, 0, -0.85), r_wire=0.034, twist0=0)
+    parts += chain("cpz_chB", 9, 0.17, steel, start=(0.5, -0.27, 0.46), direction=(-1.0, 0, -0.85), r_wire=0.034, twist0=90)
+    return group("chain_prison", parts)
+
+
+
+
+def m_matron_flail():
+    """Warden's flail: iron-banded haft with a key and a little bronze bell, a heavy chain and a spiked iron ball."""
+    iron, dk = mat("iron"), mat("iron_dark")
+    parts = [cyl("mf_haft", 0.045, 1.0, mat("wood_dark"), loc=(0, 0, -0.45))]
+    for z in (-0.3, 0.05, 0.38):
+        parts.append(cyl("mf_band%d" % int(z * 100), 0.056, 0.07, iron, loc=(0, 0, z), segs=10))
+    for i in range(3):
+        parts.append(torus("mf_wrap%d" % i, 0.049, 0.01, mat("thread"), loc=(0, 0, -0.4 + 0.045 * i), segs=10, rsegs=4))
+    parts.append(sphere("mf_cap", 0.065, dk, loc=(0, 0, -0.47), segs=8, rings=6))
+    parts.append(torus("mf_ring", 0.07, 0.024, iron, loc=(0, 0, 0.56), rot=(90, 0, 0), segs=12, rsegs=4))
+    d = Vector((0.9, 0, -0.4)).normalized()
+    start = Vector((0.04, 0, 0.58))
+    parts += chain("mf_chain", 5, 0.15, iron, start=start, direction=d, r_wire=0.03)
+    c = start + d * 0.56 + d * 0.2
+    parts.append(sphere("mf_ball", 0.2, dk, loc=c, segs=14, rings=8))
+    pts = [(0, 0, 1), (0, 0, -1), (1, 0, 0), (-1, 0, 0), (0, -1, 0), (0.7, -0.7, 0.2), (-0.7, -0.7, 0.2), (0.6, -0.5, 0.6),
+           (-0.6, -0.5, 0.6), (0.6, -0.5, -0.6), (-0.6, -0.5, -0.6), (0.0, -0.7, 0.7), (0.0, -0.7, -0.7)]
+    for i, p in enumerate(pts):
+        v = Vector(p).normalized()
+        parts.append(cone("mf_spike%d" % i, 0.06, 0.0, 0.17, iron, loc=c + v * 0.17, rot=(0, 0, 0), segs=5))
+        parts[-1].rotation_euler = v.to_track_quat("Z", "Y").to_euler()
+    parts.append(torus("mf_ballband", 0.2, 0.022, mat("blood_dry"), loc=c, rot=(90, 0, 0), segs=14, rsegs=4))
+    kc = Vector((0.0, -0.08, 0.5))
+    parts.append(torus("mf_keyring", 0.05, 0.012, mat("brass"), loc=Vector((0.1, -0.06, 0.5)), segs=10, rsegs=4,
+                       rot=(90, 0, 0)))
+    parts.append(cyl("mf_keyshaft", 0.014, 0.2, mat("brass"), loc=Vector((0.1, -0.06, 0.3)), segs=6))
+    parts.append(box("mf_keybit", (0.07, 0.015, 0.045), mat("brass"), loc=Vector((0.13, -0.06, 0.32))))
+    return group("matron_flail", parts)
+
+
+def m_soulfire_bow():
+    """Black-bone bow with a glowing cyan string and a bone arrow nocked.  Returns (root, upper tip, lower tip)."""
+    root, tu, td = bow_model("sf", mat("bone_black"), mat("bone_w"), mat("bone_w"), glow("#4fe3ff"), curve=1.25, thick=1.2,
+                             wrap=mat("thread"), string_r=0.02, knobs=mat("steel_dark"))
+    _arrow_fan(root, "sf", Vector((-0.27, 0, 0.0)), (0,), length=1.0, fletch="bone_w")
+    return root, tu, td
+
+
+def m_bell_aegis():
+    """Bell-shaped shield (faces -Y): bronze bell silhouette with a bone lip, an ember boss and a hanging clapper."""
+    half = [(0.09, 0.5), (0.14, 0.45), (0.17, 0.35), (0.2, 0.2), (0.25, 0.02), (0.32, -0.15), (0.4, -0.3), (0.44, -0.4)]
+    outline = [(x, z) for x, z in half] + [(-x, z) for x, z in reversed(half)]
+    inner = [(x * 0.78, z * 0.9 - 0.02) for x, z in half[:-1]] + [(0.32, -0.3)]
+    inner = inner + [(-x, z) for x, z in reversed(inner)]
+    parts = [prism("ba_body", outline, 0.08, mat("bell_bronze"), bevel=0.012),
+             prism("ba_panel", inner, 0.03, mat("bell_dark"), y0=-0.04)]
+    parts.append(prism("ba_lip", [(-0.46, -0.42), (0.46, -0.42), (0.44, -0.3), (-0.44, -0.3)], 0.1, mat("bone_w"), bevel=0.01))
+    parts.append(torus("ba_crown", 0.075, 0.03, mat("bell_dark"), loc=(0, 0, 0.55), rot=(90, 0, 0), segs=12, rsegs=4))
+    parts.append(torus("ba_boss", 0.12, 0.03, mat("bone_w"), loc=(0, -0.05, 0.0), rot=(90, 0, 0), segs=16, rsegs=5))
+    parts.append(cyl("ba_core", 0.1, 0.015, glow("#4fe3ff"), loc=(0, -0.06, 0.0), rot=(90, 0, 0), segs=14))
+    parts.append(sphere("ba_hot", 0.04, glow("#e6fdff"), loc=(-0.03, -0.085, 0.03), segs=6, rings=4))
+    for z in (0.3, -0.12):
+        for sx in (-1, 1):
+            w = 0.14 + (0.3 - z) * 0.2
+            parts.append(sphere("ba_rv%d_%d" % (int(z * 100), sx), 0.026, mat("bone"), loc=(sx * w * 1.0, -0.05, z), segs=6, rings=4))
+    parts.append(sphere("ba_clapper", 0.08, mat("bone_w"), loc=(0, -0.02, -0.5), segs=8, rings=6))
+    parts.append(tube("ba_thread", [Vector((0.2, -0.06, 0.36)), Vector((0.18, -0.07, 0.1)), Vector((0.24, -0.06, -0.1))], 0.014,
+                      mat("thread"), segs=5))
+    return group("bell_aegis", parts)
+
+
+def m_rag_doll():
+    """Stitched burlap doll, arms flung out, red-yarn pigtails, one cyan button eye and one crossed stitch."""
+    bur, sack, yarn, dark, thread = mat("burlap"), mat("sack"), mat("yarn"), mat("blood_dry"), mat("thread")
+    parts = [sphere("rdl_torso", 0.2, sack, loc=(0, 0, 0.0), segs=12, rings=8, scale=(1.0, 0.75, 1.45)),
+             sphere("rdl_head", 0.22, bur, loc=(0, 0, 0.52), segs=14, rings=10, scale=(1.0, 0.9, 0.95)),
+             sphere("rdl_cap", 0.235, yarn, loc=(0, 0.03, 0.6), segs=12, rings=8, scale=(1.0, 0.95, 0.6))]
+    for sx in (-1, 1):
+        parts.append(sphere("rdl_pig%d" % sx, 0.1, yarn, loc=(sx * 0.3, 0, 0.45), segs=8, rings=6, scale=(0.8, 0.8, 1.5)))
+        parts.append(torus("rdl_tie%d" % sx, 0.07, 0.02, thread, loc=(sx * 0.28, 0, 0.56), segs=10, rsegs=4, rot=(0, 20 * sx, 0)))
+    parts.append(torus("rdl_eyering", 0.075, 0.018, mat("brass"), loc=(-0.08, -0.2, 0.55), rot=(90, 0, 0), segs=12, rsegs=4))
+    parts.append(cyl("rdl_eye", 0.06, 0.02, glow("#4fe3ff"), loc=(-0.08, -0.2, 0.55), rot=(90, 0, 0), segs=12))
+    parts.append(sphere("rdl_eyehot", 0.02, glow("#ffffff"), loc=(-0.1, -0.225, 0.575), segs=6, rings=4))
+    for sg in (-1, 1):
+        parts.append(box("rdl_x%d" % sg, (0.1, 0.012, 0.018), dark, loc=(0.09, -0.2, 0.55), rot=(0, 45 * sg, 0)))
+    parts.append(tube("rdl_mouth", catmull([(-0.1, -0.2, 0.4), (-0.03, -0.215, 0.37), (0.04, -0.215, 0.37), (0.1, -0.2, 0.4)], 3),
+                      0.012, dark, segs=5))
+    for i, x in enumerate((-0.06, 0.0, 0.06)):
+        parts.append(box("rdl_tick%d" % i, (0.012, 0.012, 0.045), dark, loc=(x, -0.215, 0.385)))
+    limbs = (("al", (-0.16, 0, 0.18), (-0.5, 0, 0.44), 0.058, bur), ("ar", (0.16, 0, 0.16), (0.52, 0, 0.0), 0.058, bur),
+             ("ll", (-0.09, 0, -0.26), (-0.2, 0, -0.66), 0.066, sack), ("lr", (0.09, 0, -0.26), (0.34, 0, -0.6), 0.066, sack))
+    for nm, p0, p1, r, m in limbs:
+        parts.append(tube("rdl_" + nm, [Vector(p0), Vector(p1)], r, m, segs=8))
+        end = Vector(p1)
+        if nm[0] == "a":
+            parts.append(sphere("rdl_hand_" + nm, 0.085, mat("flesh_pale"), loc=end, segs=8, rings=6))
+            parts.append(torus("rdl_cuff_" + nm, 0.065, 0.015, thread, loc=(Vector(p0) * 0.2 + end * 0.8), segs=10, rsegs=4,
+                               rot=(0, 90 - math.degrees(math.atan2(p1[0] - p0[0], p1[2] - p0[2])) * 0, 0)))
+        else:
+            parts.append(sphere("rdl_foot_" + nm, 0.095, mat("leather"), loc=end + Vector((0.03 * (1 if nm == "lr" else -1), 0, -0.02)),
+                                segs=8, rings=6, scale=(1.2, 1, 0.8)))
+    parts.append(sphere("rdl_patch", 0.1, mat("flesh_pale"), loc=(0.06, -0.14, 0.04), segs=10, rings=6, scale=(1, 0.3, 1)))
+    for sg in (-1, 1):
+        parts.append(box("rdl_ps%d" % sg, (0.13, 0.012, 0.016), thread, loc=(0.06, -0.165, 0.04), rot=(0, 45 * sg, 0)))
+    parts.append(tube("rdl_seam", [Vector((-0.02, -0.16, 0.22)), Vector((0.0, -0.17, 0.0)), Vector((-0.02, -0.15, -0.2))], 0.012,
+                      dark, segs=5))
+    return group("rag_doll", parts)
+
+
+def m_crimson_rain():
+    """A bruise-dark storm cloud shedding a slanting rain of blood-red needles and drops."""
+    parts = []
+    for i, (x, z, r, m) in enumerate(((-0.28, 0.6, 0.2, "bone_black"), (0.0, 0.7, 0.26, "bone_black"), (0.3, 0.6, 0.21, "bone_black"),
+                                      (-0.08, 0.52, 0.2, "blood_dry"), (0.18, 0.5, 0.17, "blood_dry"))):
+        parts.append(sphere("cr_cloud%d" % i, r, mat(m), loc=(x, 0.02 * i, z), segs=12, rings=8, scale=(1.1, 0.8, 0.85)))
+    for i, (x, z0, ln) in enumerate(((-0.45, 0.4, 0.7), (-0.3, 0.3, 0.55), (-0.12, 0.34, 0.75), (0.06, 0.28, 0.6),
+                                     (0.22, 0.32, 0.8), (0.4, 0.3, 0.58), (0.52, 0.42, 0.66))):
+        pv = group("cr_n%d" % i, [cone("cr_needle%d" % i, 0.04, 0.0, ln, mat("thread"), loc=(0, 0, 0), segs=5),
+                                   box("cr_eye%d" % i, (0.03, 0.02, 0.05), mat("bone_w"), loc=(0, 0, 0.03))],
+                   rot=(0, 180 + 14, 0))
+        pv.location = (x, 0, z0)
+        parts.append(pv)
+    for i, (x, z) in enumerate(((-0.4, -0.45), (0.1, -0.5), (0.5, -0.4))):
+        parts.append(sphere("cr_drop%d" % i, 0.05, glow("#d02a48"), loc=(x, 0, z), segs=8, rings=5, scale=(1, 1, 1.25)))
+        parts.append(cone("cr_dropt%d" % i, 0.045, 0.0, 0.09, glow("#d02a48"), loc=(x, 0, z + 0.04), segs=6))
+    return group("crimson_rain", parts)
+
+
+def m_shear_half(tag, sg):
+    """One half of the giant shears: blade up the +Z axis from the pivot, shank and a red-wrapped bow ring below it."""
+    st, sd = mat("steel"), mat("steel_dark")
+    stations = [(0.0, 0.07, 0.07), (0.45, 0.068, 0.068), (0.8, 0.05, 0.05), (1.0, 0.0, 0.0)]
+    parts = [ridged_blade(tag + "_blade", stations, st if sg > 0 else sd, sd if sg > 0 else st, t=0.022)]
+    parts.append(box(tag + "_shank", (0.07, 0.05, 0.4), sd, loc=(0, 0, -0.2), bevel=0.01))
+    parts.append(torus(tag + "_ring", 0.15, 0.045, mat("blood_dry"), loc=(0, 0, -0.5), rot=(90, 0, 0), segs=16, rsegs=6,
+                       scale=(0.85, 1, 1.15)))
+    for i in range(5):
+        a = math.radians(72 * i + 20)
+        parts.append(sphere("%s_wrap%d" % (tag, i), 0.036, mat("thread"),
+                            loc=(0.15 * 0.85 * math.cos(a), -0.012, -0.5 + 0.15 * 1.15 * math.sin(a)), segs=6, rings=4))
+    return group(tag, parts)
+
+
+def m_selma_shears():
+    """Seamstress's giant shears: crossed steel blades with a bone-and-ember pivot and red thread-wrapped bow rings."""
+    a = m_shear_half("sha", 1)
+    b = m_shear_half("shb", -1)
+    a.rotation_euler = (0, math.radians(11), 0)
+    b.rotation_euler = (0, math.radians(-11), 0)
+    b.location = (0, -0.05, 0)
+    parts = [a, b, sphere("sh_pivot", 0.075, mat("bone_w"), loc=(0, -0.1, 0.0), segs=10, rings=6),
+             sphere("sh_ember", 0.036, glow("#4fe3ff"), loc=(0, -0.165, 0.0), segs=8, rings=5)]
+    thr = [Vector((0.0, -0.11, 0.0)), Vector((-0.08, -0.13, -0.12)), Vector((-0.14, -0.13, -0.3)), Vector((-0.02, -0.12, -0.4)),
+           Vector((0.1, -0.13, -0.46))]
+    parts.append(tube("sh_thread", catmull(thr, 4), 0.017, mat("thread"), segs=5))
+    return group("selma_shears", parts)
+
+
+def m_ember_blade():
+    """Black-bone blade shot through with glowing cyan cracks, bone horn guard, red-wrapped grip, floating embers."""
+    stations = [(0.02, 0.06, 0.06), (0.2, 0.062, 0.062), (0.5, 0.058, 0.058), (0.8, 0.05, 0.05), (0.98, 0.0, 0.0)]
+    parts = [ridged_blade("eb_blade", stations, mat("bone_black"), mat("black"), t=0.026)]
+    parts.append(box("eb_core", (0.034, 0.012, 0.74), glow("#4fe3ff"), loc=(0.0, -0.03, 0.46)))
+    parts.append(box("eb_core2", (0.014, 0.014, 0.74), glow("#e6fdff"), loc=(0.0, -0.036, 0.46)))
+    for i, (x, z, a, ln) in enumerate(((-0.035, 0.3, 30, 0.12), (0.03, 0.55, -35, 0.13), (-0.03, 0.75, 25, 0.1), (0.035, 0.18, -25, 0.09))):
+        parts.append(box("eb_crack%d" % i, (0.016, 0.014, ln), glow("#4fe3ff"), loc=(x, -0.03, z), rot=(0, a, 0)))
+    horn = [(-0.24, 0.14), (-0.16, 0.03), (0.0, 0.0), (0.16, 0.03), (0.24, 0.14), (0.19, -0.02), (0.07, -0.05), (-0.07, -0.05),
+            (-0.19, -0.02)]
+    parts.append(prism("eb_guard", horn, 0.07, mat("bone_w"), bevel=0.008))
+    parts.append(sphere("eb_gem", 0.04, glow("#4fe3ff"), loc=(0, -0.045, 0.0), segs=8, rings=5))
+    parts.append(cyl("eb_grip", 0.032, 0.2, mat("leather_red"), loc=(0, 0, -0.23)))
+    for i in range(4):
+        parts.append(torus("eb_wrap%d" % i, 0.034, 0.008, mat("thread"), loc=(0, 0, -0.21 + 0.05 * i), segs=12, rsegs=4))
+    parts.append(sphere("eb_pommel", 0.055, mat("bone_w"), loc=(0, 0, -0.25), segs=10, rings=6))
+    return group("ember_blade", parts)
+
+
+def m_ninefold_whip():
+    """Bone grip with nine blood-red tails fanning from a bone knot, each ending in a cyan ember bead."""
+    bone = mat("bone_w")
+    parts = [cyl("nw_grip", 0.04, 0.5, bone, loc=(0, 0, -0.3))]
+    for i in range(5):
+        parts.append(torus("nw_wrap%d" % i, 0.043, 0.011, mat("thread"), loc=(0, 0, -0.26 + 0.07 * i), segs=10, rsegs=4))
+    parts.append(sphere("nw_cap", 0.055, mat("blood_dry"), loc=(0, 0, -0.32), segs=8, rings=6))
+    parts.append(sphere("nw_knot", 0.09, bone, loc=(0, 0, 0.22), segs=10, rings=6, scale=(1, 0.9, 0.8)))
+    for k in range(9):
+        a = math.radians(-46 + 11.5 * k)
+        L_ = 0.95 + 0.12 * math.cos(k * 1.7)
+        curl = 0.1 * (1 if k % 2 else -1) * (0.6 + 0.4 * math.sin(k))
+        pts = []
+        for i in range(6):
+            t = i / 5
+            d = Vector((math.sin(a), 0, math.cos(a)))
+            n = Vector((math.cos(a), 0, -math.sin(a)))
+            p = Vector((0, -0.006 * k, 0.24)) + d * L_ * t + n * curl * math.sin(math.pi * t * 1.2) * L_ * 0.8
+            pts.append(p)
+        cur = catmull(pts, per=3)
+        m = mat("thread") if k % 2 == 0 else mat("blood_dry")
+        parts.append(tube("nw_tail%d" % k, cur, [0.034 - 0.022 * i / (len(cur) - 1) for i in range(len(cur))], m, segs=6))
+        parts.append(sphere("nw_bead%d" % k, 0.036, glow("#4fe3ff"), loc=cur[-1], segs=6, rings=4))
+    return group("ninefold_whip", parts)
+
+
+def m_last_bell():
+    """Great church bell hanging from a wooden yoke: cracked bronze, cyan ember light under the mouth, bone clapper."""
+    br, dk = mat("bell_bronze"), mat("bell_dark")
+    prof = [(0.4, 0.0), (0.39, 0.05), (0.34, 0.12), (0.27, 0.27), (0.21, 0.45), (0.16, 0.6), (0.11, 0.7), (0.06, 0.76), (0.0, 0.78)]
+    parts = [lathe("lb_bell", prof, br, segs=20),
+             torus("lb_lip", 0.4, 0.04, dk, loc=(0, 0, 0.03), segs=20, rsegs=5),
+             torus("lb_band1", 0.31, 0.024, dk, loc=(0, 0, 0.2), segs=20, rsegs=4),
+             torus("lb_band2", 0.2, 0.022, dk, loc=(0, 0, 0.5), segs=18, rsegs=4)]
+    parts.append(box("lb_yoke", (1.0, 0.2, 0.15), mat("wood_dark"), loc=(0, 0, 0.96), bevel=0.03))
+    for sx in (-1, 1):
+        parts.append(box("lb_strap%d" % sx, (0.08, 0.22, 0.2), mat("iron"), loc=(sx * 0.14, 0, 0.94), bevel=0.012))
+        parts.append(cone("lb_cap%d" % sx, 0.1, 0.06, 0.06, mat("iron"), loc=(sx * 0.5, 0, 0.96), rot=(0, 90 * sx, 0), segs=8))
+    for sx in (-1, 1):
+        parts.append(box("lb_arm%d" % sx, (0.07, 0.1, 0.22), mat("iron_dark"), loc=(sx * 0.08, 0, 0.8), bevel=0.008))
+    parts.append(torus("lb_rope", 0.08, 0.02, mat("thread"), loc=(0, 0, 1.12), rot=(90, 0, 0), segs=12, rsegs=4))
+    parts.append(sphere("lb_clapper", 0.09, mat("bone_w"), loc=(0, 0, -0.12), segs=10, rings=6))
+    parts.append(sphere("lb_ember", 0.05, glow("#4fe3ff"), loc=(0, -0.06, -0.14), segs=8, rings=5))
+    parts.append(prism("lb_crack", zap_pts((0.1, 0.65), (0.12, 0.05), w=0.025, n=6, jitter=0.1, seed=4), 0.01, glow("#4fe3ff"),
+                       y0=-0.27))
+    parts.append(prism("lb_crack2", zap_pts((-0.12, 0.5), (-0.17, 0.08), w=0.02, n=4, jitter=0.1, seed=7), 0.01, glow("#4fe3ff"),
+                       y0=-0.31))
+    parts.append(bone_skull("lb_skull", 1.2, loc=(0, -0.3, 0.3), rot=(0, 0, -90), glint=1.5))
+    return group("last_bell", parts)
+
+
+def m_requiem():
+    """A lyre of curved rib bones with a skull sounding-box, blood-red thread strings and a cyan ember above."""
+    bone = mat("bone_w")
+    parts = []
+    for sx in (-1, 1):
+        arm = [(sx * 0.1, 0, -0.38), (sx * 0.3, 0, -0.18), (sx * 0.36, 0, 0.14), (sx * 0.28, 0, 0.44), (sx * 0.22, 0, 0.54)]
+        cur = catmull(arm, 4)
+        parts.append(tube("rq_arm%d" % sx, cur, [0.055 - 0.02 * i / (len(cur) - 1) for i in range(len(cur))], bone, segs=7))
+        parts.append(sphere("rq_horn%d" % sx, 0.06, mat("bone"), loc=arm[-1], segs=8, rings=5))
+    parts.append(tube("rq_bar", [Vector((-0.24, 0, 0.5)), Vector((0.24, 0, 0.5))], 0.05, bone, segs=8))
+    parts.append(sphere("rq_box", 0.2, bone, loc=(0, 0, -0.4), segs=12, rings=8, scale=(1.2, 0.8, 0.8)))
+    parts.append(bone_skull("rq_skull", 0.85, loc=(0, -0.12, -0.5), rot=(0, 0, -90), glint=1.4))
+    for i, x in enumerate((-0.2, -0.1, 0.0, 0.1, 0.2)):
+        parts.append(tube("rq_str%d" % i, [Vector((x, -0.04, 0.5)), Vector((x * 0.7, -0.04, -0.28))], 0.022, mat("thread"), segs=5))
+    parts.append(sphere("rq_ember", 0.07, glow("#4fe3ff"), loc=(0, -0.05, 0.72), segs=8, rings=5))
+    parts.append(sphere("rq_hot", 0.03, glow("#e6fdff"), loc=(-0.015, -0.1, 0.74), segs=6, rings=4))
+    return group("requiem", parts)
+
+
+def m_bell_shard():
+    """A jagged curved shard of the cracked tower bell: bronze outside, dark inside, cyan ember along the break."""
+    pts = [(-0.3, -0.34), (-0.12, -0.4), (0.1, -0.3), (0.34, -0.36), (0.3, -0.12), (0.4, 0.1), (0.22, 0.24), (0.26, 0.42),
+           (0.0, 0.5), (-0.14, 0.34), (-0.34, 0.3), (-0.26, 0.04), (-0.4, -0.12)]
+    parts = [prism("bsh_back", pts, 0.12, mat("bell_dark"), y0=0.03, bevel=0.012),
+             prism("bsh_face", [(x * 0.9, z * 0.9) for x, z in pts], 0.06, mat("bell_bronze"), y0=-0.045, bevel=0.01)]
+    parts.append(prism("bsh_band", [(-0.3, 0.0), (0.4, 0.04), (0.38, 0.12), (-0.3, 0.09)], 0.065, mat("bell_dark"), y0=-0.05))
+    parts.append(prism("bsh_crack", zap_pts((0.3, -0.3), (-0.2, 0.3), w=0.03, n=6, jitter=0.1, seed=2), 0.012, glow("#4fe3ff"), y0=-0.09))
+    parts.append(prism("bsh_crack2", zap_pts((0.3, -0.3), (-0.2, 0.3), w=0.012, n=6, jitter=0.1, seed=2), 0.014, glow("#e6fdff"), y0=-0.1))
+    for i, (x, z) in enumerate(((-0.2, -0.24), (0.1, -0.2), (0.2, 0.3))):
+        parts.append(sphere("bsh_stud%d" % i, 0.03, mat("bone_w"), loc=(x, -0.09, z), segs=6, rings=4))
+    parts.append(tube("bsh_thread", [Vector((-0.34, -0.1, 0.3)), Vector((-0.2, -0.1, 0.15)), Vector((-0.3, -0.1, 0.0))], 0.016,
+                      mat("thread"), segs=5))
+    return group("bell_shard", parts)
+
+
+# ---- stash prop (CONTENT4 6.3): upright reliquary coffin with iron bands, a skull relief and a cyan lock ---------
+
+STASH_OUTLINE = [(-0.28, 0.14), (0.28, 0.14), (0.46, 1.45), (0.30, 2.05), (-0.30, 2.05), (-0.46, 1.45)]
+
+
+def _scaled(pts, sx, sz, cz=1.1):
+    return [(x * sx, (z - cz) * sz + cz) for x, z in pts]
+
+
+def m_stash():
+    """Standing reliquary coffin (front faces -Y).  Returns (root, P): P['door'] = pivot hinged on the left edge,
+    P['lock'] = glow parts of the lock (keyhole + ring), P['leak'] = glow seam round the door, P['inside'] = the
+    glow parts of the open interior."""
+    P = {}
+    wood, wood_d, iron, dark = mat("wood_light"), mat("wood_dark"), mat("iron"), mat("iron_dark")
+    O = STASH_OUTLINE
+    parts = [box("st_plinth", (0.96, 0.66, 0.14), mat("stone_dark"), loc=(0, 0, 0.07), bevel=0.02),
+             box("st_plinth2", (0.84, 0.58, 0.05), mat("stone"), loc=(0, 0, 0.165), bevel=0.012),
+             prism("st_shell", _scaled(O, 1.0, 1.0), 0.46, wood_d, bevel=0.015),
+             box("st_cap", (0.7, 0.52, 0.09), dark, loc=(0, 0, 2.085), bevel=0.02),
+             sphere("st_finial", 0.07, mat("bone_w"), loc=(0, 0, 2.17), segs=8, rings=6)]
+    # interior seen through the open door: dark cavity, cyan glow, a skull on a rib cage
+    inside = []
+    inside.append(prism("st_cavity", _scaled(O, 0.9, 0.955), 0.02, mat("mortar"), y0=-0.235))
+    inside.append(prism("st_glow1", _scaled(O, 0.8, 0.92), 0.012, glow("#0e4a68"), y0=-0.248))
+    inside.append(prism("st_glow2", _scaled(O, 0.56, 0.78), 0.012, glow("#1a8ab0"), y0=-0.256))
+    inside.append(prism("st_glow3", _scaled(O, 0.32, 0.6), 0.012, glow("#6ae8ff"), y0=-0.264))
+    ik = bone_skull("st_iskull", 1.1, eyes="#e6fdff", loc=(0, -0.285, 1.35), rot=(0, 0, -90), glint=1.6)
+    inside.append(ik)
+    for i, z in enumerate((1.18, 1.02, 0.86)):
+        arc = [Vector((x * (0.2 - 0.02 * i), -0.285, z - 0.05 * (1 - x * x))) for x in (-1, -0.5, 0, 0.5, 1)]
+        inside.append(tube("st_irib%d" % i, catmull(arc, 3), 0.026, mat("bone_w"), segs=6))
+    parts += inside
+    P["inside"] = inside
+    leak = prism("st_leak", _scaled(O, 0.97, 0.985), 0.012, glow("#1a6a8a"), y0=-0.236)
+    parts.append(leak)
+    P["leak"] = leak
+    # door: all in world coordinates first, then parented to the hinge pivot
+    hx = -0.4
+    door = [prism("st_door", _scaled(O, 0.91, 0.965), 0.1, wood, y0=-0.3, bevel=0.012),
+            prism("st_panel", _scaled(O, 0.8, 0.9), 0.03, wood_d, y0=-0.355)]
+    for i, z in enumerate((0.44, 1.95, 1.2)):
+        w = (0.28 + (0.46 - 0.28) * (z - 0.14) / 1.31) if z < 1.45 else 0.46 - 0.16 * (z - 1.45) / 0.6
+        w *= 0.9
+        door.append(box("st_band%d" % i, (2 * w, 0.07, 0.11), iron, loc=(0, -0.385, z), bevel=0.012))
+        door.append(box("st_bandb%d" % i, (2 * w, 0.05, 0.11), dark, loc=(0, -0.235, z), bevel=0.012))   # inside face
+        for sx in (-1, 1):
+            door.append(sphere("st_rv%d_%d" % (i, sx), 0.03, mat("gold"), loc=(sx * (w - 0.06), -0.425, z), segs=6, rings=4))
+    door.append(box("st_strap", (0.07, 0.05, 1.75), dark, loc=(0, -0.4, 1.1), bevel=0.01))
+    LZ = 1.2                      # the lock sits ~38 px above the ground (the code draws its glow at y - 40)
+    door.append(bone_skull("st_skull", (0.55, 1.15, 1.15), eyes="#4fe3ff", loc=(0, -0.44, 1.56), rot=(0, 0, -90), glint=1.5))
+    door.append(box("st_lock", (0.3, 0.07, 0.34), mat("steel_dark"), loc=(0, -0.45, LZ - 0.03), bevel=0.02))
+    sh = [(-0.1, -0.45, LZ + 0.12)] + [(0.1 * math.cos(math.pi - math.pi * k / 6), -0.45, LZ + 0.14 + 0.12 * math.sin(math.pi * k / 6))
+                                       for k in range(1, 6)] + [(0.1, -0.45, LZ + 0.12)]
+    door.append(tube("st_shackle", catmull(sh, 2), 0.028, mat("steel"), segs=6))
+    lockg = [cyl("st_key", 0.055, 0.012, glow("#4fe3ff"), loc=(0, -0.486, LZ + 0.0), rot=(90, 0, 0), segs=14),
+             torus("st_keyring", 0.09, 0.016, glow("#4fe3ff"), loc=(0, -0.482, LZ + 0.0), rot=(90, 0, 0), segs=16, rsegs=4),
+             cyl("st_lockhalo", 0.16, 0.01, glow("#12384a"), loc=(0, -0.481, LZ - 0.02), rot=(90, 0, 0), segs=16)]
+    door += lockg
+    door.append(box("st_slot", (0.026, 0.01, 0.09), mat("black"), loc=(0, -0.495, LZ - 0.08)))
+    for z in (0.62, 1.38):
+        door.append(box("st_hinge%d" % int(z * 10), (0.16, 0.12, 0.14), dark, loc=(hx + 0.02, -0.4, z), bevel=0.014))
+    pv = empty("st_hinge", loc=(hx, -0.3, 0.0))
+    parent_to(door, pv)
+    P["door"] = pv
+    P["lock"] = lockg
+    root = group("stash", parts + [pv])
+    return root, P

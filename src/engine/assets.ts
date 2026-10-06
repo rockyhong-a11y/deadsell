@@ -33,6 +33,8 @@ export interface DrawOpts {
   /** composite operation for the main draw (e.g. 'lighter') */
   blend?: GlobalCompositeOperation;
   rotation?: number;
+  /** draw the frame as a solid silhouette of this colour instead of its pixels (after-images) */
+  tint?: string;
 }
 
 /** max cached frame silhouettes per sheet (a 288×224 boss frame is ~0.26 MB) */
@@ -63,6 +65,11 @@ export class SpriteSheet {
 
   has(anim: string): boolean {
     return anim in this.anims;
+  }
+
+  /** The animation to play for `name`: itself, or its fallback while the art for it is not in the sheet (`ANIM_FALLBACK`). */
+  resolve(name: string): string {
+    return resolveAnim(this, name);
   }
 
   anim(name: string): AnimDef {
@@ -122,13 +129,31 @@ export class SpriteSheet {
       }
     }
     if (o.blend) ctx.globalCompositeOperation = o.blend;
-    ctx.drawImage(this.img, sx, sy, this.frameW, this.frameH, dx, dy, this.frameW, this.frameH);
+    if (o.tint) ctx.drawImage(this.silhouette(o.tint, sx, sy), dx, dy);
+    else ctx.drawImage(this.img, sx, sy, this.frameW, this.frameH, dx, dy, this.frameW, this.frameH);
     if (o.flash && o.flash > 0) {
       ctx.globalAlpha = (o.alpha ?? 1) * Math.min(1, o.flash);
       ctx.drawImage(this.silhouette(o.flashColor ?? '#ffffff', sx, sy), dx, dy);
     }
     ctx.restore();
   }
+}
+
+/**
+ * Animations of the heroine that a sheet may not have drawn yet (docs/CONTENT4.md §5): the name they fall back to, in order,
+ * until one exists in the sheet. Every `AnimPlayer` resolves the name it is asked to play through this table.
+ */
+export const ANIM_FALLBACK: Record<string, string[]> = {
+  whip_1: ['spear_1'], whip_2: ['spear_2'],
+  heavy_1: ['hammer_1'], heavy_2: ['hammer_2'], heavy_3: ['sword_3'],
+  cast: ['throw'],
+  sprint: ['run'],
+};
+
+/** `name` if the sheet has it, else the first of its fallbacks the sheet has, else `name` (the sheet then plays its first animation). */
+export function resolveAnim(sheet: Pick<SpriteSheet, 'has'>, name: string): string {
+  if (sheet.has(name)) return name;
+  return ANIM_FALLBACK[name]?.find((n) => sheet.has(n)) ?? name;
 }
 
 /**
@@ -155,6 +180,7 @@ export class AnimPlayer {
   }
 
   play(name: string, restart = false): void {
+    name = this.sheet.resolve(name);
     if (this.name === name && !restart && this.duration === 0 && !this.phases) return;
     this.name = name;
     this.t = 0;
@@ -163,14 +189,14 @@ export class AnimPlayer {
   }
 
   playFor(name: string, secs: number): void {
-    this.name = name;
+    this.name = this.sheet.resolve(name);
     this.t = 0;
     this.duration = Math.max(0.001, secs);
     this.phases = null;
   }
 
   playPhased(name: string, windup: number, active: number, recover: number): void {
-    this.name = name;
+    this.name = this.sheet.resolve(name);
     this.t = 0;
     this.duration = 0;
     this.phases = [windup, active, recover];

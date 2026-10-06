@@ -70,6 +70,8 @@ export function installDebug(game: Game): void {
       const inst = { id, tier: run.tier, affix: null };
       if (ITEMS[id].slot === 'skill') run.skills[slot] = inst; else run.weapons[slot] = inst;
     },
+    /** start the 광란 질주 (frenzy sprint) now */
+    sprint() { const p = level()?.world.player; if (p) p.startFrenzy(); return p?.frenzyT ?? 0; },
     /** carried 시체 조각 of the current run */
     pieces(n: number) { if (game.run) game.run.pieces = Math.max(0, Math.floor(n)); },
     /** the banked 시체 조각 (save.pieces, saved) */

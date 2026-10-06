@@ -12,7 +12,7 @@ import { weaponDef, type BowWeapon, type MeleeHit, type MeleeWeapon, type Shield
 import { SKILLS, type SkillDef } from './skills';
 import { Arrow, type Feel } from './projectiles';
 import { calcDamage } from './damage';
-import { AFFIX, CRIT_MULT, FLASK } from '../rules';
+import { AFFIX, CRIT_MULT, FLASK, SPRINT } from '../rules';
 
 /**
  * The heroine (Cinder). OWNER: player agent.
@@ -85,6 +85,10 @@ export class Player extends Actor {
   bowCharge = 0;
   /** combo index the NEXT swing of each weapon slot will use */
   combo: [number, number] = [0, 0];
+  /** 질주: running at `RUN_SPEED x SPRINT.mult` (docs/CONTENT4.md §1) */
+  sprinting = false;
+  /** 광란 질주: seconds of the kill-streak frenzy left (every movement is a sprint at once) */
+  frenzyT = 0;
 
   private mode: Mode = 'free';
   private coyote = 0;
@@ -120,6 +124,19 @@ export class Player extends Actor {
   private blk: BlockState | null = null;
   private cast: CastState | null = null;
   private ledge: LedgeState | null = null;
+  // ---- sprint
+  /** seconds a direction has been held on the ground without a break (the run-up), and which direction */
+  private runT = 0;
+  private runDir = 0;
+  /** seconds without a direction (the end grace) */
+  private idleT = 0;
+  /** kills in a row (each within `SPRINT.streakWindow` s of the one before) and the world time of the last one */
+  private streak = 0;
+  private lastKillT = -Infinity;
+  /** the stored frames drawn behind a sprinting heroine (newest first) and the time until the next one is stored */
+  private afterImgs: { anim: string; frame: number; x: number; y: number; flip: boolean }[] = [];
+  private afterT = 0;
+  private footFrame = -1;
 
   constructor(x: number, y: number) {
     super(x, y);
@@ -245,6 +262,10 @@ export class Player extends Actor {
     this.hp = Math.min(run.hp, this.maxHp);
     this.lastRunHp = run.hp;
     this.anim!.play('idle');
+    // kills in quick succession start the frenzy
+    this.world.on((e) => {
+      if (e.type === 'enemyKilled') this.onKillStreak();
+    });
   }
 
   update(dt: number): void {
@@ -269,6 +290,9 @@ export class Player extends Actor {
       this.nearInteract = w.nearestInteractable(this.x, this.y - 20);
       if (!this.tryRoll()) this.tickMode(dt);
     }
+    // any attack, skill, roll, slam, ledge grab or hit (and death) ends the sprint and restarts the run-up
+    if (this.mode !== 'free') this.breakSprint();
+    this.tickSprintFx(dt);
 
     this.physics = this.mode !== 'ledge';
     super.update(dt);
@@ -286,8 +310,54 @@ export class Player extends Actor {
 
   draw(ctx: CanvasRenderingContext2D): void {
     const blink = this.invuln > 0 && this.mode !== 'roll' && this.mode !== 'dead' && Math.floor(this.world.time * 20) % 2 === 0;
+    this.drawSprintBehind(ctx);
     this.drawSprite(ctx, { alpha: blink ? 0.5 : 1 });
-    if (this.mode !== 'dead') this.world.lights.add(this.x, this.y - 24, 70, '#9fe8ff', 0.3);
+    if (this.mode !== 'dead') {
+      this.world.lights.add(this.x, this.y - 24, 70, '#9fe8ff', 0.3);
+      if (this.frenzyT > 0) this.world.lights.add(this.x, this.y - 24, 96, SPRINT.after.frenzyColor, 0.55);
+    }
+  }
+
+  /**
+   * What a sprint draws behind the heroine (docs/CONTENT4.md §1): the stored frames as tinted after-images (cyan, red in the frenzy;
+   * the newest is the most visible), a few short speed lines against the direction of travel and, in the frenzy, an ember glow.
+   */
+  private drawSprintBehind(ctx: CanvasRenderingContext2D): void {
+    const sheet = this.anim?.sheet;
+    if (!sheet || this.mode === 'dead') return;
+    const A = SPRINT.after;
+    const frenzy = this.frenzyT > 0;
+    if (frenzy) {
+      const gx = Math.round(this.x), gy = Math.round(this.y - 22);
+      const g = ctx.createRadialGradient(gx, gy, 2, gx, gy, 36);
+      g.addColorStop(0, 'rgba(255,74,106,0.5)');
+      g.addColorStop(1, 'rgba(255,74,106,0)');
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = g;
+      ctx.fillRect(gx - 36, gy - 36, 72, 72);
+      ctx.restore();
+    }
+    const tint = frenzy ? A.frenzyColor : A.color;
+    for (let i = this.afterImgs.length - 1; i >= 0; i--) {
+      const im = this.afterImgs[i];
+      const k = A.count > 1 ? i / (A.count - 1) : 0;
+      sheet.draw(ctx, im.anim, im.frame, im.x, im.y, im.flip, { tint, alpha: A.alpha[0] + (A.alpha[1] - A.alpha[0]) * k });
+    }
+    if (!this.sprinting) return;
+    // speed lines: short, horizontal, trailing off behind her
+    const t = this.world.time;
+    const dir = this.facing;
+    ctx.save();
+    ctx.fillStyle = frenzy ? '#ffc0c8' : '#d8f6ff';
+    for (let k = 0; k < 4; k++) {
+      const phase = (t * 6 + k * 0.37) % 1;
+      const len = 10 + ((k * 7) % 12);
+      const lx = this.x - dir * (12 + phase * 26);
+      ctx.globalAlpha = (1 - phase) * 0.5;
+      ctx.fillRect(Math.round(dir > 0 ? lx - len : lx), Math.round(this.y - 8 - k * 9 - ((k * 5) % 4)), len, 1);
+    }
+    ctx.restore();
   }
 
   // ---------------------------------------------------------------- timers
@@ -378,6 +448,7 @@ export class Player extends Actor {
     const w = this.world;
     const inp = w.input;
     if (this.locked) {
+      this.breakSprint();
       this.steer(dt, 0);
       this.anim?.play(this.onGround ? 'idle' : 'fall');
       return;
@@ -399,7 +470,10 @@ export class Player extends Actor {
     this.tryJump();
     if (this.tryLedge()) return;
     if (this.tryWeapons()) return;
-    const mx = this.steer(dt, 1);
+    const mx = this.moveDir();
+    const mult = this.sprintStep(dt, mx);
+    // jumping out of a sprint keeps the horizontal speed until landing (or turning), even with the direction released
+    if (!(!this.onGround && this.sprinting && SPRINT.airKeep && mx === 0)) this.steer(dt, mult);
     this.variableJump(dt);
     this.locomotion(dt, mx);
   }
@@ -410,15 +484,23 @@ export class Player extends Actor {
     if (this.landT > 0 && this.onGround) a.play('land');
     else if (!this.onGround) a.play(this.djT > 0 ? 'double_jump' : this.vy < 0 ? 'jump' : 'fall');
     else if (mx && Math.abs(this.vx) > 20) {
-      a.play('run');
-      a.speed = clamp(Math.abs(this.vx) / RUN_SPEED, 0.6, 1.3);
+      const sprint = this.sprinting;
+      a.play(sprint ? 'sprint' : 'run');
+      a.speed = sprint ? clamp(Math.abs(this.vx) / (RUN_SPEED * SPRINT.mult), 0.6, 1.2) : clamp(Math.abs(this.vx) / RUN_SPEED, 0.6, 1.3);
       this.stepT += dt;
       this.dustT += dt;
-      if (this.stepT >= 0.26) {
+      if (this.stepT >= (sprint ? 0.16 : 0.26)) {
         this.stepT = 0;
-        w.audio.play('step', { vol: 0.35, pitch: 0.95 + Math.random() * 0.1 });
+        w.audio.play('step', { vol: 0.35, pitch: (sprint ? 1.1 : 0.95) + Math.random() * 0.1 });
       }
-      if (this.dustT >= 0.16) {
+      if (sprint) {
+        // a dust puff at every footfall frame of the stride
+        const f = a.frame;
+        if (f !== this.footFrame && (SPRINT.footFrames as readonly number[]).includes(f)) {
+          w.particles.emit('dust', this.x - this.facing * 4, this.y - 1, { dir: -this.facing, count: 3 });
+        }
+        this.footFrame = f;
+      } else if (this.dustT >= 0.16) {
         this.dustT = 0;
         w.particles.emit('dust', this.x - this.facing * 4, this.y - 1, { dir: -this.facing, count: 1 });
       }
@@ -487,6 +569,73 @@ export class Player extends Actor {
     this.vy = Math.max(this.vy, 80);
     this.world.particles.emit('dust', this.x, this.y, { count: 2 });
     return true;
+  }
+
+  // ---------------------------------------------------------------- sprint (docs/CONTENT4.md §1)
+  /**
+   * Run-up and end conditions for this step; returns the speed multiplier of the horizontal control. The run-up counts the seconds a
+   * direction is held on the ground: stopping (past the end grace), turning or a wall in front restarts it, and `SPRINT.runUp`
+   * seconds start the sprint. In the frenzy every movement is a sprint at once.
+   */
+  private sprintStep(dt: number, mx: number): number {
+    const airKept = !this.onGround && this.sprinting && SPRINT.airKeep;
+    if (mx === 0) {
+      // (released in the air: the sprint carries on until landing)
+      if (!airKept && (this.idleT += dt) > SPRINT.endGrace) this.breakSprint();
+    } else {
+      this.idleT = 0;
+      if ((this.runDir !== 0 && mx !== this.runDir) || this.hitWallX === mx) this.breakSprint();
+      this.runDir = mx;
+      if (this.onGround && this.hitWallX !== mx) this.runT += dt;
+    }
+    this.sprinting = this.runDir !== 0 && (this.frenzyT > 0 || this.runT >= SPRINT.runUp);
+    return this.sprinting ? SPRINT.mult : 1;
+  }
+
+  /** The sprint ends and the run-up starts over. */
+  private breakSprint(): void {
+    this.sprinting = false;
+    this.runT = 0;
+    this.runDir = 0;
+    this.idleT = 0;
+  }
+
+  /** A kill: `SPRINT.streakKills` of them, each within `SPRINT.streakWindow` s of the last, start the frenzy; every further kill refreshes it. */
+  private onKillStreak(): void {
+    const w = this.world;
+    this.streak = w.time - this.lastKillT <= SPRINT.streakWindow ? this.streak + 1 : 1;
+    this.lastKillT = w.time;
+    // (once it runs, every kill refreshes it, however long since the last one)
+    if ((this.frenzyT > 0 || this.streak >= SPRINT.streakKills) && !this.dying) this.startFrenzy();
+  }
+
+  /** 광란 질주: every movement is a sprint for `SPRINT.frenzyTime` s (a running one makes it full again). Also the debug hook. */
+  startFrenzy(): void {
+    const fresh = this.frenzyT <= 0;
+    this.frenzyT = SPRINT.frenzyTime;
+    if (!fresh) return;
+    const w = this.world;
+    w.fx.text(this.x, this.y - this.h - 14, '광란 질주!', SPRINT.after.frenzyColor);
+    w.shake(1, 0.15);
+    w.audio.play('crit', { pitch: 1.3 });
+  }
+
+  /** The frenzy timer and the after-image buffer (every `SPRINT.after.interval` s while sprinting; the buffer drains when it ends). */
+  private tickSprintFx(dt: number): void {
+    if (this.frenzyT > 0 && (this.frenzyT -= dt) <= 0) {
+      // the frenzy ran out: a sprint it carried falls back to a normal run and the run-up starts over
+      this.frenzyT = 0;
+      this.runT = 0;
+    }
+    if (this.frenzyT > 0 && this.mode !== 'dead' && Math.random() < dt * 12) this.world.particles.emit('embers', this.x, this.y - 20, { count: 1, w: 14, h: 36 });
+    const A = SPRINT.after;
+    this.afterT += dt;
+    if (this.afterT < A.interval) return;
+    this.afterT -= A.interval;
+    if (this.sprinting && this.anim) {
+      this.afterImgs.unshift({ anim: this.anim.name, frame: this.anim.frame, x: this.x, y: this.y, flip: this.facing < 0 });
+      if (this.afterImgs.length > A.count) this.afterImgs.length = A.count;
+    } else if (this.afterImgs.length) this.afterImgs.pop();
   }
 
   // ---------------------------------------------------------------- roll

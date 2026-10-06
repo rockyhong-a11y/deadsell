@@ -55,8 +55,8 @@ def a_idle():
 
 def glow_halo(open_t):
     """Cool light behind the coffin that swells as the door opens."""
-    a = ellipsoid("st_halo", (1.5, 0.02, 2.3), glow("#0e3a58"), loc=(-0.16, 0.45, CY))
-    b = ellipsoid("st_halo2", (1.1, 0.02, 1.75), glow("#145a80"), loc=(-0.16, 0.43, CY))
+    a = ellipsoid("st_halo", (1.5, 0.02, 2.1), glow("#0e3a58"), loc=(-0.16, 0.45, CY + 0.08))
+    b = ellipsoid("st_halo2", (1.1, 0.02, 1.65), glow("#145a80"), loc=(-0.16, 0.43, CY + 0.08))
     for o in (a, b):
         o.scale = (max(0.01, open_t), 1, max(0.01, open_t))
         L.hide(o, open_t <= 0)
@@ -66,10 +66,10 @@ def glow_halo(open_t):
 def a_open():
     root, P = setup()
     door = P["door"]
-    ang = [0, -16, -48, -84, -108, -112]
+    ang = [0, -14, -40, -68, -90, -94]
     amt = [0.0, 0.0, 0.35, 0.7, 1.0, 0.95]
-    spill = [ellipsoid("st_spill", (1.0, 0.55, 0.04), glow("#0e4a68"), loc=(-0.05, -0.5, 0.02)),
-             ellipsoid("st_spill2", (0.62, 0.34, 0.05), glow("#2a9cc0"), loc=(-0.05, -0.48, 0.03))]
+    spill = [ellipsoid("st_spill", (0.95, 0.3, 0.04), glow("#0e4a68"), loc=(-0.02, -0.3, 0.02)),
+             ellipsoid("st_spill2", (0.6, 0.2, 0.05), glow("#2a9cc0"), loc=(-0.02, -0.28, 0.03))]
     sparks = [L.sparkle("st_sp%d" % k, 0.14, glow("#e6fdff")) for k in range(3)]
     for i in range(6):
         door.rotation_euler = (0, 0, math.radians(ang[i]))

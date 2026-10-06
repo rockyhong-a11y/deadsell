@@ -1,0 +1,23 @@
+{
+ "image": "stash.png",
+ "frameW": 64,
+ "frameH": 80,
+ "anchor": [
+  32,
+  78
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 6,
+   "fps": 8,
+   "loop": true
+  },
+  "open": {
+   "row": 1,
+   "frames": 6,
+   "fps": 10,
+   "loop": false
+  }
+ }
+}

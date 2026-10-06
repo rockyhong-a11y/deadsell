@@ -519,12 +519,12 @@ def i_soulfire_bow():
     cy = ("#1a6aa8", "#2fb4e8", "#8af0ff", "#e6fdff")
     for k, tip in enumerate((tu, td)):
         w = mw @ tip
-        fl = L.flame("sf_tip%d" % k, 0.34, 0.1, layers=cy, seed=3 + k, sway=0.2 - 0.4 * k)
+        fl = L.flame("sf_tip%d" % k, 0.6, 0.16, layers=cy, seed=3 + k, sway=0.2 - 0.4 * k)
         objs.append(L.group("sf_tipg%d" % k, fl, loc=w + Vector((0, 0, 0.02))))
     fwd = mw.to_3x3() @ Vector((1, 0, 0))
     for k, off in enumerate((0.0, 0.22)):
         c = mw @ Vector((0.62 + off, 0, 0.0)) + Vector((0.0, -0.05 * k, 0.17 * (1 - 2 * k)))
-        fl = L.flame("sf_wisp%d" % k, 0.2, 0.06, layers=cy, seed=8 + k, sway=0.3)
+        fl = L.flame("sf_wisp%d" % k, 0.34, 0.1, layers=cy, seed=8 + k, sway=0.3)
         objs.append(L.group("sf_wispg%d" % k, fl, loc=c))
     return objs
 
@@ -573,8 +573,7 @@ def i_ninefold_whip():
 def i_last_bell():
     r = L.m_last_bell()
     orient(r, 0, twist=-12)
-    h = halo("lb_h", "disc", (0, 0, -0.05), dist=0.4, r=0.3, col="#0f4a78")
-    return [r, h]
+    return [r]
 
 
 def i_requiem():

@@ -22,7 +22,11 @@ const VARIANTS: Record<string, string[]> = {
 };
 const ALL = BASES.flatMap((b) => [b, ...VARIANTS[b].map((v) => `${b}_${v}`)]);
 const MIDBOSSES = ['mb_abbess', 'mb_arachne', 'mb_valkyrie', 'mb_witch'];
-const SKILLS = ['fire_grenade', 'ice_grenade', 'turret', 'wolf_trap'];
+/** the ordinary skills (the others are weapons): the four of the base game + the eight of docs/CONTENT4.md §5.2 (the starting pool has stun_grenade, blueprints add the rest) */
+const SKILLS = [
+  'fire_grenade', 'ice_grenade', 'turret', 'wolf_trap',
+  'stun_grenade', 'magnet_grenade', 'cluster_grenade', 'tesla_coil', 'flame_turret', 'phaser', 'wave_of_denial', 'tornado',
+];
 
 async function startRun(page: Page, seed: number) {
   // wait for the NEW scene (the old level scene may still be up while the fade runs)

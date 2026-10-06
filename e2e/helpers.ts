@@ -178,6 +178,8 @@ export async function interact(page: Page, cls: string, pick = 0) {
   expect(e, `a ${cls} exists`).toBeTruthy();
   await teleportNear(page, e.x - 8, e.y - 2, 25);
   await expect.poll(() => page.evaluate(() => (window as any).__ds.player.nearInteract?.constructor.name ?? null), { timeout: 5_000, message: `prompt for ${cls}` }).toBe(cls);
+  // two real frames, so the prompt has been on the screen (and in the recorded text) before the key is pressed
+  await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
   await page.keyboard.press('KeyF');
 }
 

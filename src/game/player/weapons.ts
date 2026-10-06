@@ -308,8 +308,8 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     resetDelay: 0.35,
     critVs: ['stun'],
     hits: [
-      { anim: 'heavy_1', windup: 0.2, active: 0.08, recover: 0.38, damage: 20, box: { x: -6, y: -58, w: 66, h: 58 }, lunge: 90, knockback: 160, stun: 0.8, hitstop: 0.08, shake: 2.5, swing: 'swing_heavy', hit: 'hit_heavy', slash: { radius: 54, from: -2.5, to: 0.5, color: '#b79a6a', width: 11, life: 0.22 } },
-      { anim: 'heavy_2', windup: 0.22, active: 0.08, recover: 0.4, damage: 22, box: { x: -20, y: -54, w: 84, h: 54 }, lunge: 80, knockback: 200, stun: 0.8, hitstop: 0.09, shake: 3, swing: 'swing_heavy', hit: 'hit_heavy', slash: { radius: 58, from: 0.9, to: -1.6, color: '#b79a6a', width: 11, life: 0.22 } },
+      { anim: 'heavy_1', windup: 0.2, active: 0.08, recover: 0.38, damage: 22, box: { x: -6, y: -58, w: 66, h: 58 }, lunge: 90, knockback: 160, stun: 0.8, hitstop: 0.08, shake: 2.5, swing: 'swing_heavy', hit: 'hit_heavy', slash: { radius: 54, from: -2.5, to: 0.5, color: '#b79a6a', width: 11, life: 0.22 } },
+      { anim: 'heavy_2', windup: 0.22, active: 0.08, recover: 0.4, damage: 24, box: { x: -20, y: -54, w: 84, h: 54 }, lunge: 80, knockback: 200, stun: 0.8, hitstop: 0.09, shake: 3, swing: 'swing_heavy', hit: 'hit_heavy', slash: { radius: 58, from: 0.9, to: -1.6, color: '#b79a6a', width: 11, life: 0.22 } },
     ],
   },
   torch: {

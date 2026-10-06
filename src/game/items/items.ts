@@ -1,7 +1,9 @@
 import type { Rng } from '../../engine/rng';
 import type { ItemDef, ItemId, ItemInstance, AffixId } from './types';
 import { WEAPONS, type MeleeWeapon } from '../player/weapons';
-import { BONE_SPIKES, CHAIN_HOOK, CORPSE_BOMB, SKILL_BASE, SOUL_LANTERN } from '../player/skills';
+import {
+  BONE_SPIKES, BONE_TURRET, CHAIN_HOOK, CHAIN_PRISON, CORPSE_BOMB, CRIMSON_RAIN, DEATH_ORB, LAST_BELL, PLAGUE_CENSER, RAG_DOLL, REQUIEM, SKILL_BASE, SOUL_LANTERN,
+} from '../player/skills';
 import { COLOR_HEX } from '../combat';
 import { AFFIX, AFFIX_ROLL, TIER_DMG } from '../rules';
 
@@ -152,6 +154,8 @@ const num = (v: number): string => String(Math.round(v * 100) / 100);
  */
 export function signatureText(id: ItemId, dmg: (base: number) => number = (b) => b): string {
   const w = (WEAPONS as Record<string, (typeof WEAPONS)[keyof typeof WEAPONS]>)[id];
+  const higher = higherSignature(id, dmg);
+  if (higher) return higher;
   if (w?.kind === 'melee') {
     if (w.critBleeding) return `적중 시 출혈 ${num(w.bleed ?? 0)}초 · 출혈 중인 적에게 치명타`;
     if (w.healOnKill) return `처치 시 최대 체력의 ${pct(w.healOnKill)} 회복`;
@@ -169,15 +173,54 @@ export function signatureText(id: ItemId, dmg: (base: number) => number = (b) =>
   }
 }
 
+/** The signature of the uniques of grades A to SSS (docs/CONTENT4.md §5.3), read from the tables of weapons.ts / skills.ts. */
+function higherSignature(id: ItemId, dmg: (base: number) => number): string {
+  const w = (WEAPONS as Record<string, (typeof WEAPONS)[keyof typeof WEAPONS]>)[id];
+  const per = (base: number, interval: number): number => Math.round(dmg(base) / interval);
+  if (w?.kind === 'melee') {
+    const ex = w.hits.find((h) => h.execute)?.execute;
+    const multi = w.hits.find((h) => h.multi)?.multi;
+    if (w.toll) return `타격마다 종이 울린다: 대상 주위 반경 ${w.toll.radius}px에 피해 ${dmg(w.toll.damage)} + 기절 ${num(w.toll.stun)}초`;
+    if (w.leech) return `준 피해의 ${pct(w.leech)} 회복 · 채찍 끝에 맞은 적을 ${w.tipPull}px 끌어당긴다`;
+    if (ex) return `${w.hits.findIndex((h) => h.execute) + 1}타가 체력 ${pct(ex.below)} 미만의 적을 처형 (보스·중간 보스는 피해 ×${ex.boss})`;
+    if (w.glaive) return `${w.glaive.every}번째 적중마다 되돌아오는 칼날을 던진다 (갈 때·올 때 각 피해 ${dmg(w.glaive.damage)}, ${w.glaive.range}px)`;
+    if (w.quake) return `내려칠 때마다 바닥 충격파가 양쪽으로 (피해 ${dmg(w.quake.damage)}, ${w.quake.range}px, 점프로 피함) · 강한 넉백`;
+    if (w.bleedStacks) return `적중마다 출혈 ${w.bleedStacks}중첩 · 출혈 중인 적에게 치명타 · 처치하면 시체 조각 +${w.killPieces ?? 0}`;
+    if (w.ember) return `체력이 가득이면 피해 ×${num(w.fullHpMul ?? 1)} · 적중의 ${pct(w.ember.chance)}가 추적 불씨 (피해 ${dmg(w.ember.damage)})`;
+    if (multi) return `한 번 휘두르면 ${multi.n}번 적중 (부채꼴) · 끝에 맞으면 치명타 · ${w.tipPull}px 끌어당긴다`;
+  } else if (w?.kind === 'shield') {
+    if (w.fullBlock) return `막는 첫 ${num(w.fullBlock)}초는 피해를 모두 막는다 · 패링하면 최대 체력의 ${pct(w.parryHeal ?? 0)} 회복`;
+    if (w.bell) return `패링하면 반경 ${w.bell.radius}px의 모든 적을 ${num(w.bell.stun)}초 기절 · 적의 투사체를 피해 ×${w.bell.reflectMul}로 반사`;
+  } else if (w?.kind === 'bow' && w.soulfire) {
+    const f = w.soulfire;
+    return `완전히 당긴 화살은 혼불로 폭발 (반경 ${f.radius}px, 피해 ${dmg(f.damage)}, 화상 ${num(f.burn)}초) · 짧게 쏘면 추적 혼불 ${f.wisps}개 (각 피해 ${dmg(f.wisp.damage)})`;
+  } else if (w?.kind === 'wand') {
+    const b = w.bolt;
+    return `연쇄 번개: ${b.chain + 1}명까지, 튈 때마다 −${pct(b.falloff)} (첫 피해 ${dmg(b.damage)}, 사거리 ${b.range}px)`;
+  }
+  switch (id) {
+    case 'plague_censer': return `반경 ${PLAGUE_CENSER.radius}px의 독 안개가 ${num(PLAGUE_CENSER.life)}초간 몸을 감싼다 (초당 피해 ${per(SKILL_BASE.plague_censer, PLAGUE_CENSER.interval)})`;
+    case 'bone_turret': return `${num(BONE_TURRET.life)}초간 ${num(BONE_TURRET.interval)}초마다 관통하는 뼈 파편을 쏜다 (피해 ${dmg(SKILL_BASE.bone_turret)}, 사거리 ${BONE_TURRET.range}px)`;
+    case 'death_orb': return `${num(DEATH_ORB.life)}초간 앞에 떠 있는 구슬: ${DEATH_ORB.reach}px 안에서 죽은 적이 폭발 (반경 ${DEATH_ORB.burst.radius}px, 피해 ${dmg(DEATH_ORB.burst.base)}) + 체력 ${pct(DEATH_ORB.heal)} 회복`;
+    case 'chain_prison': return `반경 ${CHAIN_PRISON.radius}px의 모든 적을 사슬로 ${num(CHAIN_PRISON.root)}초 속박 (행동 불가, 피해 ${dmg(SKILL_BASE.chain_prison)})`;
+    case 'rag_doll': return `${num(RAG_DOLL.life)}초간 작은 누더기 인형이 곁에서 적을 내려친다 (피해 ${dmg(SKILL_BASE.rag_doll)}, 체력 ${RAG_DOLL.hp})`;
+    case 'crimson_rain': return `앞 ${CRIMSON_RAIN.reach}px에 ${num(CRIMSON_RAIN.life)}초간 피의 바늘비 (타당 피해 ${dmg(SKILL_BASE.crimson_rain)} + 출혈, ${num(CRIMSON_RAIN.interval)}초마다)`;
+    case 'last_bell': return `화면의 모든 적에게 피해 ${dmg(SKILL_BASE.last_bell)} + 기절 ${num(LAST_BELL.stun)}초 (보스·중간 보스는 피해 ${dmg(LAST_BELL.boss)}, 기절 없음)`;
+    case 'requiem': return `${num(REQUIEM.life)}초간 처치마다 다른 스킬의 쿨다운 ${pct(REQUIEM.refund)} 반환 + 광란 질주 · 적중마다 체력 ${pct(REQUIEM.heal)} 회복`;
+    default: return '';
+  }
+}
+
 /** Lines for the item card (description, numbers, signature of a unique, affix). */
 export function itemLines(inst: ItemInstance): string[] {
   const def = ITEMS[inst.id];
   const out = [def.desc];
   const w = (WEAPONS as Record<string, (typeof WEAPONS)[keyof typeof WEAPONS]>)[inst.id];
-  if (w?.kind === 'melee') out.push(`피해 ${(w as MeleeWeapon).hits.map((h) => cardDamage(inst, h.damage)).join(' / ')}`);
+  if (w?.kind === 'melee') out.push(`피해 ${(w as MeleeWeapon).hits.map((h) => cardDamage(inst, h.damage) + (h.multi ? `×${h.multi.n}` : '')).join(' / ')}`);
   else if (w?.kind === 'bow') out.push(`피해 최대 ${cardDamage(inst, w.damage)} (충전)`);
   else if (w?.kind === 'shield') out.push(`정면 피해 -${pct(w.reduction)} · 패링 시 기절 ${num(w.parryStun)}초`);
   else if (w?.kind === 'staff') out.push(`피해 ${cardDamage(inst, w.flame.damage)} / ${num(w.flame.interval)}초 (누르고 있는 동안)`);
+  else if (w?.kind === 'wand') out.push(`피해 ${cardDamage(inst, w.bolt.damage)} / ${num(w.bolt.interval)}초 (누르고 있는 동안)`);
   else if (def.cooldown) out.push(`재사용 ${def.cooldown}초`);
   if (def.unique) {
     const sig = signatureText(inst.id, (b) => cardDamage(inst, b));

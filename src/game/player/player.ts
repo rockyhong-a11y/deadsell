@@ -2,16 +2,19 @@ import { Actor, type Entity } from '../entity';
 import { hitArea, isBehind, type DamageInfo, type DamageResult, type HitReport } from '../combat';
 import type { Interactable } from '../world';
 import { GRAVITY, MAX_FALL, TILE, DEBUG } from '../../engine/config';
-import { approach, clamp, lerp, overlaps, sign } from '../../engine/math';
+import { approach, clamp, lerp, overlaps, sign, type AABB } from '../../engine/math';
 import type { Btn } from '../../engine/input';
 import { moveBody } from '../physics';
 import { T } from '../tilemap';
 import { ITEMS } from '../items/items';
 import type { ItemInstance } from '../items/types';
-import { weaponDef, type BowWeapon, type DashSpec, type MeleeHit, type MeleeWeapon, type ShieldWeapon, type StaffWeapon, type Volley } from './weapons';
-import { SKILLS, type SkillDef } from './skills';
-import { Arrow, flameBurst, type Feel } from './projectiles';
+import { weaponDef, type BowWeapon, type DashSpec, type MeleeHit, type MeleeWeapon, type ShieldWeapon, type StaffWeapon, type Volley, type WandWeapon } from './weapons';
+import { CHAIN_HOOK, REQUIEM, SKILLS, type SkillDef } from './skills';
+import { Arrow, dragToward, explode, flameBurst, type Feel } from './projectiles';
+import { Glaive, Quake, Wisp, chainLightning } from './uniques';
 import { calcDamage } from './damage';
+import { dropLoot } from '../items/pickups';
+import { circleHitsBox, isReflectable } from '../enemies/projectiles';
 import { AFFIX, CRIT_MULT, FLASK, SPRINT } from '../rules';
 
 /**
@@ -61,6 +64,12 @@ interface Swing {
   dur: [number, number, number];
   fired: boolean;
   set: Set<number>;
+  /** a lash that lands several times (`hit.multi`): one once-per-target set for each of them */
+  sets: Set<number>[];
+  /** enemies a toll ring of this swing has already hurt (장례 종) */
+  tolled: Set<number>;
+  /** something was hit (applied) in this swing already (쌍월 칼날 counts the swings that connect) */
+  landed: boolean;
   queued: boolean;
   btn: Btn;
 }
@@ -70,11 +79,16 @@ interface BowState { slot: number; item: ItemInstance; def: BowWeapon; btn: Btn;
 interface ChargeState { slot: number; item: ItemInstance; def: MeleeWeapon; dash: DashSpec; btn: Btn; t: number; full: boolean }
 /** 철 도: the dash (`go`: invulnerable, slashing everything on its way) and the follow-through (`end`) */
 interface DashState { item: ItemInstance; dash: DashSpec; dir: 1 | -1; x0: number; t: number; phase: 'go' | 'end'; hit: Set<number> }
-/** 화염 지팡이: the attack held down, `tick` s to the next flame tick */
-interface StaffState { slot: number; item: ItemInstance; def: StaffWeapon; btn: Btn; t: number; tick: number; n: number }
-interface BlockState { slot: number; item: ItemInstance; def: ShieldWeapon; btn: Btn; t: number; reflected: WeakSet<object>; waved: boolean }
+/** 화염 지팡이 / 폭풍 지팡이: the attack held down, `tick` s to the next flame tick / lightning */
+interface StaffState { slot: number; item: ItemInstance; def: StaffWeapon | WandWeapon; btn: Btn; t: number; tick: number; n: number }
+/** `rewarded`: this block's parry has paid its reward already (shockwave, heal, bell: once per block) */
+interface BlockState { slot: number; item: ItemInstance; def: ShieldWeapon; btn: Btn; t: number; reflected: WeakSet<object>; rewarded: boolean }
 interface CastState { slot: number; item: ItemInstance; def: SkillDef; t: number; fired: boolean }
 interface LedgeState { t: number; x0: number; y0: number; x1: number; y1: number; dir: 1 | -1 }
+
+/** how the wisps of the soul fire bow and the embers of the ember blade look */
+const WISP_LOOK = { color: '#4fe3ff', core: '#e8fbff' };
+const EMBER_LOOK = { color: '#ffb347', core: '#fff3a0' };
 
 function godMode(): boolean {
   return DEBUG.god || !!(globalThis as { __ds?: { _god?: boolean } }).__ds?._god;
@@ -95,6 +109,8 @@ export class Player extends Actor {
   sprinting = false;
   /** 광란 질주: seconds of the kill-streak frenzy left (every movement is a sprint at once) */
   frenzyT = 0;
+  /** 진혼곡: seconds of the song left (kills refund the other skill's cooldown and keep the frenzy up, hits heal) */
+  requiemT = 0;
 
   private mode: Mode = 'free';
   private coyote = 0;
@@ -112,6 +128,11 @@ export class Player extends Actor {
   private rollCritSpent = false;
   /** seconds her next weapon hit stays a crit (위상 전이) */
   private nextCritT = 0;
+  /** the skill slot the song was sung from (the other one gets the refunds) and seconds until the next hit may heal */
+  private requiemSlot = -1;
+  private requiemHealT = 0;
+  /** 쌍월 칼날: swings that connected with each weapon slot since its last glaive */
+  private glaiveN: [number, number] = [0, 0];
   private rollT = 0;
   private rollDir: 1 | -1 = 1;
   private rollCd = 0;
@@ -262,13 +283,21 @@ export class Player extends Actor {
     w.addHitstop(feel.hitstop + (crit ? 0.03 : 0));
     w.shake(feel.shake + (crit ? 1 : 0), 0.12);
     w.audio.play(crit ? 'crit' : feel.sfx ?? 'hit', feel.vol !== undefined ? { vol: feel.vol } : undefined);
+    const wd = item ? weaponDef(item.id) : null;
+    const melee = wd?.kind === 'melee' ? wd : null;
+    if (melee?.leech && !this.dying) this.heal(res.amount * melee.leech); // (거머리 채찍: a share of the damage comes back)
+    // 진혼곡: every hit heals a little (not more often than `healCd`, so a flame that ticks ten times a second does not heal ten times)
+    if (this.requiemT > 0 && this.requiemHealT <= 0 && !this.dying) {
+      this.requiemHealT = REQUIEM.healCd;
+      this.heal(this.maxHp * REQUIEM.heal);
+    }
     if (res.killed && !this.dying) {
-      const wd = item ? weaponDef(item.id) : null;
-      const pct = (item?.affix === 'heal_on_kill' ? AFFIX.healPct : 0) + (wd?.kind === 'melee' ? wd.healOnKill ?? 0 : 0);
+      const pct = (item?.affix === 'heal_on_kill' ? AFFIX.healPct : 0) + (melee?.healOnKill ?? 0);
       if (pct > 0) {
         this.heal(Math.max(1, Math.round(this.maxHp * pct)));
         w.particles.emit('heal', this.x, this.y - 24, { count: 6 });
       }
+      if (melee?.killPieces) dropLoot(w, r.target.x, r.target.y, { pieces: melee.killPieces }); // (셀마의 대가위)
     }
   }
 
@@ -334,6 +363,7 @@ export class Player extends Actor {
       this.world.lights.add(this.x, this.y - 24, 70, '#9fe8ff', 0.3);
       if (this.frenzyT > 0) this.world.lights.add(this.x, this.y - 24, 96, SPRINT.after.frenzyColor, 0.55);
       if (this.nextCritT > 0) this.world.lights.add(this.x, this.y - 24, 60, '#c690ff', 0.5);
+      if (this.requiemT > 0) this.world.lights.add(this.x, this.y - 24, 84, '#ff4a58', 0.5 + 0.2 * Math.sin(this.world.time * 8));
       if (this.stf) this.world.lights.add(this.x + this.facing * 36, this.y - 30, 80, '#ff8a3c', 0.6);
     }
   }
@@ -387,6 +417,11 @@ export class Player extends Actor {
     this.sinceRoll += dt;
     this.sinceHurt += dt;
     if (this.nextCritT > 0) this.nextCritT -= dt;
+    this.requiemHealT -= dt;
+    if (this.requiemT > 0) {
+      this.requiemT = Math.max(0, this.requiemT - dt);
+      if (Math.random() < dt * 9) this.world.particles.emit('magic', this.x, this.y - 28, { count: 1, color: '#ffd0d8', w: 36, h: 44 });
+    }
     this.landT -= dt;
     this.djT -= dt;
     this.parryAnimT -= dt;
@@ -415,6 +450,7 @@ export class Player extends Actor {
         this.seenW[i] = run.weapons[i];
         this.combo[i] = 0;
         this.comboTimer[i] = 0;
+        this.glaiveN[i] = 0;
         const cur = this.atk?.slot === i || this.bow?.slot === i || this.blk?.slot === i || this.chg?.slot === i || this.stf?.slot === i;
         if (cur) this.cancelActions();
       }
@@ -627,6 +663,7 @@ export class Player extends Actor {
   /** A kill: `SPRINT.streakKills` of them, each within `SPRINT.streakWindow` s of the last, start the frenzy; every further kill refreshes it. */
   private onKillStreak(): void {
     const w = this.world;
+    if (this.requiemT > 0 && !this.dying) this.requiemKill();
     this.streak = w.time - this.lastKillT <= SPRINT.streakWindow ? this.streak + 1 : 1;
     this.lastKillT = w.time;
     // (once it runs, every kill refreshes it, however long since the last one)
@@ -642,6 +679,27 @@ export class Player extends Actor {
     w.fx.text(this.x, this.y - this.h - 14, '광란 질주!', SPRINT.after.frenzyColor);
     w.shake(1, 0.15);
     w.audio.play('crit', { pitch: 1.3 });
+  }
+
+  /** 진혼곡: she sings for `REQUIEM.life` s; `item` is the skill she sang it from (its slot is the one that gets no refunds). */
+  startRequiem(item: ItemInstance): void {
+    const w = this.world;
+    this.requiemT = REQUIEM.life;
+    this.requiemSlot = w.run.skills.indexOf(item);
+    w.fx.text(this.x, this.y - this.h - 14, '진혼곡', '#ff4a58');
+    w.fx.ring(this.x, this.y - 22, { radius: 52, color: '#ff4a58', life: 0.5 });
+    w.particles.emit('magic', this.x, this.y - 24, { count: 12, color: '#ffd0d8', w: 30, h: 40 });
+    w.audio.play('bell', { vol: 0.7, pitch: 1.4 });
+  }
+
+  /** A kill during the song: the other skill gets `REQUIEM.refund` of its cooldown back and the frenzy sprint starts (or is topped up). */
+  private requiemKill(): void {
+    const other = this.requiemSlot === 0 ? 1 : this.requiemSlot === 1 ? 0 : null;
+    if (other !== null && this.skillCooldown[other] > 0) {
+      this.skillCooldown[other] = Math.max(0, this.skillCooldown[other] - this.skillCooldownMax[other] * REQUIEM.refund);
+      this.world.fx.ring(this.x, this.y - 22, { radius: 30, color: '#ffd0d8', life: 0.25 });
+    }
+    this.startFrenzy();
   }
 
   /** The frenzy timer and the after-image buffer (every `SPRINT.after.interval` s while sprinting; the buffer drains when it ends). */
@@ -865,7 +923,7 @@ export class Player extends Actor {
       if (def.kind === 'melee' && def.dash) this.startCharge(slot, item, def, btn);
       else if (def.kind === 'melee') this.startSwing(slot, item, def, this.combo[slot] % def.hits.length, btn);
       else if (def.kind === 'bow') this.startBow(slot, item, def, btn);
-      else if (def.kind === 'staff') this.startStaff(slot, item, def, btn);
+      else if (def.kind === 'staff' || def.kind === 'wand') this.startStaff(slot, item, def, btn);
       else this.startBlock(slot, item, def, btn);
       return true;
     }
@@ -877,7 +935,10 @@ export class Player extends Actor {
     const k = item.affix === 'speed' ? AFFIX.speedMul : 1;
     this.mode = 'attack';
     this.combo[slot] = idx;
-    this.atk = { slot, item, def, idx, hit, t: 0, dur: [hit.windup * k, hit.active * k, hit.recover * k], fired: false, set: new Set(), queued: false, btn };
+    this.atk = {
+      slot, item, def, idx, hit, t: 0, dur: [hit.windup * k, hit.active * k, hit.recover * k], fired: false, set: new Set(),
+      sets: hit.multi ? Array.from({ length: hit.multi.n }, () => new Set<number>()) : [], tolled: new Set(), landed: false, queued: false, btn,
+    };
     this.anim?.playPhased(hit.anim, ...this.atk.dur);
     this.jumpCut = false;
   }
@@ -903,6 +964,7 @@ export class Player extends Actor {
       w.audio.play(h.swing);
       if (h.shoot) this.throwVolley(a, h.shoot);
       else w.fx.slash(this.x + this.facing * 4, this.y - 24, { dir: this.facing, radius: h.slash.radius, from: h.slash.from, to: h.slash.to, color: h.slash.color, width: h.slash.width, life: h.slash.life });
+      if (a.def.quake && this.onGround) this.releaseQuake(a);
     }
     if (a.fired && act && !a.hit.shoot) this.swingHit(a);
     // (a charging weapon is not chained by holding the button: holding charges it)
@@ -938,9 +1000,10 @@ export class Player extends Actor {
     this.gravityScale = 1;
   }
 
-  private hitBox(h: MeleeHit): { x: number; y: number; w: number; h: number } {
+  /** the box of a hit in front of her; `dy` moves it up (negative) or down */
+  private hitBox(h: MeleeHit, dy = 0): AABB {
     const b = h.box;
-    return { x: this.facing > 0 ? this.x + b.x : this.x - b.x - b.w, y: this.y + b.y, w: b.w, h: b.h };
+    return { x: this.facing > 0 ? this.x + b.x : this.x - b.x - b.w, y: this.y + b.y + dy, w: b.w, h: b.h };
   }
 
   /** Lunge magnetism: stop sliding once an enemy is already inside the swing (no overshooting through targets). */
@@ -960,26 +1023,50 @@ export class Player extends Actor {
   }
 
   private swingHit(a: Swing): void {
+    const m = a.hit.multi;
+    if (!m) {
+      this.strike(a, this.hitBox(a.hit), a.set);
+      return;
+    }
+    // a lash that lands `n` times: the box of lash i opens `gap` s after the one before (fanned `spread` px up and down) and hurts each enemy once
+    const upto = Math.min(m.n - 1, Math.floor((a.t - a.dur[0]) / m.gap));
+    for (let i = 0; i <= upto; i++) this.strike(a, this.hitBox(a.hit, (i - (m.n - 1) / 2) * m.spread), a.sets[i]);
+  }
+
+  /** One test of a swing's box (the single one, or one lash of several): whom it hits, how hard, and what the weapon's signature adds to each hit. */
+  private strike(a: Swing, box: AABB, set: Set<number>): void {
     const h = a.hit;
-    const box = this.hitBox(h);
+    const def = a.def;
     // the whip's tip: the outer `tip` px of the box
     const tip = h.tip ? { x: this.facing > 0 ? box.x + box.w - h.tip : box.x, y: box.y, w: h.tip, h: box.h } : null;
-    const first = a.def.critFirstAfterRoll !== undefined && !this.rollCritSpent && this.sinceRoll <= a.def.critFirstAfterRoll;
+    const first = def.critFirstAfterRoll !== undefined && !this.rollCritSpent && this.sinceRoll <= def.critFirstAfterRoll;
     const marked = this.nextCritT > 0;
     const infos = new Map<Actor, DamageInfo>();
+    const executed = new Set<Actor>();
     const reports = hitArea(this.world, box, 'player', (t) => {
-      const crit = h.crit === 'always' || (h.crit === 'behind' && isBehind(this, t)) || this.signatureCrit(a.def, t) || first || marked || (!!tip && overlaps(tip, t.hurtbox()));
+      const crit = h.crit === 'always' || (h.crit === 'behind' && isBehind(this, t)) || this.signatureCrit(def, t) || first || marked || (!!tip && overlaps(tip, t.hurtbox()));
       const info = this.damageInfo(a.item, h.damage, { dir: this.facing, knockback: h.knockback, knockup: h.knockup, stun: h.stun, crit, kind: 'melee' });
       if (crit) info.amount *= CRIT_MULT;
-      if (a.def.bleed) info.bleed = Math.max(info.bleed ?? 0, a.def.bleed);
-      if (a.def.burn) {
-        info.burn = Math.max(info.burn ?? 0, a.def.burn);
+      if (def.fullHpMul && this.hp >= this.maxHp - 0.01) info.amount *= def.fullHpMul;
+      if (h.execute) {
+        // 집행자의 대검: a boss takes a multiple; anything else below the line is finished off
+        if (t.isBoss) info.amount *= h.execute.boss;
+        else if (t.hp < t.maxHp * h.execute.below) {
+          info.amount = Math.max(info.amount, t.hp);
+          info.crit = true;
+          executed.add(t);
+        }
+      }
+      if (def.bleed) info.bleed = Math.max(info.bleed ?? 0, def.bleed);
+      if (def.burn) {
+        info.burn = Math.max(info.burn ?? 0, def.burn);
         info.burnDps = Math.max(info.burnDps ?? 0, AFFIX.burnDps);
       }
       infos.set(t, info);
       return info;
-    }, a.set);
-    if (reports.some((r) => r.result.applied)) {
+    }, set);
+    const applied = reports.filter((r) => r.result.applied);
+    if (applied.length) {
       if (first) this.rollCritSpent = true;
       if (marked) this.nextCritT = 0;
     }
@@ -987,6 +1074,53 @@ export class Player extends Actor {
       this.onDealt(r, a.item, infos.get(r.target)!, { hitstop: h.hitstop, shake: h.shake, sfx: h.hit });
       if (r.result.applied) this.world.particles.emit('spark', r.target.x, r.target.cy, { dir: this.facing, count: 3, color: h.slash.color });
     }
+    for (const r of applied) this.signatureHit(a, r, !!tip && overlaps(tip, r.target.hurtbox()), executed.has(r.target));
+    if (applied.length && !a.landed) {
+      a.landed = true;
+      if (def.glaive && ++this.glaiveN[a.slot] >= def.glaive.every) {
+        this.glaiveN[a.slot] = 0;
+        this.throwGlaive(a, def.glaive);
+      }
+    }
+  }
+
+  /**
+   * What a hit that landed adds for the unique weapons of docs/CONTENT4.md §5.3: the executioner's mark, further bleed stacks (셀마의 대가위), the
+   * toll ring (장례 종), the seeking ember (신더의 불씨검) and the pull of a whip's tip (거머리 채찍, 아홉 꼬리 채찍; heavy enemies stay where they are).
+   */
+  private signatureHit(a: Swing, r: HitReport, tipHit: boolean, executed: boolean): void {
+    const def = a.def;
+    const t = r.target;
+    const w = this.world;
+    if (executed && r.result.killed) w.fx.text(t.x, t.y - t.h - 8, '처형!', '#ff4a58');
+    // (the hit itself added one stack)
+    if (def.bleedStacks && !r.result.killed) t.status.bleedStacks = Math.min(AFFIX.bleedStacks, t.status.bleedStacks + def.bleedStacks - 1);
+    if (def.toll) explode(this, a.item, t.cx, t.cy, { radius: def.toll.radius, base: def.toll.damage, kind: 'toll', extra: { stun: def.toll.stun }, already: a.tolled });
+    if (def.ember && w.rng.chance(def.ember.chance)) {
+      const e = def.ember;
+      w.spawn(new Wisp(t.cx, t.cy - 4, -Math.PI / 2 + w.rng.range(-0.6, 0.6), this, a.item, e.damage, e, EMBER_LOOK, { hitstop: 0.02, shake: 0.5, sfx: 'hit' }, t));
+    }
+    if (tipHit && def.tipPull && !r.result.killed && t.knockbackTaken >= CHAIN_HOOK.pullMinKnockback) {
+      dragToward(t, this.x + this.facing * (this.w / 2 + t.w / 2 + 4), null, def.tipPull);
+    }
+  }
+
+  /** 쌍월 칼날: the glaive leaves her hand, flying the way she faces. */
+  private throwGlaive(a: Swing, g: NonNullable<MeleeWeapon['glaive']>): void {
+    const w = this.world;
+    w.spawn(new Glaive(this.x + this.facing * 14, this.y - 26, this, a.item, g.damage, this.facing, g));
+    w.audio.play('swing', { pitch: 1.5 });
+  }
+
+  /** 여교도관의 종철퇴: a slam on the ground sends a shockwave along the floor both ways (one set: an enemy is hurt by the pair of them once). */
+  private releaseQuake(a: Swing): void {
+    const w = this.world;
+    const x = this.x + this.facing * 40;
+    const seen = new Set<number>();
+    for (const dir of [1, -1] as const) w.spawn(new Quake(x, this.y, dir, this, a.item, a.def.quake!, seen));
+    w.shake(4, 0.2);
+    w.particles.emit('slam', x, this.y, { count: 10 });
+    w.audio.play('slam', { vol: 0.8 });
   }
 
   /** 투척 단검: the volley leaves her hand when the windup ends, the knives one above the other, each bleeding its target. */
@@ -1044,26 +1178,31 @@ export class Player extends Actor {
     const w = this.world;
     const c = this.bowCharge;
     const d = b.def;
-    const frac = d.minFrac + (1 - d.minFrac) * c;
-    const speed = lerp(d.minSpeed, d.maxSpeed, c);
-    // a fully drawn volley bow fans out several arrows, each a share of the damage; every other shot is one arrow
-    const fan = d.volley && c >= 1 ? d.volley : null;
-    const n = fan ? fan.n : 1;
-    const marked = this.nextCritT > 0;
-    for (let i = 0; i < n; i++) {
-      const ang = fan && n > 1 ? ((i / (n - 1)) * 2 - 1) * fan.spread * (Math.PI / 180) : 0;
-      const info = this.damageInfo(b.item, d.damage * (fan ? fan.frac : frac), { kind: 'ranged', dir: this.facing, knockback: 50 + 150 * c, knockup: c >= 1 ? 60 : undefined, freeze: d.freeze });
-      if (marked) {
-        info.crit = true;
-        info.amount *= CRIT_MULT;
+    const sf = d.soulfire;
+    if (sf && c < 1) this.fireWisps(b, sf);
+    else {
+      const frac = d.minFrac + (1 - d.minFrac) * c;
+      const speed = lerp(d.minSpeed, d.maxSpeed, c);
+      // a fully drawn volley bow fans out several arrows, each a share of the damage; every other shot is one arrow
+      const fan = d.volley && c >= 1 ? d.volley : null;
+      const n = fan ? fan.n : 1;
+      const marked = this.nextCritT > 0;
+      for (let i = 0; i < n; i++) {
+        const ang = fan && n > 1 ? ((i / (n - 1)) * 2 - 1) * fan.spread * (Math.PI / 180) : 0;
+        const info = this.damageInfo(b.item, d.damage * (fan ? fan.frac : frac), { kind: 'ranged', dir: this.facing, knockback: 50 + 150 * c, knockup: c >= 1 ? 60 : undefined, freeze: d.freeze });
+        if (marked) {
+          info.crit = true;
+          info.amount *= CRIT_MULT;
+        }
+        const arrow = new Arrow(
+          this.x + this.facing * 14, this.y - 26, this.facing * Math.cos(ang) * speed, Math.sin(ang) * speed, this, b.item, info,
+          { hitstop: 0.04 + 0.04 * c, shake: 1 + c, sfx: 'arrow_hit' },
+          { pierce: !!d.pierce && c >= 1, range: d.range, ...d.look, burst: sf ? { radius: sf.radius, base: sf.damage, burn: sf.burn } : undefined },
+        );
+        w.spawn(arrow);
       }
-      const arrow = new Arrow(
-        this.x + this.facing * 14, this.y - 26, this.facing * Math.cos(ang) * speed, Math.sin(ang) * speed, this, b.item, info,
-        { hitstop: 0.04 + 0.04 * c, shake: 1 + c, sfx: 'arrow_hit' }, { pierce: !!d.pierce && c >= 1, range: d.range, ...d.look },
-      );
-      w.spawn(arrow);
+      if (marked) this.nextCritT = 0;
     }
-    if (marked) this.nextCritT = 0;
     w.audio.play('bow_shoot', { pitch: 0.9 + 0.2 * c });
     w.particles.emit('spark', this.x + this.facing * 16, this.y - 26, { dir: this.facing, count: 2 });
     this.vx -= this.facing * 40 * c;
@@ -1071,6 +1210,15 @@ export class Player extends Actor {
     b.phase = 'shoot';
     b.t = 0;
     this.anim?.playFor('bow_shoot', 0.2);
+  }
+
+  /** 혼불 활: a shot let go before the draw is full sends `wisps` homing wisps, fanned a little apart, instead of an arrow. */
+  private fireWisps(b: BowState, sf: NonNullable<BowWeapon['soulfire']>): void {
+    const base = this.facing > 0 ? 0 : Math.PI;
+    for (let i = 0; i < sf.wisps; i++) {
+      const spread = sf.wisps > 1 ? ((i / (sf.wisps - 1)) * 2 - 1) * 0.35 : 0;
+      this.world.spawn(new Wisp(this.x + this.facing * 14, this.y - 26, base + spread, this, b.item, sf.wisp.damage, sf.wisp, WISP_LOOK, { hitstop: 0.03, shake: 0.5, sfx: 'hit' }));
+    }
   }
 
   private endBow(): void {
@@ -1169,7 +1317,7 @@ export class Player extends Actor {
   }
 
   // ---------------------------------------------------------------- staff (hold to breathe a flame cone)
-  private startStaff(slot: number, item: ItemInstance, def: StaffWeapon, btn: Btn): void {
+  private startStaff(slot: number, item: ItemInstance, def: StaffWeapon | WandWeapon, btn: Btn): void {
     this.mode = 'staff';
     this.stf = { slot, item, def, btn, t: 0, tick: 0.1, n: 0 };
     this.jumpCut = false;
@@ -1185,12 +1333,22 @@ export class Player extends Actor {
     this.tryJump();
     this.variableJump(dt);
     if (inp.pressedWithin('down', JUMP_BUFFER) && !this.onGround && this.trySlam()) return;
-    const f = s.def.flame;
+    const speed = s.item.affix === 'speed' ? AFFIX.speedMul : 1;
     s.tick -= dt;
     while (s.tick <= 0) {
-      s.tick += f.interval * (s.item.affix === 'speed' ? AFFIX.speedMul : 1);
-      flameBurst(this, s.item, this.x + this.facing * 16, this.y - 30, this.facing, { range: f.range, spread: f.spread, base: f.damage, burn: f.burn });
-      if (s.n++ % 2 === 0) this.world.audio.play('swing', { vol: 0.15, pitch: 0.6 });
+      const tipX = this.x + this.facing * 16;
+      const tipY = this.y - 30;
+      if (s.def.kind === 'staff') {
+        const f = s.def.flame;
+        s.tick += f.interval * speed;
+        flameBurst(this, s.item, tipX, tipY, this.facing, { range: f.range, spread: f.spread, base: f.damage, burn: f.burn });
+        if (s.n++ % 2 === 0) this.world.audio.play('swing', { vol: 0.15, pitch: 0.6 });
+      } else {
+        // 폭풍 지팡이: a chain lightning at the nearest enemy ahead (nothing in reach: only a crackle at the tip)
+        const f = s.def.bolt;
+        s.tick += f.interval * speed;
+        if (!chainLightning(this, s.item, tipX, tipY, this.facing, f).length) this.world.particles.emit('spark', tipX, tipY, { count: 1, color: '#9fe8ff' });
+      }
     }
     if (!inp.isDown(s.btn) && s.t >= 0.12) {
       this.stf = null;
@@ -1201,7 +1359,7 @@ export class Player extends Actor {
   // ---------------------------------------------------------------- shield
   private startBlock(slot: number, item: ItemInstance, def: ShieldWeapon, btn: Btn): void {
     this.mode = 'block';
-    this.blk = { slot, item, def, btn, t: 0, reflected: new WeakSet(), waved: false };
+    this.blk = { slot, item, def, btn, t: 0, reflected: new WeakSet(), rewarded: false };
     this.parryAnimT = 0;
     this.anim?.play('shield_block', true);
   }
@@ -1229,10 +1387,18 @@ export class Player extends Actor {
       if (typeof fn !== 'function' || e.dead || b.reflected.has(e)) continue;
       const dx = (e.x - this.x) * this.facing;
       if (dx < -6 || dx > 48 || Math.abs(e.y - (this.y - 22)) > 34) continue;
-      b.reflected.add(e);
-      fn.call(e, this);
+      this.reflectShot(e, b);
       this.parryFeedback(null);
     }
+  }
+
+  /** Send a shot back (once per block); a shield with a `bell` hits harder with it: `reflectMul` times the damage it had. */
+  private reflectShot(e: Entity, b: BlockState): void {
+    b.reflected.add(e);
+    const shot = e as unknown as { damage?: number; reflect: (by: Actor) => void };
+    const dmg = shot.damage;
+    shot.reflect(this);
+    if (b.def.bell && typeof dmg === 'number') shot.damage = Math.round(dmg * b.def.bell.reflectMul);
   }
 
   private parryFeedback(attacker: Actor | null): void {
@@ -1250,11 +1416,35 @@ export class Player extends Actor {
     w.fx.screenFlash('#ffffff', 0.12, 0.3);
     w.addHitstop(0.12);
     w.shake(3, 0.15);
-    if (b?.def.shockwave && !b.waved) {
-      b.waved = true;
-      this.parryShockwave(b.item, b.def.shockwave);
+    if (b && !b.rewarded) {
+      // what a parry pays, once per block: the shockwave, the healing, the bell
+      b.rewarded = true;
+      if (b.def.shockwave) this.parryShockwave(b.item, b.def.shockwave);
+      if (b.def.parryHeal) {
+        this.heal(Math.max(1, Math.round(this.maxHp * b.def.parryHeal)));
+        w.particles.emit('heal', this.x, this.y - 24, { count: 8 });
+      }
+      if (b.def.bell) this.parryBell(b, b.def.bell);
     }
     if (attacker && b?.def.counter) this.parryCounter(attacker, b.item, b.def.counter);
+  }
+
+  /** 종의 방패: a parry tolls: every enemy within `radius` px is stunned and every enemy shot in reach is sent back at `reflectMul` times the damage. */
+  private parryBell(b: BlockState, bell: { radius: number; stun: number }): void {
+    const w = this.world;
+    const cx = this.x;
+    const cy = this.y - 20;
+    for (const a of w.actors) {
+      if (a.team !== 'enemy' || !a.targetable || !circleHitsBox(cx, cy, bell.radius, a.hurtbox())) continue;
+      a.status.stun = Math.max(a.status.stun, bell.stun);
+      w.particles.emit('spark', a.cx, a.cy, { count: 4, color: '#ffd9a0' });
+    }
+    for (const e of w.entities) {
+      if (e.dead || !isReflectable(e) || e.team !== 'enemy' || b.reflected.has(e) || Math.hypot(e.x - cx, e.y - cy) > bell.radius) continue;
+      this.reflectShot(e, b);
+    }
+    w.fx.ring(cx, this.y - 4, { radius: bell.radius, color: '#ffd9a0', life: 0.45, flat: 0.5 });
+    w.audio.play('bell', { vol: 0.9 });
   }
 
   /** 가시 방패: a parry strikes the attacker back (unblockable) and makes it bleed. */
@@ -1305,19 +1495,22 @@ export class Player extends Actor {
     return null;
   }
 
-  /** Shield block: -80 % damage, sparks, no stagger. */
+  /** Shield block: -80 % damage, sparks, no stagger. In the first `fullBlock` s of a block (뼈 성벽) nothing gets through at all. */
   private blockHit(info: DamageInfo, b: BlockState): DamageResult {
     const w = this.world;
-    const amount = Math.max(1, Math.round(info.amount * (1 - b.def.reduction)));
+    const wall = b.def.fullBlock !== undefined && b.t < b.def.fullBlock;
+    const amount = wall ? 0 : Math.max(1, Math.round(info.amount * (1 - b.def.reduction)));
     this.hp -= amount;
     this.invuln = Math.max(this.invuln, 0.1);
     this.vx = (info.dir || -this.facing) * 90;
-    w.fx.damageNumber(this.x, this.y - this.h - 4, amount, info);
+    if (wall) w.fx.text(this.x, this.y - this.h - 14, '완전 방어', '#f0e6d2');
+    else w.fx.damageNumber(this.x, this.y - this.h - 4, amount, info);
     w.particles.emit('spark', this.x + this.facing * 14, this.y - 24, { dir: this.facing, count: 6, color: '#ffe9a8' });
     w.audio.play('block');
     w.shake(1.5, 0.12);
     w.addHitstop(0.04);
     this.flash = 0.06;
+    if (wall) return { applied: false, amount: 0, killed: false, blocked: true };
     if (this.hp <= 0) {
       this.hp = 0;
       this.die(info);

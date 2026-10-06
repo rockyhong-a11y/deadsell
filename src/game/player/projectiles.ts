@@ -15,16 +15,17 @@ import { AFFIX } from '../rules';
 /** How a hit should feel (hit-stop seconds, camera shake, sfx, and the sfx volume when it should be quiet: a flame ticks many times a second). */
 export interface Feel { hitstop: number; shake: number; sfx?: Sfx; vol?: number }
 
-const sgn = (v: number) => (v < 0 ? -1 : 1);
+export const sgn = (v: number) => (v < 0 ? -1 : 1);
 /** unique items (docs/CONTENT3.md §5): bone-white outline / sparks */
 const BONE = '#f0e6d2';
 
 // ---------------------------------------------------------------------------
 /**
  * What sets a shot apart from the plain arrow: it pierces every enemy in its path (골수 활: each is hit once), vanishes after `range` px
- * (중석궁), is drawn with an `outline` colour and `scale` (서리 활, 중석궁) or as a spinning `knife` (투척 단검).
+ * (중석궁), is drawn with an `outline` colour and `scale` (서리 활, 중석궁) or as a spinning `knife` (투척 단검), or bursts into soul fire
+ * where it lands (혼불 활: `burst` = radius px, damage base, burn seconds).
  */
-export interface ArrowOpts { pierce?: boolean; range?: number; outline?: string; scale?: number; knife?: boolean }
+export interface ArrowOpts { pierce?: boolean; range?: number; outline?: string; scale?: number; knife?: boolean; burst?: { radius: number; base: number; burn: number } }
 
 /** Arrow shot by the heroine or her turret: hits the first enemy, sticks in walls (see `ArrowOpts`). */
 export class Arrow extends Entity {
@@ -35,6 +36,7 @@ export class Arrow extends Entity {
   private stuck = 0;
   private ang: number;
   private spin = 0;
+  private burst = false;
   private readonly pierced: Set<number> | undefined;
 
   constructor(
@@ -84,6 +86,7 @@ export class Arrow extends Entity {
         this.vx = this.vy = 0;
         w.particles.emit('spark', this.x, this.y, { dir: -Math.cos(this.ang) > 0 ? 1 : -1, count: 4 });
         w.audio.play('arrow_hit', { vol: 0.5 });
+        this.soulBurst();
         return;
       }
       const reports = hitArea(w, this.bounds, 'player', this.info, this.pierced);
@@ -94,10 +97,19 @@ export class Arrow extends Entity {
         }
         if (!this.opts.pierce) {
           this.dead = true;
+          this.soulBurst();
           return;
         }
       }
     }
+  }
+
+  /** a soul fire arrow bursts once, where it hit something or stuck in a wall */
+  private soulBurst(): void {
+    const b = this.opts.burst;
+    if (!b || this.burst) return;
+    this.burst = true;
+    explode(this.owner, this.item, this.x, this.y, { radius: b.radius, base: b.base, kind: 'soul', extra: { burn: b.burn, burnDps: AFFIX.burnDps } });
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
@@ -153,7 +165,7 @@ export const GRENADE = {
 } as const;
 
 /** Every kind of blast `explode` makes. */
-export type BlastKind = 'fire' | 'ice' | 'corpse' | 'stun' | 'magnet' | 'cluster' | 'wave';
+export type BlastKind = 'fire' | 'ice' | 'corpse' | 'stun' | 'magnet' | 'cluster' | 'wave' | 'toll' | 'soul' | 'death';
 
 export interface ExplosionOpts {
   radius: number;
@@ -161,6 +173,8 @@ export interface ExplosionOpts {
   kind: BlastKind;
   /** added to what every enemy in the blast takes (섬광탄: the stun; 거부의 파동: the knockback) */
   extra?: Partial<DamageInfo>;
+  /** enemies (ids) it must not hit, and that it adds the ones it hits to (장례 종: a swing's rings hurt each enemy once) */
+  already?: Set<number>;
 }
 
 /** How each blast hits (knockback / knock-up, status) and how it looks and sounds. */
@@ -175,6 +189,9 @@ const BLAST: Record<BlastKind, {
   magnet: { knockback: 0, knockup: 0, particle: 'magic', count: 24, ring: '#c690ff', glow: '#b07cff', shake: 3, sfx: 'explosion' },
   cluster: { knockback: 130, knockup: 90, particle: 'explosion', count: 20, ring: '#ffd23f', glow: '#ffc04a', shake: 3, sfx: 'explosion' },
   wave: { knockback: 0, knockup: 60, particle: 'spark', count: 18, ring: '#9bff7a', glow: '#9bff7a', shake: 5, sfx: 'slam' },
+  toll: { knockback: 0, knockup: 0, hit: { hitstun: 0 }, particle: 'spark', count: 10, ring: '#d9a066', glow: '#d9a066', shake: 1.5, sfx: 'bell' },
+  soul: { knockback: 90, knockup: 50, particle: 'magic', count: 20, ring: '#4fe3ff', glow: '#4fe3ff', shake: 2, sfx: 'explosion' },
+  death: { knockback: 120, knockup: 80, particle: 'explosion', count: 16, ring: '#c8324a', glow: '#b02040', shake: 2.5, sfx: 'explosion', debris: '#7a1f2a' },
 };
 
 /** 시체 폭탄 numbers (skills.ts `CORPSE_BOMB`): blast radius, and the one chain burst of every enemy the blast kills. */
@@ -211,7 +228,7 @@ export function explode(owner: Player, item: ItemInstance, x: number, y: number,
     });
     infos.set(t, info);
     return info;
-  });
+  }, o.already);
   for (const r of reports) owner.onDealt(r, item, infos.get(r.target)!, { hitstop: 0.06, shake: 2 });
   w.particles.emit(s.particle, x, y, { count: s.count, power: o.radius / 40 });
   if (s.debris) w.particles.emit('debris', x, y, { count: 8, color: s.debris, power: o.radius / 40 });
@@ -224,7 +241,7 @@ export function explode(owner: Player, item: ItemInstance, x: number, y: number,
 }
 
 /** Move an enemy `step` px toward (tx, ty) (ty = null: sideways only) unless a wall is in the way. True when it moved. */
-function dragToward(a: Actor, tx: number, ty: number | null, step: number): boolean {
+export function dragToward(a: Actor, tx: number, ty: number | null, step: number): boolean {
   const dx = tx - a.x;
   const dy = ty === null ? 0 : ty - a.cy;
   const d = Math.hypot(dx, dy);
@@ -426,7 +443,10 @@ export class MagnetWell extends Entity {
 }
 
 // ---------------------------------------------------------------------------
-/** Crossbow turret: deploys, then shoots arrows at the nearest enemy within 220 px for 10 s. */
+/** What makes another turret differ from the crossbow turret: seconds it stands, reach (px), seconds between shots, piercing shards (뼈 포탑) and their outline colour. */
+export interface TurretSpec { life: number; range: number; interval: number; pierce?: boolean; outline?: string }
+
+/** Crossbow turret: deploys, then shoots arrows at the nearest enemy within 220 px for 10 s (a `TurretSpec` changes that). */
 export class Turret extends Entity {
   z = 15;
   static readonly LIFE = 10;
@@ -436,12 +456,18 @@ export class Turret extends Entity {
   private t = 0;
   private cd = 0.55;
   private shootT = 0;
+  private readonly life: number;
+  private readonly range: number;
+  private readonly interval: number;
 
-  constructor(x: number, y: number, readonly owner: Player, readonly item: ItemInstance, readonly base: number, face: 1 | -1) {
+  constructor(x: number, y: number, readonly owner: Player, readonly item: ItemInstance, readonly base: number, face: 1 | -1, readonly spec?: TurretSpec) {
     super(x, y);
     this.w = 20;
     this.h = 24;
     this.facing = face;
+    this.life = spec?.life ?? Turret.LIFE;
+    this.range = spec?.range ?? Turret.RANGE;
+    this.interval = spec?.interval ?? Turret.INTERVAL;
   }
 
   init(): void {
@@ -453,7 +479,7 @@ export class Turret extends Entity {
     this.t += dt;
     super.update(dt);
     const w = this.world;
-    if (this.t >= Turret.LIFE) {
+    if (this.t >= this.life) {
       w.particles.emit('smoke', this.x, this.y - 12, { count: 8 });
       this.dead = true;
       return;
@@ -467,7 +493,7 @@ export class Turret extends Entity {
     const target = this.pickTarget();
     if (target) this.facing = target.x >= this.x ? 1 : -1;
     if (target && this.cd <= 0) {
-      this.cd = Turret.INTERVAL;
+      this.cd = this.interval;
       this.shootT = 0.3;
       this.anim!.playFor('turret_shoot', 0.3);
       const sx = this.x + this.facing * 12;
@@ -478,7 +504,7 @@ export class Turret extends Entity {
       const d = Math.hypot(dx, dy) || 1;
       const speed = 480;
       const info = this.owner.damageInfo(this.item, this.base, { kind: 'ranged', dir: sgn(dx) });
-      w.spawn(new Arrow(sx, sy, (dx / d) * speed, (dy / d) * speed, this.owner, this.item, info, { hitstop: 0.02, shake: 0 }));
+      w.spawn(new Arrow(sx, sy, (dx / d) * speed, (dy / d) * speed, this.owner, this.item, info, { hitstop: 0.02, shake: 0 }, { pierce: this.spec?.pierce, outline: this.spec?.outline }));
       w.audio.play('turret', { vol: 0.6 });
       w.particles.emit('spark', sx, sy, { dir: this.facing, count: 2 });
     }
@@ -487,7 +513,7 @@ export class Turret extends Entity {
   private pickTarget(): Actor | null {
     const w = this.world;
     let best: Actor | null = null;
-    let bd = Turret.RANGE;
+    let bd = this.range;
     for (const a of w.actors) {
       if (a.team !== 'enemy' || !a.targetable) continue;
       const d = Math.hypot(a.cx - this.x, a.cy - (this.y - 14));
@@ -500,11 +526,11 @@ export class Turret extends Entity {
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
-    const left = Turret.LIFE - this.t;
+    const left = this.life - this.t;
     const alpha = left < 1.2 ? 0.45 + 0.55 * Math.abs(Math.sin(this.t * 14)) : 1;
     // the turret sheet is centred (anchor 24,24): lift it so the base sits on the floor
-    this.anim?.draw(ctx, this.x, this.y - 14, this.facing < 0, { alpha });
-    this.world.lights.add(this.x, this.y - 14, 26, '#ffd27a', 0.4);
+    this.anim?.draw(ctx, this.x, this.y - 14, this.facing < 0, { alpha, outline: this.spec?.outline });
+    this.world.lights.add(this.x, this.y - 14, 26, this.spec?.outline ?? '#ffd27a', 0.4);
   }
 }
 
@@ -943,7 +969,7 @@ export function flameBurst(owner: Player, item: ItemInstance, x: number, y: numb
 }
 
 /** Nearest living enemy to (x, y) within `range` px that the point can see (not through walls), optionally not one of `skip`. */
-function nearestEnemy(w: Player['world'], x: number, y: number, range: number, skip?: Set<Actor>): Actor | null {
+export function nearestEnemy(w: Player['world'], x: number, y: number, range: number, skip?: Set<Actor>): Actor | null {
   let best: Actor | null = null;
   let bd = range;
   for (const a of w.actors) {
@@ -960,10 +986,35 @@ function nearestEnemy(w: Player['world'], x: number, y: number, range: number, s
 /** 테슬라 코일 numbers: seconds it stands, seconds between zaps, reach (px), extra targets a zap chains to and how far (px) a chain jumps. */
 export interface TeslaSpec { life: number; interval: number; range: number; chain: number; chainRange: number }
 
-interface Arc { x0: number; y0: number; x1: number; y1: number; age: number }
+export interface Arc { x0: number; y0: number; x1: number; y1: number; age: number }
 /** seconds a lightning arc stays on screen, and the height (px) of the coil's tip above the floor */
-const ARC_LIFE = 0.14;
+export const ARC_LIFE = 0.14;
 const COIL_TOP = 30;
+
+/** The arcs: a jagged line from tip to target, redrawn every frame so it crackles (blue glow, white core), fading with age. */
+export function drawArcs(ctx: CanvasRenderingContext2D, arcs: readonly Arc[], alpha = 1): void {
+  ctx.save();
+  for (const a of arcs) {
+    const n = 6;
+    const dx = a.x1 - a.x0;
+    const dy = a.y1 - a.y0;
+    const len = Math.hypot(dx, dy) || 1;
+    for (const [lw, col] of [[3, '#4fb8ff'], [1, '#ffffff']] as const) {
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = col;
+      ctx.globalAlpha = alpha * (1 - a.age / ARC_LIFE);
+      ctx.beginPath();
+      ctx.moveTo(a.x0, a.y0);
+      for (let i = 1; i < n; i++) {
+        const j = (Math.random() - 0.5) * 10;
+        ctx.lineTo(a.x0 + (dx * i) / n - (dy / len) * j, a.y0 + (dy * i) / n + (dx / len) * j);
+      }
+      ctx.lineTo(a.x1, a.y1);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
 
 /** 테슬라 코일: stands for `life` s and zaps the nearest enemy in reach every `interval` s; the bolt jumps on to `chain` more. */
 export class TeslaCoil extends Entity {
@@ -1042,27 +1093,8 @@ export class TeslaCoil extends Entity {
     ctx.beginPath();
     ctx.arc(x, y - COIL_TOP + 1, 4.5, 0, Math.PI * 2);
     ctx.fill();
-    // the arcs: a jagged line from tip to target, redrawn every frame so it crackles
-    for (const a of this.arcs) {
-      const n = 6;
-      const dx = a.x1 - a.x0;
-      const dy = a.y1 - a.y0;
-      const len = Math.hypot(dx, dy) || 1;
-      for (const [lw, col] of [[3, '#4fb8ff'], [1, '#ffffff']] as const) {
-        ctx.lineWidth = lw;
-        ctx.strokeStyle = col;
-        ctx.globalAlpha = alpha * (1 - a.age / ARC_LIFE);
-        ctx.beginPath();
-        ctx.moveTo(a.x0, a.y0);
-        for (let i = 1; i < n; i++) {
-          const j = (Math.random() - 0.5) * 10;
-          ctx.lineTo(a.x0 + (dx * i) / n - (dy / len) * j, a.y0 + (dy * i) / n + (dx / len) * j);
-        }
-        ctx.lineTo(a.x1, a.y1);
-        ctx.stroke();
-      }
-    }
     ctx.restore();
+    drawArcs(ctx, this.arcs, alpha);
     this.world.lights.add(this.x, this.y - COIL_TOP, 40, '#8fe3ff', (0.5 + 0.2 * glow) * alpha);
   }
 }

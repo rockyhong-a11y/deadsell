@@ -101,6 +101,8 @@ export abstract class Actor extends Entity {
   hitstun = 0;
   /** 1 = full knockback, 0 = immovable */
   knockbackTaken = 1;
+  /** the Iron Matron or a mid-boss: executions, the last bell and chains treat it differently (docs/CONTENT4.md §5.3) */
+  isBoss = false;
   /** playing a death animation: not targetable, removed when it finishes */
   dying = false;
   status: Status = { burn: 0, burnDps: 0, bleed: 0, bleedStacks: 0, freeze: 0, stun: 0, dotTimer: 0 };

@@ -271,10 +271,13 @@ describe('codex previews point at real sheets and animations (public/assets/spri
     expect(skills.get('corpse_bomb')!.preview.steps[0].anim).toBe('throw');
     for (const id of ['bone_spikes', 'soul_lantern']) expect(skills.get(id)!.preview.steps[0].anim, id).toBe('deploy');
     expect(skills.get('chain_hook')!.preview.steps[0].anim).toBe('throw');
-    for (const id of ['stun_grenade', 'magnet_grenade', 'cluster_grenade', 'phaser', 'tornado']) expect(skills.get(id)!.preview.steps[0].anim, id).toBe('throw');
-    for (const id of ['tesla_coil', 'flame_turret', 'wave_of_denial']) expect(skills.get(id)!.preview.steps[0].anim, id).toBe('deploy');
-    // the skills drawn in code (spikes, flames, the hook, coil, flame turret, phaser, wave, tornado) have no sprite of their own: only the cast is shown
-    const inCode = ['bone_spikes', 'soul_lantern', 'chain_hook', 'tesla_coil', 'flame_turret', 'phaser', 'wave_of_denial', 'tornado'];
+    for (const id of ['stun_grenade', 'magnet_grenade', 'cluster_grenade', 'phaser', 'tornado', 'death_orb', 'crimson_rain']) expect(skills.get(id)!.preview.steps[0].anim, id).toBe('throw');
+    for (const id of ['tesla_coil', 'flame_turret', 'wave_of_denial', 'plague_censer', 'bone_turret', 'chain_prison', 'rag_doll', 'last_bell', 'requiem']) expect(skills.get(id)!.preview.steps[0].anim, id).toBe('deploy');
+    // the skills drawn in code (spikes, flames, the hook, coil, flame turret, phaser, wave, tornado, the unique skills but the bone turret) have no sprite of their own: only the cast is shown
+    const inCode = [
+      'bone_spikes', 'soul_lantern', 'chain_hook', 'tesla_coil', 'flame_turret', 'phaser', 'wave_of_denial', 'tornado',
+      'plague_censer', 'death_orb', 'chain_prison', 'rag_doll', 'crimson_rain', 'last_bell', 'requiem',
+    ];
     for (const e of skills.values()) expect(e.preview.prop?.sheet, e.id).toBe(inCode.includes(e.id) ? undefined : 'projectiles');
   });
 
@@ -338,7 +341,7 @@ describe('codex numbers come from the game tables (no drift)', () => {
       if (w.kind !== 'melee') continue;
       const combo = e.rows.find((r) => r.label === '콤보')!.text;
       expect(combo, e.id).toContain(`${w.hits.length}연격`);
-      expect(combo, e.id).toContain(w.hits.map((h) => h.damage).join(' / '));
+      expect(combo, e.id).toContain(w.hits.map((h) => h.damage + (h.multi ? `×${h.multi.n}` : '')).join(' / '));
     }
     expect(byId('weapon').get('spear')!.rows.find((r) => r.label === '치명타')!.text).toContain('3타');
     expect(byId('weapon').get('twin_daggers')!.rows.find((r) => r.label === '치명타')!.text).toContain('등 뒤');

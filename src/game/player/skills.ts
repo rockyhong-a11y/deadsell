@@ -3,6 +3,7 @@ import type { Actor } from '../entity';
 import type { ItemId, ItemInstance } from '../items/types';
 import type { Player } from './player';
 import { BoneSpikes, ChainHook, FlameTurret, Grenade, SoulFlames, TeslaCoil, Tornado, Turret, WolfTrap, denialWave, type GrenadeSpec, type GrenadeType } from './projectiles';
+import { ChainPrison, DeathOrb, NeedleRain, PlagueAura, lastBell, summonDoll } from './uniques';
 
 /**
  * Skills (skill1 / skill2). Cooldown lives in ITEMS[id].cooldown; numbers here.
@@ -24,12 +25,14 @@ export interface SkillDef {
  * Base damage per skill (fire grenade blast, ice grenade blast, one turret arrow, wolf trap bite; of the unique skills of
  * docs/CONTENT3.md §5: 시체 폭탄 blast, one 뼈 가시, one 영혼 등불 touch, 사슬 갈고리 hit; and of the ordinary skills of
  * docs/CONTENT4.md §5.2: 섬광탄 blast, 자석 수류탄 blast, 집속 수류탄 blast, one 테슬라 코일 zap, one 화염 포탑 tick, 거부의 파동, one 회오리 tick;
- * 위상 전이 does no damage).
+ * 위상 전이 does no damage; and of the unique skills of grades A to SSS (§5.3): one 역병 향로 tick (every 0.5 s: 8 a second), one 뼈 포탑 shard,
+ * the 죽음의 구슬 burst, the 사슬 감옥 blow, the 누더기 인형's slam, one 핏빛 비 needle and the 마지막 종 toll; 진혼곡 does no damage).
  */
 export const SKILL_BASE = {
   fire_grenade: 30, ice_grenade: 8, turret: 7, wolf_trap: 20,
   corpse_bomb: 40, bone_spikes: 18, soul_lantern: 10, chain_hook: 12,
   stun_grenade: 6, magnet_grenade: 24, cluster_grenade: 18, tesla_coil: 6, flame_turret: 4, wave_of_denial: 12, tornado: 3,
+  plague_censer: 4, bone_turret: 14, death_orb: 20, chain_prison: 20, rag_doll: 40, crimson_rain: 5, last_bell: 120,
 } as const;
 export type SkillId = keyof typeof SKILL_BASE;
 
@@ -58,6 +61,29 @@ export const PHASER = { range: 160, stun: 1, critWindow: 2 } as const;
 export const WAVE_OF_DENIAL = { radius: 110, knockback: 420 } as const;
 /** 회오리: distance (px) and seconds of travel, seconds between ticks, radius and height (px), drag speed (px/s); heavy enemies (`knockbackTaken` below `minKnockback`) are not dragged. */
 export const TORNADO = { distance: 200, life: 2, interval: 0.2, radius: 30, height: 64, drag: 170, minKnockback: CHAIN_HOOK.pullMinKnockback } as const;
+
+/**
+ * The unique skills of docs/CONTENT4.md §5.3 (A to SSS). The power target of their grade (A +30 %, S +45 %, SS +60 %, SSS +80 %) is measured in damage
+ * per second of cooldown on one target against the ordinary skill of their family (turret 7.1, tornado 2.0, cluster grenade 4.7): the 뼈 포탑 does 9.6,
+ * the 역병 향로 2.7 on everyone around her, the 핏빛 비 about 10 with its bleed; the others are utility whose cooldown is their price.
+ */
+
+/** 역병 향로: seconds it lasts, radius (px) around her and seconds between ticks (a tick hurts for `SKILL_BASE.plague_censer`). */
+export const PLAGUE_CENSER = { life: 6, radius: 72, interval: 0.5 } as const;
+/** 뼈 포탑: a turret that stands `life` s, sees `range` px and fires a piercing, bone-white shard every `interval` s. */
+export const BONE_TURRET = { life: 10, range: 220, interval: 0.9, pierce: true, outline: '#f0e6d2' } as const;
+/** 죽음의 구슬: seconds it floats, px ahead of her, how close (px) to it an enemy must die, the burst it makes (radius px, damage base) and the share of max HP it heals. */
+export const DEATH_ORB = { life: 8, ahead: 56, reach: 90, burst: { radius: 48, base: 20 }, heal: 0.02 } as const;
+/** 사슬 감옥: radius (px) around her, seconds the chains hold, and the knockbackTaken below which an enemy is too heavy to be held in place. */
+export const CHAIN_PRISON = { radius: 120, root: 2.5, minKnockback: CHAIN_HOOK.pullMinKnockback } as const;
+/** 누더기 인형: scale of the golem sprite, seconds it stays, its hp, the speed of its slam (a multiple of the golem's durations) and seconds between two slams. */
+export const RAG_DOLL = { scale: 0.5, life: 10, hp: 150, tempo: 0.6, cooldown: 1.1 } as const;
+/** 핏빛 비: seconds it rains, the stretch ahead of her it covers (px from, px to), seconds between two volleys, bleed seconds of a needle and the height (px) of the rain. */
+export const CRIMSON_RAIN = { life: 2, from: 16, reach: 160, interval: 0.1, bleed: 2, height: 130 } as const;
+/** 마지막 종: the damage base a boss or mid-boss takes (everything else takes `SKILL_BASE.last_bell`) and the seconds everything else is stunned. */
+export const LAST_BELL = { boss: 40, stun: 2 } as const;
+/** 진혼곡: seconds it lasts, the share of the other skill's cooldown each kill gives back, the share of max HP each hit heals and the seconds before the next heal. */
+export const REQUIEM = { life: 6, refund: 0.3, heal: 0.01, healCd: 0.1 } as const;
 
 function lob(p: Player, item: ItemInstance, type: GrenadeType, base: number, spec?: GrenadeSpec): void {
   const vx = p.facing * 235 + p.vx * 0.35;
@@ -148,5 +174,38 @@ export const SKILLS: Partial<Record<ItemId, SkillDef>> = {
   tornado: {
     anim: 'throw', castTime: 0.34, fireAt: 0.12, sfx: 'throw', moveScale: 0.5,
     use: (p, it) => { p.world.spawn(new Tornado(p.x + p.facing * 20, p.y, p, it, SKILL_BASE.tornado, p.facing, TORNADO)); },
+  },
+  // unique skills of grades A to SSS (docs/CONTENT4.md §5.3)
+  plague_censer: {
+    anim: 'deploy', castTime: 0.5, fireAt: 0.25, sfx: 'throw', moveScale: 0.25,
+    use: (p, it) => { p.world.spawn(new PlagueAura(p, it, SKILL_BASE.plague_censer, PLAGUE_CENSER)); },
+  },
+  bone_turret: {
+    anim: 'deploy', castTime: 0.5, fireAt: 0.25, sfx: 'throw', moveScale: 0.25,
+    use: (p, it) => { p.world.spawn(new Turret(p.x + p.facing * 18, p.y, p, it, SKILL_BASE.bone_turret, p.facing, BONE_TURRET)); },
+  },
+  death_orb: {
+    anim: 'throw', castTime: 0.34, fireAt: 0.12, sfx: 'throw', moveScale: 0.5,
+    use: (p, it) => { p.world.spawn(new DeathOrb(p, it, DEATH_ORB)); },
+  },
+  chain_prison: {
+    anim: 'deploy', castTime: 0.45, fireAt: 0.22, sfx: 'throw', moveScale: 0.25,
+    use: (p, it) => { p.world.spawn(new ChainPrison(p, it, SKILL_BASE.chain_prison, CHAIN_PRISON)); },
+  },
+  rag_doll: {
+    anim: 'deploy', castTime: 0.5, fireAt: 0.25, sfx: 'throw', moveScale: 0.25,
+    use: (p, it) => { summonDoll(p, it, SKILL_BASE.rag_doll, RAG_DOLL); },
+  },
+  crimson_rain: {
+    anim: 'throw', castTime: 0.34, fireAt: 0.12, sfx: 'throw', moveScale: 0.5,
+    use: (p, it) => { p.world.spawn(new NeedleRain(p.x, p.y, p.facing, p, it, SKILL_BASE.crimson_rain, CRIMSON_RAIN)); },
+  },
+  last_bell: {
+    anim: 'deploy', castTime: 0.6, fireAt: 0.3, sfx: 'throw', moveScale: 0.25,
+    use: (p, it) => { lastBell(p, it, SKILL_BASE.last_bell, LAST_BELL); },
+  },
+  requiem: {
+    anim: 'deploy', castTime: 0.5, fireAt: 0.25, sfx: 'throw', moveScale: 0.25,
+    use: (p, it) => { p.startRequiem(it); },
   },
 };

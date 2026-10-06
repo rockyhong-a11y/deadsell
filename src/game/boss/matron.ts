@@ -77,6 +77,7 @@ export class Matron extends Actor {
     this.h = MATRON.h;
     this.maxHp = this.hp = MATRON.hp;
     this.knockbackTaken = 0;
+    this.isBoss = true;
     this.alwaysActive = true;
     this.z = 10;
     this.bloodColor = '#7a2a2a';

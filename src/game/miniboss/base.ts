@@ -110,6 +110,7 @@ export abstract class MiniBoss extends Actor {
     this.h = spec.h;
     this.maxHp = this.hp = Math.round(spec.hp * (tier >= 2 ? TIER2.hp : 1));
     this.knockbackTaken = 0;
+    this.isBoss = true;
     this.alwaysActive = true;
     this.z = 10;
     this.bloodColor = spec.blood;

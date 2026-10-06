@@ -2,8 +2,8 @@ import { ITEM_IDS, STARTER_UNLOCKS, UNIQUE_IDS, type AffixId, type ItemId } from
 import { AFFIX_NAMES, COLOR_NAMES, ITEMS, UNIQUE_COLOR, UNIQUE_TAG, affixPool, signatureText } from '../items/items';
 import { WEAPONS, type MeleeWeapon, type WeaponDef, type WeaponId } from '../player/weapons';
 import {
-  BONE_SPIKES, CHAIN_HOOK, CLUSTER_GRENADE, CORPSE_BOMB, FLAME_TURRET, MAGNET_GRENADE, PHASER, SKILLS, SKILL_BASE, SOUL_LANTERN, STUN_GRENADE,
-  TESLA_COIL, TORNADO, WAVE_OF_DENIAL,
+  BONE_SPIKES, BONE_TURRET, CHAIN_HOOK, CHAIN_PRISON, CLUSTER_GRENADE, CORPSE_BOMB, CRIMSON_RAIN, DEATH_ORB, FLAME_TURRET, LAST_BELL, MAGNET_GRENADE, PHASER,
+  PLAGUE_CENSER, RAG_DOLL, REQUIEM, SKILLS, SKILL_BASE, SOUL_LANTERN, STUN_GRENADE, TESLA_COIL, TORNADO, WAVE_OF_DENIAL,
 } from '../player/skills';
 import { BOMBLET_FUSE, GRENADE, Turret, WolfTrap } from '../player/projectiles';
 import {
@@ -117,7 +117,7 @@ const uniq = <T>(a: T[]): T[] => [...new Set(a)];
 const KIND_LABEL = { melee: '근접', bow: '활', shield: '방패', skill: '스킬' } as const;
 /** the tag of a weapon page: its family, told from its table (the knives are thrown by the melee input, the staff is held) */
 function weaponLabel(id: ItemId, w: WeaponDef): string {
-  if (w.kind === 'staff') return '지팡이';
+  if (w.kind === 'staff' || w.kind === 'wand') return '지팡이';
   if (w.kind === 'melee' && w.hits.some((h) => h.shoot)) return '투척';
   return KIND_LABEL[ITEMS[id].kind];
 }
@@ -181,6 +181,19 @@ function meleeRows(w: MeleeWeapon): CodexRow[] {
   if (w.bleed) special.push(`출혈 ${secs(w.bleed)} (적중마다 중첩)`);
   if (w.burn) special.push(`적중마다 ${secs(w.burn)} 화상 (초당 ${AFFIX.burnDps})`);
   if (w.healOnKill) special.push(`처치할 때마다 최대 체력의 ${pct(w.healOnKill)} 회복`);
+  if (w.toll) special.push(`타격마다 종이 울린다: 대상 주위 반경 ${w.toll.radius}px에 피해 ${w.toll.damage} + 기절 ${secs(w.toll.stun)} (한 번 휘두를 때 적마다 한 번)`);
+  if (w.leech) special.push(`준 피해의 ${pct(w.leech)}가 체력으로 돌아온다`);
+  if (w.tipPull) special.push(`채찍 끝에 맞은 적을 ${w.tipPull}px 끌어당긴다 (넉백이 거의 없는 적은 제외)`);
+  const ex = hits.findIndex((h) => h.execute);
+  if (ex >= 0) special.push(`${ex + 1}타: 체력 ${pct(hits[ex].execute!.below)} 미만의 적을 처형 · 보스·중간 보스에게는 피해 ×${hits[ex].execute!.boss}`);
+  if (w.glaive) special.push(`${w.glaive.every}번째 적중마다 되돌아오는 칼날을 던진다 (${w.glaive.range}px, 갈 때·올 때 각각 피해 ${w.glaive.damage})`);
+  if (w.quake) special.push(`내려칠 때마다 바닥 충격파가 양쪽으로 ${w.quake.range}px 달려간다 (피해 ${w.quake.damage}, 방어 불가, 점프로 피한다) · 강한 넉백`);
+  if (w.bleedStacks) special.push(`적중마다 출혈 ${w.bleedStacks}중첩 (최대 ${AFFIX.bleedStacks})`);
+  if (w.killPieces) special.push(`처치하면 시체 조각 +${w.killPieces}`);
+  if (w.fullHpMul) special.push(`체력이 가득이면 피해 ×${num(w.fullHpMul)}`);
+  if (w.ember) special.push(`적중의 ${pct(w.ember.chance)}가 추적 불씨를 낳는다 (피해 ${w.ember.damage}, 맞힌 적이 아닌 가까운 적을 쫓는다)`);
+  const multi = hits.find((h) => h.multi)?.multi;
+  if (multi) special.push(`한 번 휘두르면 ${multi.n}번 적중한다 (부채꼴, 타마다 적 하나에 한 번씩)`);
   const stuns = uniq(hits.map((h) => h.stun ?? 0).filter((s) => s > 0));
   if (stuns.length) special.push(`기절 ${stuns.map(num).join(' / ')}초`);
   const ups = hits.map((h, i) => (h.knockup ? `${i + 1}타` : '')).filter(Boolean);
@@ -199,7 +212,7 @@ function meleeRows(w: MeleeWeapon): CodexRow[] {
   if (w.critVs) crits.push(`${w.critVs.map((k) => STATUS_ADJ[k]).join('·')} 적을 맞히면 치명타 (피해 ×${CRIT_MULT})`);
   if (tip) crits.push(`채찍 끝 ${tip}px에 맞은 적은 치명타 (피해 ×${CRIT_MULT})`);
   return [
-    { label: '콤보', text: `${hits.length}연격 · 타당 피해 ${hits.map((h) => h.damage).join(' / ')}${shoot ? ` (단검 한 개당, ${shoot.count}개씩)` : ''}` },
+    { label: '콤보', text: `${hits.length}연격 · 타당 피해 ${hits.map((h) => h.damage + (h.multi ? `×${h.multi.n}` : '')).join(' / ')}${shoot ? ` (단검 한 개당, ${shoot.count}개씩)` : ''}` },
     { label: '속도', text: `타당 ${hits.map((_, i) => num(total(i))).join(' / ')}초${w.dash ? ` · 돌진 후 ${secs(w.dash.recover)} 경직` : ''}` },
     { label: '사거리', text: shoot ? `단검 ${shoot.range}px` : back ? `전방 ${reach}px · 후방 ${back}px` : `전방 ${reach}px` },
     { label: '치명타', text: crits.length ? crits.join(' · ') : '없음' },
@@ -218,19 +231,31 @@ function weaponEntry(id: WeaponId): CodexEntry {
     steps = w.hits.map((h, i) => ({ anim: h.anim, dur: h.windup + h.active + h.recover, hold: i === w.hits.length - 1 ? 0.7 : 0.04 }));
   } else if (w.kind === 'bow') {
     const v = w.volley;
+    const sf = w.soulfire;
     const special = [
       v ? `원거리 · 완전히 당기면 화살 ${v.n}발이 ±${v.spread}°로 퍼진다` : w.pierce ? '원거리 · 완전히 당긴 화살은 적을 관통' : '원거리 · 길게 눌러 조준하고 떼면 발사',
       ...(w.freeze ? [`맞은 적을 ${secs(w.freeze)} 빙결`] : []),
       ...(w.range ? [`사거리 ${w.range}px`] : []),
+      ...(sf ? [`완전히 당긴 화살은 맞은 자리(벽에 박혀도)에서 혼불로 폭발한다: 반경 ${sf.radius}px, 피해 ${sf.damage}, 화상 ${secs(sf.burn)} (초당 ${AFFIX.burnDps})`, `다 당기기 전에 쏘면 화살 대신 추적 혼불 ${sf.wisps}개 (각 피해 ${sf.wisp.damage}, 가장 가까운 적을 쫓는다)`] : []),
     ];
     rows = [
-      { label: '피해', text: v ? `완전히 당기면 ${v.n}발 × ${Math.round(w.damage * v.frac)} · 짧게 탭하면 한 발 ${pct(w.minFrac)}` : `완전히 당기면 ${w.damage} · 짧게 탭하면 ${pct(w.minFrac)}` },
+      { label: '피해', text: sf ? `완전히 당기면 ${w.damage} + 폭발 ${sf.damage} · 짧게 쏘면 혼불 ${sf.wisps}개 × ${sf.wisp.damage}` : v ? `완전히 당기면 ${v.n}발 × ${Math.round(w.damage * v.frac)} · 짧게 탭하면 한 발 ${pct(w.minFrac)}` : `완전히 당기면 ${w.damage} · 짧게 탭하면 ${pct(w.minFrac)}` },
       { label: '충전', text: `${secs(w.drawTime)} · 화살 속도 ${w.minSpeed}–${w.maxSpeed}px/s` },
       { label: '이동', text: `당기는 동안 이동 속도 ${pct(w.moveScale)}` },
       { label: '특수', text: special.join(' · ') },
     ];
     steps = [{ anim: 'bow_draw', dur: w.drawTime, hold: 0.04 }, { anim: 'bow_shoot', hold: 0.8 }];
     prop = { sheet: 'projectiles', steps: [{ anim: 'arrow' }], dx: 26, dy: -32, start: w.drawTime + 0.05, motion: 'fly', travel: 92, flight: 0.35 };
+  } else if (w.kind === 'wand') {
+    const b = w.bolt;
+    rows = [
+      { label: '피해', text: `${b.damage} / ${secs(b.interval)} (초당 약 ${Math.round(b.damage / b.interval)}) · 누르고 있는 동안 계속` },
+      { label: '사거리', text: `앞쪽 ${b.range}px 안의 시야가 닿는 가장 가까운 적` },
+      { label: '연쇄', text: `번개가 ${b.chain}번 더 튄다 (최대 ${b.chain + 1}명) · 튈 때마다 피해 −${pct(b.falloff)} · 튀는 거리 ${b.jump}px` },
+      { label: '이동', text: `번개를 부르는 동안 이동 속도 ${pct(w.moveScale)}` },
+      { label: '특수', text: '방어 불가 · 적이 거의 비틀거리지 않는다 · 앞에 적이 없으면 불꽃만 튄다' },
+    ];
+    steps = [{ anim: 'cast', hold: 1.4 }];
   } else if (w.kind === 'staff') {
     const f = w.flame;
     rows = [
@@ -244,15 +269,17 @@ function weaponEntry(id: WeaponId): CodexEntry {
     const special = [
       w.shockwave ? `패링하면 충격파 · 반경 ${w.shockwave.radius}px, 피해 ${w.shockwave.damage}, 기절 ${secs(w.shockwave.stun)}, 방어 불가` : '',
       w.counter ? `패링하면 공격한 적에게 피해 ${w.counter.damage} + 출혈 ${secs(w.counter.bleed)} (방어 불가)` : '',
+      w.fullBlock ? `막기 시작 ${secs(w.fullBlock)} 동안은 피해를 모두 막는다 · 패링하면 최대 체력의 ${pct(w.parryHeal ?? 0)} 회복` : '',
+      w.bell ? `패링하면 반경 ${w.bell.radius}px의 모든 적을 ${secs(w.bell.stun)} 기절시키고 적의 투사체를 피해 ×${w.bell.reflectMul}로 되받아친다` : '',
     ].filter(Boolean);
     rows = [
-      { label: '막기', text: `정면 피해 -${pct(w.reduction)} (이동 속도 ${pct(w.moveScale)})` },
+      { label: '막기', text: `정면 피해 -${pct(w.reduction)}${w.fullBlock ? ` (처음 ${secs(w.fullBlock)}은 -100%)` : ''} (이동 속도 ${pct(w.moveScale)})` },
       { label: '패링', text: `막기 직후 ${secs(w.parryWindow)} 안에 맞으면 패링 · 공격한 적 기절 ${secs(w.parryStun)}` },
       { label: '특수', text: special.length ? special.join(' · ') : '공격 수단이 없는 방어 전용 장비' },
     ];
     steps = [{ anim: 'shield_block', hold: 0.9 }, { anim: 'shield_parry', hold: 0.9 }];
   }
-  const shieldGrowth = w.kind === 'shield' ? (w.shockwave ? `방어량은 성장하지 않음 · 충격파 피해는 ${scaling(def.color)}` : w.counter ? `방어량은 성장하지 않음 · 반격 피해는 ${scaling(def.color)}` : '방어량은 성장하지 않음 · 접사로 처치 회복만 가능') : scaling(def.color);
+  const shieldGrowth = w.kind === 'shield' ? (w.shockwave ? `방어량은 성장하지 않음 · 충격파 피해는 ${scaling(def.color)}` : w.counter ? `방어량은 성장하지 않음 · 반격 피해는 ${scaling(def.color)}` : w.fullBlock || w.bell ? '방어량과 회복량은 성장하지 않음' : '방어량은 성장하지 않음 · 접사로 처치 회복만 가능') : scaling(def.color);
   rows.push({ label: '성장', text: shieldGrowth });
   rows.push({ label: '접사', text: affixList(id) });
   return {
@@ -377,11 +404,61 @@ function skillEntry(id: ItemId): CodexEntry {
       { label: '피해', text: `${base} (반경 ${v.radius}px) · 방어 불가` },
       { label: '효과', text: `범위 안의 모든 적을 밀어내고 (넉백 ${v.knockback}) 적이 쏜 화살·볼트·폭탄·거미줄을 없앤다` },
     );
-  } else {
+  } else if (id === 'tornado') {
     const t = TORNADO;
     rows.push(
       { label: '피해', text: `회오리 한 번 ${base} (${secs(t.interval)}마다)` },
       { label: '효과', text: `${t.distance}px 앞으로 ${secs(t.life)} 동안 굴러가며 안의 적을 기절시킨 채 끌고 간다 · 넉백이 거의 없는 적(넉백 ${pct(t.minKnockback)} 미만)은 끌려가지 않고 피해만 입는다` },
+    );
+  } else if (id === 'plague_censer') {
+    const c = PLAGUE_CENSER;
+    rows.push(
+      { label: '피해', text: `독 한 번 ${base} (${secs(c.interval)}마다, 초당 ${Math.round(base / c.interval)}) · 방어 불가, 적이 비틀거리지 않는다` },
+      { label: '효과', text: `${secs(c.life)} 동안 신더를 따라다니는 반경 ${c.radius}px의 독 안개 · 안에 있는 모든 적이 계속 피해를 입는다` },
+    );
+  } else if (id === 'bone_turret') {
+    const t = BONE_TURRET;
+    rows.push(
+      { label: '피해', text: `뼈 파편 1발 ${base} (${secs(t.interval)}마다 사격)` },
+      { label: '효과', text: `${secs(t.life)} 동안 사거리 ${t.range}px 안의 가장 가까운 적을 자동 사격 · 파편은 적을 관통해 경로의 모든 적을 맞힌다` },
+    );
+    prop = { sheet: 'projectiles', steps: [{ anim: 'turret_deploy', hold: 0.1 }, { anim: 'turret_idle', dur: 0.6 }, { anim: 'turret_shoot', hold: 0.1 }, { anim: 'turret_idle', dur: 0.5 }], dx: 24, dy: -14, start: sk.fireAt };
+    steps = [{ anim: sk.anim, dur: sk.castTime, hold: 3.2 }];
+  } else if (id === 'death_orb') {
+    const o = DEATH_ORB;
+    rows.push(
+      { label: '피해', text: `구슬 근처에서 죽은 적이 폭발한다: 반경 ${o.burst.radius}px, 피해 ${o.burst.base}` },
+      { label: '효과', text: `${secs(o.life)} 동안 신더 앞 ${o.ahead}px에 구슬이 떠 있다 · ${o.reach}px 안에서 죽은 적이 터지고 (폭발에 죽은 적도 다시 터진다) 터질 때마다 최대 체력의 ${pct(o.heal)}를 회복` },
+    );
+  } else if (id === 'chain_prison') {
+    const c = CHAIN_PRISON;
+    rows.push(
+      { label: '피해', text: `${base} (반경 ${c.radius}px) · 방어 불가` },
+      { label: '효과', text: `범위 안의 모든 적을 사슬로 ${secs(c.root)} 속박한다 (기절: 행동 불가, 제자리에 묶임) · 넉백이 거의 없는 적(넉백 ${pct(c.minKnockback)} 미만)은 붙잡지 못하고 피해와 기절만` },
+    );
+  } else if (id === 'rag_doll') {
+    const d = RAG_DOLL;
+    rows.push(
+      { label: '피해', text: `내려치기 ${base} (${secs(d.cooldown)}마다)` },
+      { label: '효과', text: `${secs(d.life)} 동안 반 크기의 누더기 인형(체력 ${d.hp})이 곁에서 가까운 적을 내려친다 · 쓰러지거나 시간이 다하면 흩어진다 · 한 번에 한 마리` },
+    );
+  } else if (id === 'crimson_rain') {
+    const r = CRIMSON_RAIN;
+    rows.push(
+      { label: '피해', text: `바늘 한 번 ${base} (${secs(r.interval)}마다) · 방어 불가` },
+      { label: '효과', text: `앞 ${r.from}–${r.reach}px 구간에 ${secs(r.life)} 동안 피의 바늘비 · 맞을 때마다 ${secs(r.bleed)} 출혈 (중첩)` },
+    );
+  } else if (id === 'last_bell') {
+    const l = LAST_BELL;
+    rows.push(
+      { label: '피해', text: `${base} + 기절 ${secs(l.stun)} · 방어 불가` },
+      { label: '효과', text: `화면 안의 모든 적을 종소리로 친다 · 보스·중간 보스는 피해 ${l.boss}만 입고 기절하지 않는다` },
+    );
+  } else {
+    const r = REQUIEM;
+    rows.push(
+      { label: '효과', text: `${secs(r.life)} 동안 적을 처치할 때마다 다른 스킬의 재사용 대기시간 ${pct(r.refund)}를 돌려받고 광란 질주가 시작된다 (이미 달리는 중이면 시간이 다시 찬다)` },
+      { label: '', text: `노래하는 동안 적중할 때마다 최대 체력의 ${pct(r.heal)} 회복 (${secs(r.healCd)}에 한 번까지)` },
     );
   }
   rows.push({ label: '성장', text: scaling(def.color) });

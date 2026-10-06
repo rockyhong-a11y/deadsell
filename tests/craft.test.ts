@@ -544,7 +544,7 @@ describe('grade badges and the codex', () => {
     for (const tab of ['weapon', 'skill'] as const) {
       const groups = order(tab).filter((g, i, a) => a.indexOf(g) === i);
       expect(groups[0]).toBe('일반');
-      expect(groups.slice(1)).toEqual(['유니크 C', '유니크 B']);
+      expect(groups.slice(1)).toEqual(GRADE_IDS.map((g) => `유니크 ${g}`));
     }
   });
 

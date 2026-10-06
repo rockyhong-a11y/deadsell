@@ -30,6 +30,13 @@ export function spawnRunGolem(world: World, player: Player, levelKind: 'biome' |
   return world.spawn(g);
 }
 
+/**
+ * 누더기 인형 (docs/CONTENT4.md §5.3): the golem at a smaller `scale`, for `life` seconds, with its own `hp` and slam `damage`; its slam
+ * (and every step of it) takes `tempo` times as long as the golem's, and `cooldown` s pass before it can slam again. It is not the run's golem:
+ * it never touches `run.golem` and leaves no pile.
+ */
+export interface DollSpec { scale: number; life: number; hp: number; damage: number; tempo: number; cooldown: number }
+
 /** where the heroine is */
 type Pos = { x: number; y: number; facing: number };
 
@@ -63,13 +70,16 @@ export class Golem extends Actor {
   /** best distance to the heroine seen since it last made progress, and for how long it has not improved */
   private bestDist = Infinity;
   private stuckT = 0;
+  /** 1 for the golem, `doll.scale` for a rag doll: the body, the slam box and the drawing are this much of the golem's */
+  readonly scale: number;
 
-  constructor(x: number, y: number, readonly slot: { hp: number; maxHp: number }) {
+  constructor(x: number, y: number, readonly slot: { hp: number; maxHp: number }, readonly doll?: DollSpec) {
     super(x, y);
-    this.w = GOLEM.w;
-    this.h = GOLEM.h;
-    this.maxHp = slot.maxHp;
-    this.hp = Math.min(slot.hp, slot.maxHp);
+    this.scale = doll?.scale ?? 1;
+    this.w = GOLEM.w * this.scale;
+    this.h = GOLEM.h * this.scale;
+    this.maxHp = doll ? doll.hp : slot.maxHp;
+    this.hp = doll ? doll.hp : Math.min(slot.hp, slot.maxHp);
     this.knockbackTaken = GOLEM.knockbackTaken;
     this.alwaysActive = true;
     this.z = 15;
@@ -89,8 +99,9 @@ export class Golem extends Actor {
   /** the box the slam hits: in front of the body */
   slamBox(): { x: number; y: number; w: number; h: number } {
     const S = GOLEM.slam;
+    const sw = S.w * this.scale;
     const f = this.mode === 'free' ? this.facing : this.lockedFacing;
-    return { x: f > 0 ? this.x + this.w / 2 - 4 : this.x - this.w / 2 + 4 - S.w, y: this.y - S.h, w: S.w, h: S.h };
+    return { x: f > 0 ? this.x + this.w / 2 - 4 : this.x - this.w / 2 + 4 - sw, y: this.y - S.h * this.scale, w: sw, h: S.h * this.scale };
   }
 
   /**
@@ -99,7 +110,7 @@ export class Golem extends Actor {
    */
   private pickTarget(): Actor | null {
     const w = this.world;
-    const reachTop = this.y - GOLEM.slam.h - GOLEM.reachSlack;
+    const reachTop = this.y - GOLEM.slam.h * this.scale - GOLEM.reachSlack;
     let best: Actor | null = null;
     let bd = Infinity;
     for (const a of w.actors) {
@@ -128,6 +139,7 @@ export class Golem extends Actor {
     if (this.attackCd > 0) this.attackCd -= dt;
     if (this.jumpCd > 0) this.jumpCd -= dt;
     if (this.hurtT > 0) this.hurtT -= dt;
+    if (this.doll && this.time >= this.doll.life) return this.expire();
     if (this.dropT > 0 && (this.dropT -= dt) <= 0) this.dropThrough = false;
     if (this.anim) this.anim.speed = this.status.freeze > 0 ? 0 : 1;
     const p = this.world.player;
@@ -154,7 +166,7 @@ export class Golem extends Actor {
         return;
       }
       // close in until the slam reaches
-      const gap = Math.abs(t.x - this.x) - (this.w / 2 + GOLEM.slam.w * 0.6);
+      const gap = Math.abs(t.x - this.x) - (this.w / 2 + GOLEM.slam.w * this.scale * 0.6);
       this.run(gap > 0 ? sign(t.x - this.x) : 0, t.y < this.y - 8, t.y < this.y - 30, dt);
       return;
     }
@@ -218,37 +230,45 @@ export class Golem extends Actor {
 
   // ------------------------------------------------------------ slam
 
+  /** seconds each step of a slam takes: the golem's own, `tempo` times as long for a doll */
+  private get tempo(): number {
+    return this.doll?.tempo ?? 1;
+  }
+
   private startSlam(): void {
     const S = GOLEM.slam;
+    const k = this.tempo;
     this.lockedFacing = this.facing;
     this.mode = 'windup';
     this.stateT = 0;
-    this.attackCd = S.cooldown;
+    this.attackCd = this.doll ? this.doll.cooldown : S.cooldown;
     this.hitSet = new Set();
     this.vx = 0;
-    this.anim?.playPhased('attack', S.windup, S.active, S.recover);
+    this.anim?.playPhased('attack', S.windup * k, S.active * k, S.recover * k);
   }
 
   private attack(dt: number): void {
     const S = GOLEM.slam;
+    const k = this.tempo;
     const w = this.world;
     this.facing = this.lockedFacing;
     this.vx = approach(this.vx, 0, 1200 * dt);
     if (this.mode === 'windup') {
-      if (this.stateT >= S.windup) {
+      if (this.stateT >= S.windup * k) {
         this.mode = 'active';
         this.stateT = 0;
         const f = this.lockedFacing;
-        w.audio.play('slam', { vol: 0.7 });
-        w.shake(3, 0.2);
-        w.particles.emit('slam', this.x + f * (this.w / 2 + S.w * 0.6), this.y, { dir: f, count: 8 });
-        w.particles.emit('debris', this.x + f * (this.w / 2 + S.w * 0.6), this.y - 6, { count: 4, color: RAG });
-        w.fx.slash(this.x + f * 26, this.y - 42, { dir: f, radius: 46, from: -1.2, to: 0.6, color: '#e8dcc4', width: 4, life: 0.18 });
+        const sc = this.scale;
+        w.audio.play('slam', { vol: 0.7 * Math.sqrt(sc) });
+        w.shake(3 * sc, 0.2);
+        w.particles.emit('slam', this.x + f * (this.w / 2 + S.w * sc * 0.6), this.y, { dir: f, count: 8 });
+        w.particles.emit('debris', this.x + f * (this.w / 2 + S.w * sc * 0.6), this.y - 6, { count: 4, color: RAG });
+        w.fx.slash(this.x + f * 26 * sc, this.y - 42 * sc, { dir: f, radius: 46 * sc, from: -1.2, to: 0.6, color: '#e8dcc4', width: 4, life: 0.18 });
       }
     }
     if (this.mode === 'active') {
       const info: DamageInfo = {
-        amount: golemDamage(w.run.loop, w.run.tier), dir: this.lockedFacing, kind: 'melee', source: this,
+        amount: this.doll ? this.doll.damage : golemDamage(w.run.loop, w.run.tier), dir: this.lockedFacing, kind: 'melee', source: this,
         knockback: S.knockback, stun: S.stun,
       };
       // its slam hurts enemies but is not the heroine's: it does not break secret walls
@@ -257,11 +277,11 @@ export class Golem extends Actor {
         w.addHitstop(0.04);
         w.audio.play('hit_heavy', { vol: 0.8 });
       }
-      if (this.stateT >= S.active) {
+      if (this.stateT >= S.active * k) {
         this.mode = 'recover';
         this.stateT = 0;
       }
-    } else if (this.mode === 'recover' && this.stateT >= S.recover) {
+    } else if (this.mode === 'recover' && this.stateT >= S.recover * k) {
       this.mode = 'free';
       this.stateT = 0;
     }
@@ -314,32 +334,49 @@ export class Golem extends Actor {
     this.stateT = 0;
     this.vx = 0;
     this.anim?.play('death');
-    w.run.golem = null;
     w.audio.play('enemy_death', { vol: 0.8 });
     w.particles.emit('debris', this.x, this.y - this.h / 2, { count: 14, color: RAG });
+    // (a doll is not the run's golem: its end costs nothing and says nothing)
+    if (this.doll) return;
+    w.run.golem = null;
     w.emit({ type: 'toast', text: '골렘이 쓰러졌다', color: '#ffb347' });
+  }
+
+  /** the rag doll's time is up: it falls apart into rags and is gone at once */
+  private expire(): void {
+    const w = this.world;
+    w.particles.emit('debris', this.x, this.y - this.h / 2, { count: 10, color: RAG });
+    w.particles.emit('dust', this.x, this.y, { count: 5, w: 20 });
+    this.dead = true;
   }
 
   /** the heap of rags lies there for a while, then fades */
   private updateDying(dt: number): void {
     this.vx = approach(this.vx, 0, 700 * dt);
-    if (this.stateT >= GOLEM.pileFade + 0.6) this.dead = true;
+    if (this.stateT >= this.pileTime) this.dead = true;
     super.update(dt);
+  }
+
+  /** seconds the heap of rags lies there before it is gone (a doll's is short) */
+  private get pileTime(): number {
+    return this.doll ? 1 : GOLEM.pileFade + 0.6;
   }
 
   // ------------------------------------------------------------ drawing
 
   draw(ctx: CanvasRenderingContext2D): void {
     if (!this.anim) return;
-    const alpha = this.dying ? Math.max(0, Math.min(1, (GOLEM.pileFade + 0.6 - this.stateT) / 0.6)) : 1;
-    this.drawSprite(ctx, { alpha });
+    let alpha = this.dying ? Math.max(0, Math.min(1, (this.pileTime - this.stateT) / 0.6)) : 1;
+    // a doll about to fall apart blinks
+    if (this.doll && !this.dying && this.doll.life - this.time < 1.2) alpha = 0.45 + 0.55 * Math.abs(Math.sin(this.time * 14));
+    this.drawSprite(ctx, { alpha, scale: this.scale });
     if (this.dying) return;
-    this.world.lights.add(this.x, this.y - this.h * 0.7, 50, EMBER, 0.28);
+    this.world.lights.add(this.x, this.y - this.h * 0.7, 50 * this.scale, EMBER, 0.28);
     if (this.time - this.lastHit < GOLEM.barSecs && this.hp > 0) {
       // above her head (the sprite is taller than the hitbox), not across her face
-      const bw = GOLEM.barW;
+      const bw = GOLEM.barW * this.scale;
       const bx = Math.round(this.x - bw / 2);
-      const by = Math.round(this.y - GOLEM.barY);
+      const by = Math.round(this.y - GOLEM.barY * this.scale);
       ctx.fillStyle = '#07060b';
       ctx.fillRect(bx - 1, by - 1, bw + 2, 5);
       ctx.fillStyle = '#2a1424';

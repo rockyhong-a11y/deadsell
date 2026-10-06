@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { makeTestWorld } from './helpers';
+import { makeTestWorld, implemented } from './helpers';
 import { LevelUI } from '../src/game/ui/levelUI';
 import { hudLayout, MIN_TAP, itemOf } from '../src/game/ui/hud';
 import { formatTime, wrap, atLeast } from '../src/game/ui/draw';
@@ -159,7 +159,7 @@ describe('meta progression', () => {
     }
     const unlockable = META_UPGRADES.filter((u) => u.item).map((u) => u.item!);
     const starter = defaultSave().unlocked;
-    for (const id of Object.keys(ITEMS)) if (!ITEMS[id as keyof typeof ITEMS].unique) expect([...starter, ...unlockable]).toContain(id);
+    for (const id of Object.keys(ITEMS)) if (!ITEMS[id as keyof typeof ITEMS].unique && implemented(id as keyof typeof ITEMS)) expect([...starter, ...unlockable]).toContain(id);
     const bp = META_UPGRADES.find((u) => u.id === 'unlock_spear')!;
     expect(bp.name).toContain(ITEMS.spear.name);
   });

@@ -10,7 +10,8 @@ import { SettingsScreen, MODE_LABEL, drawButtonsPreview, drawPadList, type Setti
 import { CodexScreen } from './codex';
 import type { CodexTabId } from './codexData';
 
-export type ModalKey = 'left' | 'right' | 'up' | 'down' | 'confirm' | 'cancel';
+/** `special` = X on the keyboard, Y on the pad: the second action of a screen (분해 in the stash) */
+export type ModalKey = 'left' | 'right' | 'up' | 'down' | 'confirm' | 'cancel' | 'special';
 
 /** Taps are ignored for this long after a modal opens (a finger lifting from the previous tap must not hit a card). */
 const LOCKOUT = 0.2;
@@ -151,7 +152,7 @@ export class ChoiceModal extends Modal {
   }
 }
 
-function hexA(hex: string, a: number): string {
+export function hexA(hex: string, a: number): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex);
   if (!m) return `rgba(255,255,255,${a})`;
   const n = parseInt(m[1], 16);

@@ -4,7 +4,7 @@ import type { LevelUI } from './levelUI';
 import type { Entity } from '../entity';
 import type { Interactable } from '../world';
 import type { ItemInstance } from '../items/types';
-import { ITEMS, UNIQUE_COLOR, UNIQUE_TAG, itemColor, itemName, itemLines } from '../items/items';
+import { ITEMS, UNIQUE_COLOR, UNIQUE_TAG, itemColor, itemName, itemLines, signatureText } from '../items/items';
 import { COLOR_HEX } from '../combat';
 import { touchView } from './touch';
 import { drawVButtons, vbLayout, type VSkillView } from './vbuttons';
@@ -577,7 +577,7 @@ export class Hud {
     const def = ITEMS[item.id];
     const w = def.unique ? 236 : 204;
     const textW = w - 60;
-    const sig = def.unique ? itemLines(item).length - 1 : -1; // the signature line of a unique item is its last
+    const sig = def.unique && signatureText(item.id) ? itemLines(item).length - 1 : -1; // the signature line of a unique item is its last
     const accent = itemColor(item.id);
     const lines = itemLines(item).flatMap((l, i) => wrap(c, l, textW, SZ.s).map((s) => ({ s, color: i === 0 ? COL.text : i === sig ? accent : COL.amber })));
     const h = Math.max(46, 24 + lines.length * 13 + 8);

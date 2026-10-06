@@ -12,3 +12,4 @@ export { BossGate } from './bossGate';
 export { RoomTracker } from './roomTracker';
 export { Seamstress, SELMA_LINES } from './seamstress';
 export { GolemPile } from './golemPile';
+export { StashChest } from './stashChest';

@@ -277,14 +277,15 @@ export abstract class MiniBoss extends Actor {
   /** Remove projectiles / orbs the boss left behind. */
   protected clearConjured(): void {}
 
-  /** Exactly one weapon and one skill (tier + 1, guaranteed affix), plus cells and gold. */
+  /** Exactly one weapon and one skill (tier + 1, guaranteed affix, flagged `mb`), plus cells and gold. */
   protected dropRewards(): void {
     const w = this.world;
     const unlocked = w.game.save.unlocked;
     dropLoot(w, this.x, this.y - this.h * 0.5, { cells: w.rng.int(MB.cells[0], MB.cells[1]), gold: w.rng.int(MB.gold[0], MB.gold[1]), pieces: CORPSE.drop.miniboss });
     const tier = this.tier + 1;
-    spawnItemDrop(w, this.x - 32, this.y - 30, rollItem(w.rng, tier, unlocked, 'weapon', { guaranteeAffix: true }));
-    spawnItemDrop(w, this.x + 32, this.y - 30, rollItem(w.rng, tier, unlocked, 'skill', { guaranteeAffix: true }));
+    // flagged `mb`: a crafting material of its own at Selma's (docs/CONTENT4.md §4)
+    spawnItemDrop(w, this.x - 32, this.y - 30, { ...rollItem(w.rng, tier, unlocked, 'weapon', { guaranteeAffix: true }), mb: true });
+    spawnItemDrop(w, this.x + 32, this.y - 30, { ...rollItem(w.rng, tier, unlocked, 'skill', { guaranteeAffix: true }), mb: true });
   }
 
   // ------------------------------------------------------------ state helpers

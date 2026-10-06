@@ -42,8 +42,8 @@ const MAX_BUTTON = 31;
 export type ScrollKey = 'scrollUp' | 'scrollDown' | 'pageUp' | 'pageDown' | 'scrollTop' | 'scrollEnd';
 
 /** Menu / UI navigation keys (ModalKey + the two global menu buttons). */
-/** (`tabL` / `tabR` = the shoulder buttons LB / RB: switch tabs in tabbed screens such as the codex) */
-export type NavKey = 'left' | 'right' | 'up' | 'down' | 'confirm' | 'cancel' | 'pause' | 'map' | 'tabL' | 'tabR' | ScrollKey;
+/** (`tabL` / `tabR` = the shoulder buttons LB / RB: switch tabs in tabbed screens such as the codex; `special` = Y, the second action of a screen: 분해 in the stash) */
+export type NavKey = 'left' | 'right' | 'up' | 'down' | 'confirm' | 'cancel' | 'special' | 'pause' | 'map' | 'tabL' | 'tabR' | ScrollKey;
 
 /** The right stick (axes 2 / 3) scrolls text panels: first step at once, then after this delay every PAD_SCROLL_RATE s */
 export const PAD_SCROLL_DELAY = 0.3;
@@ -188,6 +188,7 @@ export function mapPad(snap: PadSnapshot | null, map: PadMap, prev: PadState, dt
   }
   if (raw.includes(0)) nav.push('confirm');
   if (raw.includes(1)) nav.push('cancel');
+  if (raw.includes(3)) nav.push('special');
   if (raw.includes(4)) nav.push('tabL');
   if (raw.includes(5)) nav.push('tabR');
 

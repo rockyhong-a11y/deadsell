@@ -119,7 +119,8 @@ describe('pickups', () => {
     steps(world, 40);
     input.tap('interact');
     steps(world, 3);
-    expect(asked.length).toBe(2);
+    expect(asked.length).toBe(3); // the two slots and the stash
+    expect(asked[2]).toContain('보관함으로 보내기');
     expect(run.weapons[1]).toBe(hammer);
     expect(run.weapons[0]!.id).toBe('rusty_sword');
     const left = drops(world);

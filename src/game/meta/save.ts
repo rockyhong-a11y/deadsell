@@ -1,4 +1,5 @@
-import { ITEM_IDS, STARTER_UNLOCKS, UNIQUE_IDS, type ItemId } from '../items/types';
+import { ITEM_IDS, STARTER_UNLOCKS, UNIQUE_IDS, type ItemId, type StashEntry } from '../items/types';
+import { affixPool } from '../items/items';
 import { DEFAULT_GFX, sanitizeGfx, type GfxSettings } from '../../engine/filters';
 import { DEFAULT_PAD_MAP, sanitizePadMap, type PadMap } from '../../engine/gamepad';
 import { STASH } from '../rules';
@@ -39,6 +40,8 @@ export interface SaveData {
   loop: number;
   /** 시체 조각 banked at the 쉼터 / on victory: pays for crafting and the golem (docs/CONTENT4.md §3) */
   pieces: number;
+  /** 보관함: the permanent item store, at most `STASH.capacity` (docs/CONTENT4.md §2) */
+  stash: StashEntry[];
   /** 종탑의 파편: one per Iron Matron kill, each the loop it was won in (docs/CONTENT4.md §4) */
   shards: number[];
   settings: Settings;
@@ -60,6 +63,7 @@ export function defaultSave(): SaveData {
     totalKills: 0,
     loop: 1,
     pieces: 0,
+    stash: [],
     shards: [],
     settings: {
       sfx: 0.8, music: 0.5, hints: true, muted: false,
@@ -70,6 +74,23 @@ export function defaultSave(): SaveData {
 }
 
 const num = (v: unknown, fallback: number, min = 0): number => (typeof v === 'number' && Number.isFinite(v) ? Math.max(min, v) : fallback);
+
+/** The stash of a stored save: unknown items dropped, tier an integer 1..5, an affix only when the item can roll it, at most `STASH.capacity` entries. */
+export function sanitizeStash(v: unknown): StashEntry[] {
+  const out: StashEntry[] = [];
+  if (!Array.isArray(v)) return out;
+  for (const e of v as unknown[]) {
+    if (out.length >= STASH.capacity) break;
+    if (!e || typeof e !== 'object') continue;
+    const r = e as Record<string, unknown>;
+    const id = (ITEM_IDS as readonly unknown[]).find((x) => x === r.id) as ItemId | undefined;
+    if (!id) continue;
+    const tier = typeof r.tier === 'number' && Number.isFinite(r.tier) ? Math.min(5, Math.max(1, Math.floor(r.tier))) : 1;
+    const affix = (affixPool(id) as readonly unknown[]).find((a) => a === r.affix) as StashEntry['affix'] | undefined;
+    out.push({ id, tier, affix: affix ?? null, ...(r.mb === true ? { mb: true as const } : {}) });
+  }
+  return out;
+}
 
 /** Merge stored data over the defaults, dropping anything with the wrong shape (old / hand-edited / corrupted saves). */
 export function loadSave(): SaveData {
@@ -94,6 +115,7 @@ export function loadSave(): SaveData {
       loop: Math.min(MAX_LOOP, Math.floor(num(d.loop, 1, 1))),
       // (`body` / `loopRuns` of the old body-sewing saves are ignored)
       pieces: Math.floor(num(d.pieces, 0)),
+      stash: sanitizeStash(d.stash),
       shards: Array.isArray(d.shards)
         ? (d.shards as unknown[]).filter((v): v is number => typeof v === 'number' && Number.isFinite(v)).map((v) => Math.min(MAX_LOOP, Math.max(1, Math.floor(v)))).slice(0, STASH.shardCap)
         : [],

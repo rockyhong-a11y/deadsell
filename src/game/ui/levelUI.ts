@@ -3,6 +3,7 @@ import type { World } from '../world';
 import type { Actor } from '../entity';
 import { Hud } from './hud';
 import { Modal, ChoiceModal, AlchemistModal, CodexModal, MapModal, PauseModal, SettingsModal, TutorialModal, type ModalKey } from './modals';
+import { StashModal } from './stashModal';
 import type { NavKey, ScrollKey } from '../../engine/gamepad';
 
 export interface ChoiceOption {
@@ -18,7 +19,7 @@ export interface ChoiceOption {
 const KEYS: Record<string, ModalKey> = {
   ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
   KeyA: 'left', KeyD: 'right', KeyW: 'up', KeyS: 'down',
-  Enter: 'confirm', KeyJ: 'confirm', Space: 'confirm', NumpadEnter: 'confirm',
+  Enter: 'confirm', KeyJ: 'confirm', Space: 'confirm', NumpadEnter: 'confirm', KeyX: 'special',
 };
 
 /** keys that scroll a long text panel (the codex detail); Shift + up / down scrolls it by lines */
@@ -123,6 +124,13 @@ export class LevelUI {
   openAlchemist(): void {
     this.game.audio.play('ui_open');
     this.push(new AlchemistModal(this));
+  }
+
+  /** 보관함 (the stash chest): equip, put away and salvage items (docs/CONTENT4.md §2) */
+  openStash(): void {
+    if (this.top instanceof StashModal) return;
+    this.game.audio.play('ui_open');
+    this.push(new StashModal(this));
   }
 
   openMap(): void {

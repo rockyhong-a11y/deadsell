@@ -10,7 +10,7 @@ import { createBoss } from '../boss/matron';
 import { createMiniBoss, pickMiniBoss } from '../miniboss';
 import { rollItem } from '../items/items';
 import { loopEliteBonus } from '../rules';
-import { Alchemist, Altar, BossGate, Chest, Deco, ExitDoor, Fountain, GolemPile, Merchant, Pedestal, RoomTracker, Seamstress, ShopItem, Torch, pickDeco, type DecoKind } from '../props';
+import { Alchemist, Altar, BossGate, Chest, Deco, ExitDoor, Fountain, GolemPile, Merchant, Pedestal, RoomTracker, Seamstress, ShopItem, StashChest, Torch, pickDeco, type DecoKind } from '../props';
 
 /**
  * Build the level for a spec: procedural biome (generator.ts), passage or boss arena (special.ts).
@@ -97,6 +97,9 @@ export function populateLevel(world: World, level: LevelData): void {
         break;
       case 'golem_pile':
         world.spawn(new GolemPile(s.x, s.y));
+        break;
+      case 'stash':
+        world.spawn(new StashChest(s.x, s.y));
         break;
       case 'exit':
         world.spawn(new ExitDoor(s.x, s.y));

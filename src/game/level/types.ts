@@ -17,7 +17,7 @@ export interface LevelData {
 export type SpawnType =
   | 'enemy' | 'flyer' | 'chest' | 'altar' | 'pedestal' | 'merchant' | 'alchemist' | 'exit' | 'boss' | 'miniboss'
   | 'torch' | 'deco' | 'shop' | 'fountain' | 'gate'
-  | 'seamstress' | 'golem_pile';
+  | 'seamstress' | 'golem_pile' | 'stash';
 
 export interface Spawn {
   type: SpawnType;

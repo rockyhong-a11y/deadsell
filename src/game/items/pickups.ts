@@ -8,7 +8,8 @@ import { approach, overlaps } from '../../engine/math';
 import { moveBody } from '../physics';
 import type { ItemInstance } from './types';
 import { ITEMS, COLOR_NAMES, itemColor, itemLines, itemName, AFFIX_NAMES } from './items';
-import { CORPSE, FOODS, SCROLL } from '../rules';
+import { CORPSE, FOODS, SCROLL, STASH } from '../rules';
+import { addToStash, stashFull } from '../meta/stash';
 
 /**
  * Pickups: cells, gold, corpse pieces, food, scrolls, dropped items. OWNER: player agent.
@@ -321,24 +322,40 @@ class ItemDrop extends Drop implements Interactable {
       color: itemColor(cur!.id),
       icon: ITEMS[cur!.id].icon,
     }));
+    // the third choice keeps both slots as they are: the item goes into the permanent stash (docs/CONTENT4.md §2)
+    const save = w.game.save;
+    const full = stashFull(save);
+    options.push({
+      label: `보관함으로 보내기 · ${save.stash.length}/${STASH.capacity}`,
+      sub: full ? '보관함이 가득 찼다' : `${itemName(this.inst)} 보관`,
+      color: itemColor(this.inst.id),
+      icon: def.icon,
+      disabled: full,
+    });
     this.busy = true;
     w.ui.openChoice(`${itemName(this.inst)} · 교체할 칸을 선택`, options, (i) => {
       this.busy = false;
-      if (this.dead || i < 0 || i >= slots.length) return;
+      if (this.dead || i < 0 || i > slots.length) return;
+      if (i === slots.length) {
+        if (!addToStash(save, this.inst)) return;
+        w.game.persist();
+        this.finish(null, true);
+        return;
+      }
       const old = slots[i];
       slots[i] = this.inst;
       this.finish(old);
     }, true);
   }
 
-  private finish(replaced: ItemInstance | null): void {
+  private finish(replaced: ItemInstance | null, stashed = false): void {
     const w = this.world;
     this.dead = true;
     const col = itemColor(this.inst.id);
     w.audio.play('pickup_item');
     w.particles.emit('magic', this.x, this.y - 10, { count: 10, color: col });
     w.emit({ type: 'pickup', what: 'item', amount: 1 });
-    w.emit({ type: 'toast', text: `${itemName(this.inst)} 획득`, color: col });
+    w.emit({ type: 'toast', text: stashed ? `${itemName(this.inst)} 보관함에 보관` : `${itemName(this.inst)} 획득`, color: col });
     if (replaced) {
       const p = w.player;
       const d = new ItemDrop(p.x, p.y - 24, replaced, 0.5);

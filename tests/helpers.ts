@@ -11,6 +11,9 @@ import { SpriteSheet, type AnimDef } from '../src/engine/assets';
 import { RunState } from '../src/game/run';
 import type { LevelData } from '../src/game/level/types';
 import { defaultSave } from '../src/game/meta/save';
+import type { ItemId } from '../src/game/items/types';
+import { weaponDef } from '../src/game/player/weapons';
+import { SKILLS } from '../src/game/player/skills';
 
 const anyAnim = new Proxy({} as Record<string, AnimDef>, {
   get: () => ({ row: 0, frames: 6, fps: 12, loop: false, windup: 2, active: 2, recover: 2 }),
@@ -38,6 +41,7 @@ export function makeTestWorld(map: TileMap = flatMap(), seed = 1) {
     assets: { sheet: (n: string) => fakeSheet(n), image: () => undefined, json: new Map() },
     save: defaultSave(),
     taps: { add() {}, clear() {}, hit: () => null },
+    persist() {},
   };
   const run = new RunState(seed);
   run.weapons = [{ id: 'rusty_sword', tier: 1, affix: null }, null];
@@ -60,3 +64,9 @@ export function steps(world: World, n: number, before?: (i: number) => void): vo
     world.input.endStep(1 / 60);
   }
 }
+
+/**
+ * Has the item its behaviour yet? The item expansion (docs/CONTENT4.md §5) registers every id first and writes the weapon / skill
+ * tables lane by lane; the tests that need a working item loop over these.
+ */
+export const implemented = (id: ItemId): boolean => weaponDef(id) !== null || id in SKILLS;

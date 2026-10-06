@@ -590,7 +590,7 @@ function itemEntries(): CodexEntry[] {
     });
   }
   for (const a of Object.keys(AFFIX_NAMES) as AffixId[]) {
-    const on = ITEM_IDS.filter((i) => affixPool(i).includes(a)).map((i) => ITEMS[i].name);
+    const on = ITEM_IDS.filter((i) => (i in WEAPONS || i in SKILL_BASE) && affixPool(i).includes(a)).map((i) => ITEMS[i].name);
     add({
       id: `affix_${a}`, group: '접사', name: AFFIX_NAMES[a], tag: '접사', icon: { sheet: 'icons', anim: AFFIX_ICON[a] },
       desc: affixText(a),
@@ -611,8 +611,8 @@ let cache: CodexEntry[] | null = null;
 /** Every codex entry, in display order (weapons, skills, enemies by family, bosses, items). Built once. */
 export function buildCodex(): CodexEntry[] {
   if (cache) return cache;
-  const weapons = ITEM_IDS.filter((i) => ITEMS[i].slot === 'weapon').map((i) => weaponEntry(i as WeaponId));
-  const skills = ITEM_IDS.filter((i) => ITEMS[i].slot === 'skill').map((i) => skillEntry(i as SkillId));
+  const weapons = ITEM_IDS.filter((i) => ITEMS[i].slot === 'weapon' && i in WEAPONS).map((i) => weaponEntry(i as WeaponId));
+  const skills = ITEM_IDS.filter((i) => ITEMS[i].slot === 'skill' && i in SKILL_BASE).map((i) => skillEntry(i as SkillId));
   const enemies = BASE_KINDS.flatMap((b) => ALL_ENEMY_KINDS.filter((k) => ENEMY_DEFS[k].base === b)).map(enemyEntry);
   const bosses = [...MINIBOSS_IDS.map(miniBossEntry), matronEntry()];
   cache = [...weapons, ...skills, ...enemies, ...bosses, ...itemEntries()];

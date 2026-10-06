@@ -1,6 +1,7 @@
 import { FONT } from '../../engine/config';
 import type { Assets } from '../../engine/assets';
 import type { AABB } from '../../engine/math';
+import { GRADES, type Grade } from '../rules';
 
 /**
  * Small canvas helpers shared by the HUD, overlays and scenes. All coordinates are
@@ -208,6 +209,26 @@ export function icon(assets: Pick<Assets, 'sheet'>, c: CanvasRenderingContext2D,
 /** The 시체 조각 icon (`corpse_piece` of the `icons` sheet) centred at (cx, cy). */
 export function pieceIcon(assets: Pick<Assets, 'sheet'>, c: CanvasRenderingContext2D, cx: number, cy: number, size = 18, alpha = 1): void {
   icon(assets, c, 'corpse_piece', cx, cy, size, alpha);
+}
+
+/** The grade pill of a unique item (`[S]` in the grade colour, SSS with its gold ring) centred at (cx, cy); `size` = font size. */
+export function gradeBadge(c: CanvasRenderingContext2D, grade: Grade, cx: number, cy: number, size: number = SZ.s): void {
+  const g = GRADES[grade];
+  const w = Math.round(textWidth(c, grade, size, true)) + 8;
+  const h = size + 4;
+  panel(c, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h, { fill: g.color, stroke: g.outline ?? '#07060b', lineWidth: g.outline ? 2 : 1, r: 3 });
+  text(c, grade, cx, cy + 0.5, { size, bold: true, align: 'center', color: '#07060b', shadow: null });
+}
+
+/** Width of `gradeBadge` (to lay out text beside it). */
+export function gradeBadgeW(c: CanvasRenderingContext2D, grade: Grade, size: number = SZ.s): number {
+  return Math.round(textWidth(c, grade, size, true)) + 8;
+}
+
+/** The small corner version of the grade (HUD weapon slots, stash cells): the letters in the grade colour, outlined. `x`/`y` = right-bottom corner. */
+export function gradeLetter(c: CanvasRenderingContext2D, grade: Grade, x: number, y: number, size: number = SZ.s): void {
+  const g = GRADES[grade];
+  text(c, grade, x, y, { size, bold: true, align: 'right', color: g.color, shadow: g.outline ?? '#07060b' });
 }
 
 /** m:ss (or h:mm:ss) */

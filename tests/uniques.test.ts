@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeTestWorld, steps, flatMap } from './helpers';
+import { makeTestWorld, steps, flatMap, implemented } from './helpers';
 import { Player } from '../src/game/player/player';
 import { Actor } from '../src/game/entity';
 import type { DamageInfo } from '../src/game/combat';
@@ -110,8 +110,10 @@ describe('the catalogue of unique items (docs/CONTENT3.md §5)', () => {
     ['chain_hook', '사슬 갈고리', 'tactics', 'skill', 'skill'],
   ];
 
-  it('the ten first UNIQUE_IDS are the ids of CONTENT3, flagged `unique`, with the spec name / colour / slot', () => {
-    expect([...UNIQUE_IDS].sort()).toEqual(spec.map((s) => s[0]).sort());
+  it('the ten uniques of CONTENT3 are in UNIQUE_IDS (grade C and B), flagged `unique`, with the spec name / colour / slot', () => {
+    expect(UNIQUE_IDS).toHaveLength(30);
+    expect(UNIQUE_IDS.slice(0, 10).map((id) => ITEMS[id].grade)).toEqual(['C', 'C', 'C', 'C', 'C', 'B', 'B', 'B', 'B', 'B']);
+    expect([...UNIQUE_IDS.slice(0, 10)].sort()).toEqual(spec.map((s) => s[0]).sort());
     for (const [id, name, color, slot, kind] of spec) {
       const d = ITEMS[id];
       expect([d.name, d.color, d.slot, d.kind, d.unique, d.icon]).toEqual([name, color, slot, kind, true, id]);
@@ -128,7 +130,7 @@ describe('the catalogue of unique items (docs/CONTENT3.md §5)', () => {
       expect(SKILLS[id as ItemId], id).toBeTruthy();
       expect(SKILL_BASE[id as keyof typeof SKILL_BASE], id).toBeGreaterThan(0);
     }
-    for (const id of UNIQUE_IDS) if (ITEMS[id].slot === 'weapon') expect((WEAPONS as Record<string, unknown>)[id], id).toBeTruthy();
+    for (const [id] of spec) if (ITEMS[id].slot === 'weapon') expect((WEAPONS as Record<string, unknown>)[id], id).toBeTruthy();
     expect(SKILL_BASE).toMatchObject({ corpse_bomb: 40, bone_spikes: 18, soul_lantern: 10, chain_hook: 12 });
   });
 
@@ -164,12 +166,18 @@ describe('the catalogue of unique items (docs/CONTENT3.md §5)', () => {
     expect(UNIQUE_COLOR).toBe('#f0d9a0');
     for (const id of ITEM_IDS) expect(itemColor(id) === UNIQUE_COLOR, id).toBe(!!ITEMS[id].unique);
     expect(itemName(item('bone_cleaver', 2))).toBe('뼈 도살검 +1');
-    for (const id of UNIQUE_IDS) {
+    for (const id of UNIQUE_IDS.filter(implemented)) {
       const lines = itemLines(item(id));
       expect(lines[0]).toBe(ITEMS[id].desc);
       expect(lines.at(-1), id).toBe(signatureText(id));
       expect(signatureText(id).length, id).toBeGreaterThan(8);
       expect(signatureText(id), id).not.toMatch(/undefined|NaN/);
+    }
+    // an entry whose behaviour is not written yet has no signature line (and no empty line on its card)
+    for (const id of UNIQUE_IDS.filter((i) => !implemented(i))) {
+      const lines = itemLines(item(id));
+      expect(lines[0], id).toBe(ITEMS[id].desc);
+      expect(lines.every((l) => l.length > 0), id).toBe(true);
     }
     // numbers of the cards are the table numbers
     expect(signatureText('reaper_scythe')).toContain(`${Math.round(melee('reaper_scythe').healOnKill! * 100)}%`);
@@ -209,10 +217,10 @@ describe('unique items stay out of every random pool', () => {
     expect(affixPool('spear').length).toBeGreaterThan(0);
   });
 
-  it('the title unlock count ignores uniques (x / y over the 11 ordinary items)', () => {
+  it('the title unlock count ignores uniques (x / y over the 33 ordinary items)', () => {
     const c = unlockedCount(defaultSave());
     expect(c.total).toBe(ITEM_IDS.length - UNIQUE_IDS.length);
-    expect(c.total).toBe(11);
+    expect(c.total).toBe(33);
     expect(c.have).toBe(STARTER_UNLOCKS.length);
     const s = defaultSave();
     s.unlocked.push('bone_cleaver'); // a hand-edited save
@@ -266,8 +274,8 @@ describe('a unique item on the floor is a usable item', () => {
     expect(dropsOf(t).map((d) => d.inst.id)).toEqual(['rusty_sword']);
   });
 
-  it('every unique: pick up, use once (a weapon swings / draws / blocks, a skill starts its cooldown)', () => {
-    for (const id of UNIQUE_IDS) {
+  it('every working unique: pick up, use once (a weapon swings / draws / blocks, a skill starts its cooldown)', () => {
+    for (const id of UNIQUE_IDS.filter(implemented)) {
       const t = dropFor({ id, tier: 1, affix: null });
       const e = new Dummy(t.p.x + 40, FLOOR);
       t.world.spawn(e);
@@ -816,7 +824,7 @@ describe('사슬 갈고리: the first enemy hit is pulled to her', () => {
 describe('the codex pages of the unique items', () => {
   const weapons = new Map(codexEntries('weapon').map((e) => [e.id, e]));
   const skills = new Map(codexEntries('skill').map((e) => [e.id, e]));
-  const uniques = [...UNIQUE_IDS].map((id) => (weapons.get(id) ?? skills.get(id))!);
+  const uniques = [...UNIQUE_IDS].filter(implemented).map((id) => (weapons.get(id) ?? skills.get(id))!);
 
   it('every unique is in the weapon / skill tab with the 유니크 tag, the bone-gold name and a signature row', () => {
     expect(uniques.every(Boolean)).toBe(true);

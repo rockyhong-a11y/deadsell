@@ -14,6 +14,7 @@ import { COLOR_HEX } from '../src/game/combat';
 import { CORPSE, ELITE, FOODS, GOLEM, LOOP, TIER2, golemCost } from '../src/game/rules';
 import { WEAPONS } from '../src/game/player/weapons';
 import { TapRegistry } from '../src/game/ui/taps';
+import { implemented } from './helpers';
 import { LevelUI } from '../src/game/ui/levelUI';
 import { CodexModal, PauseModal } from '../src/game/ui/modals';
 import {
@@ -105,22 +106,23 @@ describe('codex entries cover the whole game', () => {
   const all = buildCodex();
   const ids = new Set(all.map((e) => e.id));
 
-  it('has 13 weapons (7 + 6 unique), 8 skills (4 + 4 unique), 30 enemies, 5 bosses and the item pages', () => {
-    expect(codexEntries('weapon')).toHaveLength(13);
-    expect(codexEntries('skill')).toHaveLength(8);
-    expect(UNIQUE_IDS).toHaveLength(10);
+  it('has a page for every working weapon and skill, 30 enemies, 5 bosses and the item pages', () => {
+    // (an item registered for the item expansion but not written yet has no page: docs/CONTENT4.md §5)
+    expect(codexEntries('weapon')).toHaveLength(ITEM_IDS.filter((i) => ITEMS[i].slot === 'weapon' && implemented(i)).length);
+    expect(codexEntries('skill')).toHaveLength(ITEM_IDS.filter((i) => ITEMS[i].slot === 'skill' && implemented(i)).length);
+    expect(UNIQUE_IDS).toHaveLength(30);
     expect(codexEntries('enemy')).toHaveLength(30);
     expect(codexEntries('boss')).toHaveLength(5);
     expect(codexEntries('item').length).toBeGreaterThanOrEqual(2 + 3 + 3 + 2 + META_UPGRADES.length + Object.keys(AFFIX_NAMES).length);
     expect(ids.size).toBe(all.length); // ids are unique across tabs
   });
 
-  it('every ITEMS id is there (weapons / skills by slot)', () => {
-    for (const id of ITEM_IDS) {
+  it('every working ITEMS id is there (weapons / skills by slot)', () => {
+    for (const id of ITEM_IDS.filter(implemented)) {
       expect(ids.has(id), id).toBe(true);
       expect(all.find((e) => e.id === id)!.tab).toBe(ITEMS[id].slot === 'weapon' ? 'weapon' : 'skill');
     }
-    expect(Object.keys(ITEMS).length).toBe(codexEntries('weapon').length + codexEntries('skill').length);
+    expect(ITEM_IDS.filter(implemented).length).toBe(codexEntries('weapon').length + codexEntries('skill').length);
   });
 
   it('every enemy of the variants table (30) is there, grouped by its base', () => {
@@ -206,7 +208,8 @@ describe('codex previews point at real sheets and animations (public/assets/spri
   const all = buildCodex();
 
   it('the sprite manifests of the game are all readable', () => {
-    for (const name of SHEETS) expect(onDisk(name), name).not.toBeNull();
+    // (the stash sheet is drawn by the art lane of docs/CONTENT4.md §6: until it lands the game uses a placeholder)
+    for (const name of SHEETS) if (name !== 'stash') expect(onDisk(name), name).not.toBeNull();
   });
 
   it('the CONTENT3 art (corpse, seamstress, golem, new icons) is there and has the animations the codex and the props use', () => {

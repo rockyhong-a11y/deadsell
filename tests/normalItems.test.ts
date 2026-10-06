@@ -110,7 +110,7 @@ const dpsOf = (w: MeleeWeapon): number => {
   let dmg = 0;
   let time = 0;
   w.hits.forEach((h, i) => {
-    dmg += h.damage;
+    dmg += h.damage * (h.shoot?.count ?? 1); // a thrown volley hurts once per knife
     time += h.windup + h.active + h.recover * (i === w.hits.length - 1 ? 1 : 0.45);
   });
   return dmg / time;
@@ -1105,7 +1105,8 @@ describe('거부의 파동: pushes every enemy in r 110 away (knockback 420), 12
     const arrowIn = new EnemyArrow(300 + 80, FLOOR - 24, -100, 0, 8, null);
     const boltIn = new Bolt(300 - 70, FLOOR - 24, 100, 0, 8, null);
     const arrowOut = new EnemyArrow(300 + 180, FLOOR - 24, -100, 0, 8, null);
-    const mine = new EnemyArrow(300 + 50, FLOOR - 24, 100, 0, 8, null);
+    // (flies over the heads of the dummies: it must not hit one of them before the wave goes off)
+    const mine = new EnemyArrow(300 + 50, FLOOR - 70, 100, 0, 8, null);
     for (const e of [arrowIn, boltIn, arrowOut, mine]) t.world.spawn(e);
     steps(t.world, 1);
     mine.reflect('player'); // sent back by a parry: hers now

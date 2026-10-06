@@ -439,8 +439,13 @@ test('the Matron killed from far away still hands over her 12 pieces: the victor
     }, dist);
     expect(before.dying, 'the Matron is dying').toBe(true);
     expect(before.gap, `the heroine stands ${dist} px from her`).toBeGreaterThanOrEqual(dist - 30);
-    // her pieces fly to the heroine from anywhere while the slow motion runs
-    await page.evaluate(() => (window as any).__ds.step(120));
+    // her pieces fly to the heroine from anywhere while the slow motion runs (it starts with bossDefeated, MATRON.deathAt
+    // after the blow plus any hit-stop, so wait for it rather than for a fixed number of steps)
+    await page.evaluate(() => {
+      const ds = (window as any).__ds;
+      for (let i = 0; i < 60 && ds.world.timeScale >= 1; i++) ds.step(10);
+      ds.step(10);
+    });
     if (dist > 260) {
       const flying = await page.evaluate(() => (window as any).__ds.world.entities.some((e: any) => e.constructor.name === 'Coin' && e.kind === 'piece' && e.homing && !e.dead));
       expect(flying, 'a far piece is already homing').toBe(true);

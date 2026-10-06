@@ -42,7 +42,7 @@ src/game/combat.ts              DamageInfo, hitArea, isBehind, COLOR_HEX        
 src/game/run.ts                 RunState, LEVEL_SEQUENCE                              [core]
 src/game/debug.ts               window.__ds test hooks                                [core]
 src/game/scenes/levelScene.ts   level lifecycle + render order                        [core]
-src/game/player/*               Player controller, weapons, skills                    [player]
+src/game/player/*               Player controller, weapons, skills, projectiles, uniques.ts (entities of the A-SSS uniques)  [player]
 src/game/items/*                item catalogue, rolling, pickups, item drops          [player]
 src/game/enemies/*              enemy AI, enemy projectiles, createEnemy, pools       [enemies]
 src/game/boss/*                 The Iron Matron, boss projectiles/hazards             [enemies]
@@ -114,9 +114,8 @@ note the dependency in your report; do not edit the other module.
   쉼터) opens `StashModal` (`ui/stashModal.ts`, `LevelUI.openStash`): equipment row + 6 x 4 grid + item card; `장착` (asks which slot when both are taken, `pending`), `맡기기`, `분해` (armed by the
   first press, done by the second within 3 s); keys arrows / Enter / X (`ModalKey` `'special'`, the pad's Y) / Esc. `stashLayout(W, H)` is the pure geometry.
 * **Grades and recipes.** `rules.ts`: `GRADE_IDS` C B A S SS SSS, `GRADES` (badge colour, salvage, power target), `CRAFT[grade]` (`items`: stash lines `any` / `affix` / `tier` (>= `CRAFT_MIN_TIER`) / `mb` / `unique` of a grade;
-  `shards: { n, minLoop }`; `pieces`; `tier` of the crafted unique). `ItemDef.grade` marks the 30 uniques (`UNIQUE_IDS`, five per grade, C and B are the ten of docs/CONTENT3.md); the 20 new unique ids are registered (names, colours, slots, icon = id) before their behaviour exists:
-  such an item does nothing when used, shows no signature line and has no codex page (`buildCodex` lists items that have a `WEAPONS` / `SKILLS` entry). `rollItem` never returns a unique. The 22 new ordinary
-  items are complete (next section).
+  `shards: { n, minLoop }`; `pieces`; `tier` of the crafted unique). `ItemDef.grade` marks the 30 uniques (`UNIQUE_IDS`, five per grade, C and B are the ten of docs/CONTENT3.md; A to SSS are the 20 of docs/CONTENT4.md §5.3,
+  next sections). Every one of the 63 ids has its behaviour now (`buildCodex` lists the items that have a `WEAPONS` / `SKILLS` entry, which is all of them). `rollItem` never returns a unique.
 * **Crafting.** `meta/craft.ts`: `planCraft(grade, save)` -> `CraftPlan` (`lines` with have / need, `picks` = the stash indices that would be consumed, `shardPicks`); lines claim entries most specific first
   (unique, mb, tier, affix, any), cheapest first (lowest tier, no affix, not mb, oldest); `craftUnique(save, grade, id)` consumes them, takes the bank pieces and the shards (lowest loops first) and
   puts the unique (tier by grade, no affix) into the stash. `Seamstress` (prompt `조합`; after a craft she plays `sew` and says one of `SELMA_LINES`) opens `CraftModal` (`ui/craftModal.ts`, `LevelUI.openCraft(onCraft)`): grade tabs (Q / E, LB / RB, left / right),
@@ -147,6 +146,23 @@ note the dependency in your report; do not edit the other module.
 * **Pool.** `STARTER_UNLOCKS` = the base four + the four ★ items (`grave_shovel`, `leather_whip`, `throwing_knives`, `stun_grenade`); `loadSave` always merges it in, so an old save gains the ★ items and keeps what it unlocked. Every
   other ordinary item is a `META_UPGRADES` blueprint row (`unlock_<id>`, 20-40 cells, weapons first). The Alchemist screen shows `ALCHEMIST_PAGE` (10) rows per page (`<` `>`, LB / RB, the page follows the selection; after a purchase the
   selection moves to the next upgrade still for sale). Codex: group `일반` with a `해금` row (`기본` or `연금술사 {cost}셀`).
+
+## Unique items of grades A to SSS (docs/CONTENT4.md §5.3)
+* **Tables.** 12 weapons in `player/weapons.ts` and 8 skills in `player/skills.ts` (`SKILL_BASE` + one spec constant each: `PLAGUE_CENSER`, `BONE_TURRET`, `DEATH_ORB`, `CHAIN_PRISON`, `RAG_DOLL`, `CRIMSON_RAIN`, `LAST_BELL`, `REQUIEM`; cooldowns in `ITEMS`).
+  The base table of a weapon sits at the power target of its grade over the DPS of the ordinary weapon of its family (A +30 %, S +45 %, SS +60 %, SSS +80 %; 셀마의 대가위 / 신더의 불씨검 / 아홉 꼬리 채찍 a little lower because
+  their signature multiplies damage), the signature on top; `tests/uniques4.test.ts` checks the ratios. New table fields: melee `toll`, `leech`, `tipPull`, `glaive`, `quake`, `bleedStacks`, `killPieces`, `fullHpMul`, `ember`, per hit
+  `multi` (a lash that lands n times, each with its own box and once-per-target set) and `execute`; bow `soulfire`; shield `fullBlock`, `parryHeal`, `bell`; and a new weapon kind `wand` (`WandWeapon.bolt`, the 폭풍 지팡이).
+* **Player hooks.** `Player.strike` (one test of a swing's box; `swingHit` runs it once, or once per lash) + `signatureHit` (executioner mark, extra bleed stacks, the toll ring, the ember, the whip's pull), `throwGlaive` (every n-th swing that
+  connects, counted per weapon slot), `releaseQuake` (at the end of the windup, on the ground only), `fireArrow` / `fireWisps` (a full draw bursts, a short one sends wisps), `parryFeedback` pays one reward per block (`BlockState.rewarded`:
+  shockwave, `parryHeal`, `parryBell`), `blockHit` stops everything inside `fullBlock`, `tickStaff` calls `chainLightning` for a wand, `onDealt` adds the leech, the requiem heal (at most once per `REQUIEM.healCd`) and the kill pieces;
+  `startRequiem` / `requiemKill` (`requiemT`; the kill listener of the kill streak refunds the other slot and keeps the frenzy up). `Actor.isBoss` (set by the Matron and the mid-bosses) marks the targets the executioner, the last bell and
+  the chains treat differently.
+* **Entities** (`player/uniques.ts`, numbers come in as specs). `Wisp` (homing: the soul fire bow's tap shot and the ember; an ember leaves the enemy it came from and flies on to the next one), `Glaive` (out, then back to her hand, one set of
+  targets for each way), `Quake` (a wave that runs along the floor, `QUAKE_H` px tall: whoever is above it is spared; the two waves of a slam share one set), `chainLightning` + `LightningArcs` (the arcs of `projectiles.ts` `drawArcs`), `PlagueAura`,
+  `DeathOrb` (listens to `enemyKilled`), `ChainPrison` (stun + held on the spot unless the target is heavy), `NeedleRain`, `summonDoll` (a `Golem` with a `DollSpec`: half scale, its own hp and damage, a faster slam, never touches `run.golem`),
+  `lastBell` + `GreatBell` (every enemy whose hurtbox is in the camera view; a boss takes the boss damage and no stun). `projectiles.ts` gained the blast kinds `toll` / `soul` / `death`, `ExplosionOpts.already`, `ArrowOpts.burst`, `TurretSpec`
+  (the 뼈 포탑 is a `Turret` with piercing, outlined shards) and exports `dragToward` / `nearestEnemy`.
+* **Text.** `signatureText` reads the tables for the 20 (`higherSignature` in `items.ts`), the codex (`codexData.ts`) has the rows of every new field, and its unique pages end with the recipe row of `CRAFT`.
 
 ## Unique items (docs/CONTENT3.md §5)
 * **Identity.** An `ItemDef` with `unique: true` and a `grade` (items.ts): thirty of them (`UNIQUE_IDS`, the ten of docs/CONTENT3.md are grades C and B), crafted only at Selma. `rollItem` filters them out of every pool (drops, chests,
@@ -220,6 +236,8 @@ The detail text of a page that does not fit (final boss on a narrow view: up to 
     stash and craft screens at 844x390 and 667x375.
     Also: every new ordinary weapon and skill equipped with `__ds.give` and used once in the real loop (states, projectiles, hurt ghouls, cooldown, screenshots `40_item_*` / `41_item_*`), and the paged Alchemist
     screen bought from by touch (screenshots `42_alchemist_*` at 844x390 and 667x375).
+  * `e2e/uniques4.spec.ts` - docs/CONTENT4.md §5.3: one unique of each grade C B A S SS SSS crafted through the debug hooks (`stashAdd` / `bank` / `shards` / `craft`), equipped from the stash with the real stash operation and used
+    on three ghouls; then all 20 uniques of A to SSS equipped with `__ds.give` and used once in the real loop (states, entities drawn, hurt ghouls, cooldown, no console errors; screenshots `50_unique_*` / `51_unique_*`).
   * `e2e/codex.spec.ts` - the codex from the title (touch, keyboard, mocked pad) and from the pause menu; one screenshot per tab
     (`e2e-shots/codex_*.png`).
   * `e2e/settings.spec.ts` - settings by touch, virtual buttons with real multi-touch, a mocked `navigator.getGamepads`

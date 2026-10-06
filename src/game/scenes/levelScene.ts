@@ -6,7 +6,7 @@ import { LevelRenderer } from '../level/render';
 import { Player } from '../player/player';
 import { spawnRunGolem } from '../allies/golem';
 import { collectAllPieces, collectCoinsInRange, homeAllPieces, PIECE_COLOR } from '../items/pickups';
-import { bankPieces } from '../meta/bank';
+import { bankOnEntry } from '../meta/bank';
 import { LevelUI } from '../ui/levelUI';
 import { DEBUG } from '../../engine/config';
 import type { Actor } from '../entity';
@@ -67,12 +67,10 @@ export class LevelScene implements Scene {
   enter(): void {
     const spec = this.run.level;
     // entering a 쉼터: every carried piece goes into the permanent bank (docs/CONTENT4.md §3)
-    if (spec.kind === 'passage') {
-      const n = bankPieces(this.run, this.game.save);
-      if (n > 0) {
-        this.game.persist();
-        this.world.emit({ type: 'toast', text: `시체 조각 ${n}개를 셀마에게 맡겼다`, color: PIECE_COLOR });
-      }
+    const banked = bankOnEntry(this.run, this.game.save, spec.kind);
+    if (banked > 0) {
+      this.game.persist();
+      this.world.emit({ type: 'toast', text: `시체 조각 ${banked}개를 셀마에게 맡겼다`, color: PIECE_COLOR });
     }
     this.game.audio.music(spec.kind === 'boss' ? 'boss' : spec.kind === 'passage' ? 'passage' : spec.biome === 'prison' ? 'prison' : 'ramparts');
     this.ui.onLevelStart();

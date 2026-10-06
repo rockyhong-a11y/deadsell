@@ -26,27 +26,26 @@ agent). If you need to deviate from it, update this file in the same change.
 ## 2. Game flow
 
 ```
-Title ─tap─▶ Biome 1 "Sunken Prison" (가라앉은 감옥, procedural)
+Title ─tap─▶ Biome 1 "Sunken Prison" (가라앉은 감옥, procedural; the 보관함 chest stands next to the start)
              └─exit door─▶ 쉼터 (rest stop = the passage level: Alchemist + flask refill + cell spending,
-                           │        Selma: sew pieces into the body / 시체 상점 / golem pile)
+                           │        Selma: craft uniques, 보관함, golem pile; carried pieces are banked on entering)
                            └─▶ Biome 2 "Moonlit Ramparts" (달빛 성벽, procedural)
                                └─exit door─▶ 쉼터
                                              └─▶ Boss arena "Bell of Chains" (사슬의 종탑)
-                                                 └─ boss dies ─▶ Victory screen ─▶ Title
-                                                    (carried pieces are sewn; body 100 ─▶ Loop-clear scene ─▶ Title)
-Death anywhere ─▶ Death screen (stats, cells and pieces lost) ─▶ new run from Biome 1 (new seed)
-Body made whole at Selma's (100/100) ─▶ Loop-clear scene ─▶ Title, the next 회차 (loop) starts harder
+                                                 └─ boss dies ─▶ Victory screen (pieces banked, +1 bell shard, 다음 회차: N) ─▶ Title ({loop}회차)
+Death anywhere ─▶ Death screen (stats, cells and carried pieces lost) ─▶ new run from Biome 1 (new seed)
 ```
 
-Corpse pieces (시체 조각, docs/CONTENT3.md): every kill drops pieces (1 / elite 3 / mid-boss 8 / the Matron 12; ≈ 100 for a full loop of
-the stages). Selma, the corpse seamstress waiting in each 쉼터, sews the carried pieces into Cinder's body (permanent, `save.body` 0..99),
-sells unique relics (시체 상점) and stitches a rag golem (누더기 골렘) that fights beside Cinder for the run. A body of 100 pieces clears the
-loop; each loop above the first has stronger enemies (+30 % hp, +20 % damage, more elites, pricier golem / shop, ceiling at loop 5).
+Corpse pieces (시체 조각, docs/CONTENT3.md, docs/CONTENT4.md §3): every kill drops pieces (1 / elite 3 / mid-boss 8 / the Matron 12). The ones a run carries are lost on death, but entering a 쉼터 (or
+winning) **banks** them (`save.pieces`, permanent). The bank pays for Selma's crafting and the rag golem (누더기 골렘, fights beside Cinder for the run). Killing the Iron Matron advances the loop (회차): each loop
+above the first has stronger enemies (+30 % hp, +20 % damage, more elites, pricier golem, ceiling at loop 5) and yields a 종탑의 파편 (bell shard) tagged with the loop it was won in.
+The **stash** (보관함, 24 slots, permanent) holds items beyond the four equipped ones: it is reached through a chest in the prison start room and in every 쉼터, and a picked-up item can be sent there from the field.
+Selma **crafts uniques** (grades C B A S SS SSS, 5 each) from stash items, banked pieces and bell shards: a C unique after one or two repetitions of stages 1-2; the top grades follow the loops. Uniques are never in drops.
 
 Run state that persists across the levels of one run: HP, max HP, flask charges,
 equipment (2 weapons + 2 skills), stat levels, gold, carried cells, carried corpse pieces, the golem, kills, time.
 Meta state that persists across runs (localStorage): unlocked items, upgrades
-bought from the Alchemist, best time, runs won, the loop (회차) and the pieces sewn into the body.
+bought from the Alchemist, best time, runs won, the loop (회차), the banked pieces, the stash and the bell shards.
 
 ---------------------------------------------------------------------------
 ## 3. Characters (all female)
@@ -63,7 +62,7 @@ bought from the Alchemist, best time, runs won, the loop (회차) and the pieces
 | `matron` | 강철 여교도관 (The Iron Matron) | Boss | Giant (≈2.4× player height) armored jailer-queen: spiked iron crown/helm, long braid, massive pauldrons, chain wrapped around the body, a huge iron bell-flail (a bell on a chain) as weapon, glowing ember eyes, tattered dark cape. |
 | `alchemist` | 연금술사 모르웬 (Morwen) | Meta NPC (Collector role) | Tall hooded alchemist woman with a bird-beak plague mask pushed up on her head, many glowing blue vials on her coat, a huge backpack with a tank of cells. |
 | `merchant` | 상인 펠 (Pell) | Shop NPC | Cheerful merchant woman with a big backpack of goods, wide hat, scarf, lantern. |
-| `seamstress` | 재봉사 셀마 (Selma) | 쉼터 NPC (docs/CONTENT3.md) | Tall gaunt corpse seamstress: bone-white skin with stitch lines, black hair in a bun pierced with needles, monocle, patchwork dress, measuring-tape scarf, thread spools, huge shears on her back. Sews the body, runs the 시체 상점. |
+| `seamstress` | 재봉사 셀마 (Selma) | 쉼터 NPC (docs/CONTENT3.md, crafting: docs/CONTENT4.md) | Tall gaunt corpse seamstress: bone-white skin with stitch lines, black hair in a bun pierced with needles, monocle, patchwork dress, measuring-tape scarf, thread spools, huge shears on her back. Crafts unique items from the stash. |
 | `golem` | 누더기 골렘 (Rag Golem) | Player's ally | Big (≈ 1.6× the heroine) female rag-doll giant of burlap and corpse-pale patches, dark-red yarn braids, two cyan button eyes (Cinder's ember), stitched smile, bandaged fists. Built at the golem pile in the 쉼터. |
 
 Elite enemies are the normal sprite at 1.0× scale with a stat boost and a coloured aura (code side; see docs/CONTENT2.md — elites are not mid-bosses).
@@ -103,6 +102,9 @@ jump buffer 0.12 s, variable jump (release → vy × 0.4). Roll 0.32 s at 300 px
 invulnerable 0.04–0.30 s, cancels attack recovery. Ground slam: dive 620 px/s,
 AoE damage + stun on landing. Ledge grab & auto-climb. One-way platforms.
 No ladders (vertical travel = platforms and jumps).
+Sprint (질주, docs/CONTENT4.md §1): holding a direction on the ground for 0.9 s sprints at ×1.6 (240 px/s); stopping, turning, a wall, an attack / skill / roll / slam / ledge grab / hit ends it,
+a jump keeps the speed until landing. Three kills within 2.5 s of each other start the 광란 질주 (frenzy, 5 s, every movement a sprint at once, each kill refreshes it). A sprint has its own
+animation, cyan after-images (red in the frenzy), dust and speed lines.
 
 Combat: hit-stop 50–80 ms on hits, small screen shake, knockback, white hit flash,
 damage numbers (crits yellow and larger). Enemies telegraph every attack (wind-up
@@ -163,7 +165,7 @@ E  ground enemy     F  flying enemy         T  treasure chest   S  scroll altar
 I  item pedestal    M  merchant             A  alchemist        P  player start
 X  exit door        B  boss                 L  torch/light      D  random decoration
 $  shop item slot   H  health fountain
-Z  seamstress (Selma, 쉼터)   C  corpse-shop pedestal (3 per 쉼터)   G  golem pile
+Z  seamstress (Selma, 쉼터)   K  stash chest (보관함)   G  golem pile
 ```
 
 ---------------------------------------------------------------------------

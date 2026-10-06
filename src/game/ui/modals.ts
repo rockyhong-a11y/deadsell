@@ -321,7 +321,7 @@ export class MapModal extends Modal {
     else if (k === 'right') this.panX += step;
     else if (k === 'up') this.panY -= step;
     else if (k === 'down') this.panY += step;
-    else this.ui.closeTop(this);
+    else if (k === 'confirm' || k === 'cancel') this.ui.closeTop(this);
   }
 
   draw(c: CanvasRenderingContext2D, W: number, H: number): void {

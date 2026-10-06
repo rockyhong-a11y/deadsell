@@ -137,3 +137,47 @@ export async function hold(page: Page, key: string, ms: number) {
   await page.waitForTimeout(ms);
   await page.keyboard.up(key);
 }
+
+// ---- shared by the content specs (corpse, content4) ----
+export const SHOTS = 'e2e/__shots__/';
+export const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png` });
+
+export async function startRun(page: Page, seed: number) {
+  // wait for the NEW scene (the old one may still be up while the fade runs)
+  await page.evaluate((s) => { (window as any).__prev = (window as any).__ds.game.scene; (window as any).__ds.start(s); }, seed);
+  await page.waitForFunction(() => { const d = (window as any).__ds; return d.game.scene !== (window as any).__prev && d.game.scene?.constructor?.name === 'LevelScene' && d.game.fade < 0.3 && d.player?.onGround === true; }, null, { timeout: 30_000 });
+}
+export async function toLevel(page: Page, name: string) {
+  await page.evaluate((n) => { (window as any).__prev = (window as any).__ds.game.scene; (window as any).__ds.gotoLevel(n); }, name);
+  await page.waitForFunction(() => { const d = (window as any).__ds; return d.game.scene !== (window as any).__prev && d.game.fade < 0.3 && d.player?.onGround === true; }, null, { timeout: 30_000 });
+}
+
+export const saved = (page: Page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), SAVE_KEY);
+export const hudPieces = (page: Page) => page.evaluate(() => (window as any).__ds.game.scene.ui.hud.lastPieces as number);
+
+/** Record every string the game draws with fillText, so tests can read the canvas UI. */
+export async function recordText(page: Page) {
+  await page.evaluate(() => {
+    const w = window as any;
+    if (w.__texts) return;
+    w.__texts = [] as string[];
+    const orig = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (s: string, ...a: any[]) {
+      w.__texts.push(String(s));
+      return (orig as any).call(this, s, ...a);
+    };
+  });
+}
+/** the strings drawn since the last `clearText` */
+export const drawn = (page: Page) => page.evaluate(() => [...((window as any).__texts as string[])]);
+export const clearText = (page: Page) => page.evaluate(() => { ((window as any).__texts as string[]).length = 0; });
+
+/** Stand next to an entity of a class, wait for its prompt, press the interact key. */
+export async function interact(page: Page, cls: string, pick = 0) {
+  const e = (await entitiesOf(page, cls))[pick];
+  expect(e, `a ${cls} exists`).toBeTruthy();
+  await teleportNear(page, e.x - 8, e.y - 2, 25);
+  await expect.poll(() => page.evaluate(() => (window as any).__ds.player.nearInteract?.constructor.name ?? null), { timeout: 5_000, message: `prompt for ${cls}` }).toBe(cls);
+  await page.keyboard.press('KeyF');
+}
+

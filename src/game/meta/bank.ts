@@ -1,4 +1,4 @@
-import type { RunState } from '../run';
+import type { LevelSpec, RunState } from '../run';
 import { MAX_LOOP, type SaveData } from './save';
 import { STASH } from '../rules';
 
@@ -13,6 +13,11 @@ export function bankPieces(run: Pick<RunState, 'pieces'>, save: Pick<SaveData, '
   run.pieces = 0;
   save.pieces += n;
   return n;
+}
+
+/** Entering a level: a 쉼터 (`passage`) banks the carried pieces, every other level leaves them. Returns how many were banked. */
+export function bankOnEntry(run: Pick<RunState, 'pieces'>, save: Pick<SaveData, 'pieces'>, kind: LevelSpec['kind']): number {
+  return kind === 'passage' ? bankPieces(run, save) : 0;
 }
 
 /** What winning a run did: the pieces banked, the loop that was won and the one that starts next. */

@@ -1,7 +1,7 @@
 import type { Interactable } from '../world';
 import { Prop, drawBubble, drawSoftGlow } from './common';
 
-/** Selma's banter (docs/CONTENT3.md §3): she says one when she is spoken to; it stays up while the craft screen is closed. */
+/** Selma's banter (docs/CONTENT3.md §3): she says one after every craft. */
 export const SELMA_LINES = [
   '여기 있던 팔, 종탑에서 은화 세 닢에 팔렸지.',
   '실은 붉은 걸로. 피가 덜 티 나거든.',
@@ -55,7 +55,6 @@ export class Seamstress extends Prop implements Interactable {
 
   interact(): void {
     if (!this.canInteract()) return;
-    this.talk();
     this.world.ui.openCraft(() => this.sew());
   }
 
@@ -70,9 +69,11 @@ export class Seamstress extends Prop implements Interactable {
     w.audio.play('ui_tap');
   }
 
-  /** She sews (after a craft): the `sew` animation for a moment. */
+  /** After a craft: the `sew` animation for a moment and one of her lines (it stays up once the craft screen is closed). */
   sew(): void {
     this.sewT = SEW_TIME;
+    this.anim?.play('sew'); // (the world is paused while the craft screen is up)
+    this.talk();
   }
 
   update(dt: number): void {

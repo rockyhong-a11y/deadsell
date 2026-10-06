@@ -5,6 +5,7 @@ import { LEVEL_SEQUENCE } from './run';
 import type { AffixId, ItemId, ItemInstance } from './items/types';
 import { GRADE_IDS, type Grade } from './rules';
 import { addToStash } from './meta/stash';
+import { spawnItemDrop } from './items/pickups';
 import { craftUnique } from './meta/craft';
 import { ITEMS } from './items/items';
 import { Actor } from './entity';
@@ -86,6 +87,13 @@ export function installDebug(game: Game): void {
       const ok = addToStash(game.save, inst);
       if (ok) game.persist();
       return ok;
+    },
+    /** drop an item on the floor `dx` px in front of the player (pick it up with the interact key) */
+    drop(id: ItemId, tier = 1, affix: AffixId | null = null, mb = false, dx = 20) {
+      const w = level()?.world;
+      if (!w) return;
+      const p = w.player;
+      spawnItemDrop(w, p.x + dx * p.facing, p.y - 10, { id, tier, affix, ...(mb ? { mb: true as const } : {}) });
     },
     /** craft the unique `id` of `grade` from the stash / bank / shards as Selma would (saved) */
     craft(grade: Grade, id: ItemId) {

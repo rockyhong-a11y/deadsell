@@ -1,70 +1,29 @@
 import { test, expect, type Page } from '@playwright/test';
-import { SAVE_KEY, boot, waitScene, sceneName, entitiesOf, teleportNear } from './helpers';
+import { boot, waitScene, sceneName, entitiesOf, teleportNear, shot, startRun, toLevel, saved, hudPieces, recordText, drawn, clearText, interact } from './helpers';
 
 /**
- * docs/CONTENT3.md in the real game (Chromium, real asset loading + real render loop, sound ON so audio errors surface):
- * kills drop corpse pieces that fly to the heroine and show in the HUD; Selma sews them into the body in the 쉼터; the 시체 상점
- * sells with pieces; the golem pile builds a golem that follows into the next level; a body made whole clears the loop
- * (loop-clear scene -> title shows the next 회차); dying loses carried pieces. The debug hooks (__ds) set the scene up.
+ * docs/CONTENT3.md (as changed by docs/CONTENT4.md §0 / §3) in the real game (Chromium, real asset loading + real render loop,
+ * sound ON so audio errors surface): kills drop corpse pieces that fly to the heroine and show in the HUD; entering a 쉼터 banks
+ * them (Selma crafts, the stash chest stands there); the golem pile is paid from the bank and builds a golem that follows into the
+ * next level; dying loses carried pieces; the Matron's pieces are banked on victory. The debug hooks (__ds) set the scene up.
  * Screenshots for a human to look at go to e2e/__shots__/.
  */
 test.use({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 });
 test.setTimeout(180_000);
 
-/** the ten unique items of docs/CONTENT3.md §5 (the 시체 상점 sells only these) */
+/** the ten unique items of docs/CONTENT3.md §5 (the first two grades, C and B) */
 const UNIQUES = ['bone_cleaver', 'reaper_scythe', 'stitch_needle', 'widow_fangs', 'coffin_lid', 'marrow_bow', 'corpse_bomb', 'bone_spikes', 'soul_lantern', 'chain_hook'];
 
 /** the unique skills (the others are weapons) */
 const ITEM_SLOT_SKILL = ['corpse_bomb', 'bone_spikes', 'soul_lantern', 'chain_hook'];
 
-const SHOTS = 'e2e/__shots__/';
-const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png` });
-
-async function startRun(page: Page, seed: number) {
-  // wait for the NEW scene (the old one may still be up while the fade runs)
-  await page.evaluate((s) => { (window as any).__prev = (window as any).__ds.game.scene; (window as any).__ds.start(s); }, seed);
-  await page.waitForFunction(() => { const d = (window as any).__ds; return d.game.scene !== (window as any).__prev && d.game.scene?.constructor?.name === 'LevelScene' && d.game.fade < 0.3 && d.player?.onGround === true; }, null, { timeout: 30_000 });
-}
-async function toLevel(page: Page, name: string) {
-  await page.evaluate((n) => { (window as any).__prev = (window as any).__ds.game.scene; (window as any).__ds.gotoLevel(n); }, name);
-  await page.waitForFunction(() => { const d = (window as any).__ds; return d.game.scene !== (window as any).__prev && d.game.fade < 0.3 && d.player?.onGround === true; }, null, { timeout: 30_000 });
-}
-
 const run = (page: Page) =>
   page.evaluate(() => {
     const r = (window as any).__ds.game.run;
-    return { pieces: r.pieces as number, sewn: r.piecesSewn as number, golem: r.golem as { hp: number; maxHp: number } | null, kind: r.level.kind as string, loop: r.loop as number };
+    return { pieces: r.pieces as number, golem: r.golem as { hp: number; maxHp: number } | null, kind: r.level.kind as string, loop: r.loop as number };
   });
-const saved = (page: Page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), SAVE_KEY);
-const hudPieces = (page: Page) => page.evaluate(() => (window as any).__ds.game.scene.ui.hud.lastPieces as number);
 
-/** Record every string the game draws with fillText, so tests can read the canvas UI. */
-async function recordText(page: Page) {
-  await page.evaluate(() => {
-    const w = window as any;
-    if (w.__texts) return;
-    w.__texts = [] as string[];
-    const orig = CanvasRenderingContext2D.prototype.fillText;
-    CanvasRenderingContext2D.prototype.fillText = function (s: string, ...a: any[]) {
-      w.__texts.push(String(s));
-      return (orig as any).call(this, s, ...a);
-    };
-  });
-}
-/** the strings drawn since the last `clearText` */
-const drawn = (page: Page) => page.evaluate(() => [...((window as any).__texts as string[])]);
-const clearText = (page: Page) => page.evaluate(() => { ((window as any).__texts as string[]).length = 0; });
-
-/** Stand next to an entity of a class, wait for its prompt, press the interact key. */
-async function interact(page: Page, cls: string, pick = 0) {
-  const e = (await entitiesOf(page, cls))[pick];
-  expect(e, `a ${cls} exists`).toBeTruthy();
-  await teleportNear(page, e.x - 8, e.y - 2, 25);
-  await expect.poll(() => page.evaluate(() => (window as any).__ds.player.nearInteract?.constructor.name ?? null), { timeout: 5_000, message: `prompt for ${cls}` }).toBe(cls);
-  await page.keyboard.press('KeyF');
-}
-
-test('kills drop pieces, Selma sews them, the shop sells, the golem follows into the next level', async ({ page }) => {
+test('kills drop pieces, the 쉼터 banks them (Selma, the stash chest, the golem pile), the golem follows into the next level', async ({ page }) => {
   const c = await boot(page, { query: '?seed=3&god=1' });
   await recordText(page);
   await startRun(page, 3);
@@ -100,120 +59,53 @@ test('kills drop pieces, Selma sews them, the shop sells, the golem follows into
     expect(texts.some((t) => /^\+\d+ 조각$/.test(t)), '+N 조각 toast').toBe(true);
   });
 
-  await test.step('the 쉼터: Selma, three pedestals, the golem pile', async () => {
+  await test.step('entering the 쉼터 banks the carried pieces; Selma, the golem pile and the stash chest stand there, no corpse shop', async () => {
+    await clearText(page);
     await toLevel(page, 'passage');
     expect((await run(page)).kind).toBe('passage');
-    expect((await run(page)).pieces).toBe(4); // carried through the level change
+    expect((await run(page)).pieces, 'nothing is carried any more').toBe(0);
+    expect((await saved(page)).pieces, 'the 4 carried pieces are in the bank').toBe(4);
+    await page.waitForTimeout(500);
+    expect(await drawn(page), 'the toast').toEqual(expect.arrayContaining(['시체 조각 4개를 셀마에게 맡겼다']));
     const names = await page.evaluate(() => (window as any).__ds.world.entities.map((e: any) => e.constructor.name));
-    for (const n of ['Seamstress', 'GolemPile', 'Alchemist', 'Fountain', 'ExitDoor']) expect(names, n).toContain(n);
-    expect(names.filter((n: string) => n === 'CorpseShopItem')).toHaveLength(3);
+    for (const n of ['Seamstress', 'GolemPile', 'Alchemist', 'Fountain', 'ExitDoor', 'StashChest']) expect(names, n).toContain(n);
+    expect(names).not.toContain('CorpseShopItem');
     await page.waitForTimeout(1200);
     await shot(page, '02_rest_stop');
-    for (const [cls, name] of [['Seamstress', '03_selma'], ['CorpseShopItem', '04_corpse_shop'], ['GolemPile', '05_golem_pile']] as const) {
-      const e = (await entitiesOf(page, cls))[cls === 'CorpseShopItem' ? 1 : 0];
+    for (const [cls, name] of [['Seamstress', '03_selma'], ['StashChest', '04_stash_chest'], ['GolemPile', '05_golem_pile']] as const) {
+      const e = (await entitiesOf(page, cls))[0];
       await teleportNear(page, e.x - 40, e.y - 2, 25);
       await page.waitForTimeout(700);
       await shot(page, name);
     }
   });
 
-  await test.step('Selma: nothing carried she talks; carrying pieces she sews them into the body (saved at once)', async () => {
-    await page.evaluate(() => (window as any).__ds.pieces(0));
-    await clearText(page);
-    await interact(page, 'Seamstress');
-    await page.waitForTimeout(300);
-    expect(await drawn(page)).toEqual(expect.arrayContaining(['대화']));
-    expect((await saved(page)).body).toBe(0);
-
-    await page.evaluate(() => { const ds = (window as any).__ds; ds.pieces(37); ds.step(20); });
+  await test.step('Selma: her prompt is 조합 with the bank; talking to her opens the craft screen', async () => {
     await clearText(page);
     await interact(page, 'Seamstress');
     await page.waitForTimeout(400);
+    expect(await page.evaluate(() => (window as any).__ds.game.scene.ui.top?.constructor.name)).toBe('CraftModal');
     const texts = await drawn(page);
-    expect(texts.some((t) => t === '몸 꿰매기 · 37조각'), 'the prompt before sewing').toBe(true);
-    expect(texts.some((t) => t === '시체 조각 37개를 꿰맸다 · 몸 37/100'), 'the toast').toBe(true);
-    const r = await run(page);
-    expect(r.pieces).toBe(0);
-    expect(r.sewn).toBe(37);
-    expect((await saved(page)).body).toBe(37);
-    await shot(page, '06_sewn');
+    expect(texts, 'the craft screen').toEqual(expect.arrayContaining(['조합', '재봉사 셀마', '조합']));
+    expect(texts.some((t) => t === '재봉사 셀마 · 시체 조각 4'), 'the prompt of Selma before the screen opened').toBe(true);
+    await shot(page, '06_craft_open');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => (window as any).__ds.game.scene.ui.top)).toBeNull();
   });
 
-  await test.step('시체 상점: three distinct uniques; one is bought with pieces, picked up, equipped and used once', async () => {
-    const stock: { id?: string; price: number; sold: boolean; affix: string | null }[] = await page.evaluate(() =>
-      (window as any).__ds.world.entities.filter((e: any) => e.constructor.name === 'CorpseShopItem').map((p: any) => ({ id: p.item?.id as string | undefined, price: p.price as number, sold: p.sold as boolean, affix: p.item?.affix ?? null })));
-    expect(stock, 'three pedestals').toHaveLength(3);
-    for (const s of stock) {
-      expect(UNIQUES, 'a unique item on every pedestal (no 품절)').toContain(s.id);
-      expect([s.sold, s.affix]).toEqual([false, null]);
-      expect(s.price).toBeGreaterThan(0);
-    }
-    expect(new Set(stock.map((s) => s.id)).size, 'distinct').toBe(3);
-    const ped = 1;
-    const { id, price } = stock[ped] as { id: string; price: number };
-    // too poor: error toast, nothing happens
-    await page.evaluate(() => { const ds = (window as any).__ds; ds.pieces(1); ds.step(5); });
-    await clearText(page);
-    await interact(page, 'CorpseShopItem', ped);
+  await test.step('the golem pile is paid from the bank and builds a golem that follows into the next level', async () => {
+    await page.evaluate(() => { const ds = (window as any).__ds; ds.bank(29); ds.step(5); });
+    await interact(page, 'GolemPile');
     await page.waitForTimeout(300);
-    const texts = await drawn(page);
-    expect(texts.some((t) => t === '시체 조각이 부족하다')).toBe(true);
-    expect(texts.some((t) => t.startsWith('구매 · ')), 'the prompt names the item').toBe(true);
-    expect(texts.some((t) => t === '유니크'), 'the item card carries the 유니크 tag').toBe(true);
-    expect((await run(page)).pieces).toBe(1);
-    await shot(page, '07a_unique_card');
-    // rich: pays, the item drops at the pedestal, the pedestal is spent
-    await page.evaluate((n) => { const ds = (window as any).__ds; ds.pieces(n + 7); ds.step(5); }, price);
-    await interact(page, 'CorpseShopItem', ped);
-    await page.waitForTimeout(300);
-    expect((await run(page)).pieces).toBe(7);
-    expect(await page.evaluate(() => (window as any).__ds.world.entities.filter((e: any) => e.constructor.name === 'ItemDrop' && !e.dead).length)).toBe(1);
-    expect(await page.evaluate((k) => (window as any).__ds.world.entities.filter((e: any) => e.constructor.name === 'CorpseShopItem')[k].sold, ped)).toBe(true);
-    await page.waitForTimeout(500);
-    await shot(page, '07_bought');
-    // pick the item up: it goes into its slot as the shop sold it (tier of the run, no affix)
-    await clearText(page);
-    await interact(page, 'ItemDrop');
-    await page.waitForTimeout(300);
-    const held = await page.evaluate((want) => {
-      const r = (window as any).__ds.game.run;
-      const all = [...r.weapons.map((w: any, slot: number) => ({ w, slot, kind: 'weapon' })), ...r.skills.map((w: any, slot: number) => ({ w, slot, kind: 'skill' }))];
-      const f = all.find((x) => x.w?.id === want);
-      return f ? { slot: f.slot as number, kind: f.kind as string, affix: f.w.affix, tier: f.w.tier as number, run: r.tier as number } : null;
-    }, id);
-    expect(held, `${id} is equipped`).not.toBeNull();
-    expect([held!.affix, held!.tier]).toEqual([null, held!.run]);
-    expect(await page.evaluate(() => (window as any).__ds.world.entities.filter((e: any) => e.constructor.name === 'ItemDrop' && !e.dead).length)).toBe(0);
-    // use it once with the real input: a weapon swings / draws / blocks, a skill starts its cooldown
-    const used = await page.evaluate(([kind, slot]) => {
-      const ds = (window as any).__ds, w = ds.world, inp = w.input, p = w.player;
-      const e = ds.spawn('ghoul', 40);
-      ds.step(2);
-      const seen = new Set<string>();
-      if (kind === 'skill') {
-        inp.tap(slot === 0 ? 'skill1' : 'skill2');
-        for (let f = 0; f < 60; f++) { ds.step(1); seen.add(p.state); }
-        return { moved: p.skillCooldown[slot as number] > 0, seen: [...seen] };
-      }
-      const a = slot === 0 ? 'attack1' : 'attack2';
-      inp.press(a);
-      for (let f = 0; f < 40; f++) { ds.step(1); seen.add(p.state); }
-      inp.release(a);
-      for (let f = 0; f < 30; f++) { ds.step(1); seen.add(p.state); }
-      e.dead = true;
-      return { moved: [...seen].some((st) => st !== 'free'), seen: [...seen] };
-    }, [held!.kind, held!.slot] as const);
-    expect(used.moved, `${id} used once (states ${used.seen})`).toBe(true);
-    await page.waitForTimeout(300);
-    await shot(page, '07b_unique_used');
-  });
-
-  await test.step('the golem pile builds a golem that follows into the next level', async () => {
-    await page.evaluate(() => { const ds = (window as any).__ds; ds.pieces(31); ds.step(5); });
+    expect((await run(page)).golem, 'too few banked pieces: no golem').toBeNull();
+    expect((await saved(page)).pieces).toBe(29);
+    await page.evaluate(() => { const ds = (window as any).__ds; ds.bank(31); ds.pieces(500); ds.step(5); });
     await interact(page, 'GolemPile');
     await page.waitForTimeout(300);
     let r = await run(page);
-    expect(r.pieces).toBe(1);
+    expect(r.pieces, 'the carried pieces were not spent').toBe(500);
+    expect((await saved(page)).pieces, 'the bank paid 30').toBe(1);
     expect(r.golem).toEqual({ hp: 300, maxHp: 300 });
     await expect.poll(() => entitiesOf(page, 'Golem'), { timeout: 8_000, message: 'the golem stands up' }).toHaveLength(1);
     await page.waitForTimeout(1200);
@@ -309,68 +201,10 @@ test('every unique item can be equipped and used in the real game (its entities 
   expect(c.errors).toEqual([]);
 });
 
-test('the body made whole clears the loop: loop-clear scene, then the title shows the next 회차', async ({ page }) => {
-  const c = await boot(page, { query: '?seed=5&god=1' });
-  await recordText(page);
-  await startRun(page, 5);
-  await toLevel(page, 'passage');
-  expect((await saved(page))?.loop ?? 1).toBe(1);
-  await page.evaluate(() => { const ds = (window as any).__ds; ds.body(99); ds.pieces(41); ds.step(5); });
-  await clearText(page);
-  await interact(page, 'Seamstress');
-  await page.waitForTimeout(200);
-  const texts = await drawn(page);
-  expect(texts.some((t) => t === '몸 완성하기 · 1조각'), 'the completing prompt').toBe(true);
-  expect(texts.some((t) => t === '1회차 클리어! · 남는 40조각은 사라짐'), 'the surplus warning').toBe(true);
-  // the save already moved on
-  const s = await saved(page);
-  expect([s.loop, s.body, s.loopRuns]).toEqual([2, 0, 0]);
-  await waitScene(page, 'LoopClearScene', 20_000);
-  await clearText(page);
-  await page.waitForTimeout(9000); // the typewriter epilogue + stats
-  await shot(page, '10_loop_clear');
-  const t1 = await drawn(page);
-  // (the big headings are drawn letter by letter, so look at the joined text)
-  const joined = t1.join('');
-  for (const want of ['온전한 몸', '1회차 클리어', '도전 횟수', '처치한 적', '2회차 시작 — 적이 강해집니다']) expect(joined, want).toContain(want);
-  // tap to leave (the first tap may only finish the typewriter)
-  for (let i = 0; i < 2 && (await sceneName(page)) === 'LoopClearScene'; i++) {
-    await page.evaluate(() => (window as any).__ds.game.taps.byId('title')?.onTap());
-    await page.waitForTimeout(900);
-  }
-  await waitScene(page, 'TitleScene');
-  await page.waitForTimeout(1200);
-  const t2 = await drawn(page);
-  expect(t2.some((t) => t === '2회차 · 몸 0/100'), 'the title shows the next loop').toBe(true);
-  expect(t2.some((t) => t === '그들은 나를 백 조각으로 나눠 팔았다.'), 'the tagline').toBe(true);
-  await shot(page, '11_title_loop2');
-  // the next run is a loop-2 run: stronger enemies, a pricier golem
-  await startRun(page, 6);
-  const r = await run(page);
-  expect(r.loop).toBe(2);
-  expect((await saved(page)).loopRuns).toBe(1);
-  const hp = await page.evaluate(() => { const ds = (window as any).__ds; const e = ds.spawn('ghoul', 200); ds.step(2); return [e.maxHp, e.spec.hp]; });
-  expect(hp[0]).toBe(Math.round(hp[1] * 1.3));
-  expect(c.errors, 'no console / page errors').toEqual([]);
-});
-
-test('a loop-2 body: 99 sewn in the title save, the meter and "몸 n/100"', async ({ page }) => {
-  const c = await boot(page, { query: '?seed=5&god=1' });
-  await recordText(page);
-  await page.evaluate(() => { const ds = (window as any).__ds; ds.loop(3); ds.body(63); });
-  await page.reload();
-  await page.waitForFunction(() => (window as any).__ds?.game?.scene?.constructor?.name === 'TitleScene', null, { timeout: 30_000 });
-  await recordText(page);
-  await page.waitForTimeout(1500);
-  expect(await drawn(page)).toEqual(expect.arrayContaining(['3회차 · 몸 63/100']));
-  await shot(page, '12_title_body63');
-  expect(c.errors).toEqual([]);
-});
-
-test('dying loses the carried pieces (the sewn ones stay), the death screen says so', async ({ page }) => {
+test('dying loses the carried pieces (the banked ones stay), the death screen says so', async ({ page }) => {
   const c = await boot(page, { query: '?seed=9' });
   await recordText(page);
-  await page.evaluate(() => { (window as any).__ds.body(20); });
+  await page.evaluate(() => { (window as any).__ds.bank(20); });
   await startRun(page, 9);
   await page.evaluate(() => { const ds = (window as any).__ds; ds.pieces(12); ds.game.run.cells = 5; ds.step(5); });
   expect((await run(page)).pieces).toBe(12);
@@ -379,53 +213,23 @@ test('dying loses the carried pieces (the sewn ones stay), the death screen says
   await waitScene(page, 'DeathScene', 15_000);
   await page.waitForTimeout(3500);
   const texts = await drawn(page);
-  expect(texts, 'death rows').toEqual(expect.arrayContaining(['잃어버린 시체 조각', '12', '※ 꿰매지 않은 시체 조각은 사라졌습니다. 쉼터의 재봉사 셀마에게 맡기세요.', '※ 쓰지 않은 셀은 사라졌습니다. 쉼터의 연금술사에게 맡기세요.']));
+  expect(texts, 'death rows').toEqual(expect.arrayContaining(['잃어버린 시체 조각', '12', '※ 쉼터에 맡기지 못한 시체 조각은 사라졌습니다.', '※ 쓰지 않은 셀은 사라졌습니다. 쉼터의 연금술사에게 맡기세요.']));
   await shot(page, '13_death');
-  expect((await saved(page)).body).toBe(20);
-  // retry: a fresh run with nothing carried
+  expect((await saved(page)).pieces).toBe(20);
+  // retry: a fresh run with nothing carried, the bank is still there
   await page.evaluate(() => (window as any).__ds.game.taps.byId('retry')?.onTap());
   await page.waitForFunction(() => { const d = (window as any).__ds; return d.game.scene?.constructor?.name === 'LevelScene' && d.game.fade < 0.3 && d.player?.onGround === true; }, null, { timeout: 30_000 });
   expect((await run(page)).pieces).toBe(0);
-  expect((await saved(page)).body).toBe(20);
+  expect((await saved(page)).pieces).toBe(20);
   expect(c.errors).toEqual([]);
 });
 
-test('a won run sews the carried pieces on the spot (victory rows); a body made whole hands over to the loop-clear scene', async ({ page }) => {
-  const c = await boot(page, { query: '?seed=4&god=1' });
-  await recordText(page);
-  await startRun(page, 4);
-  await page.evaluate(() => { const ds = (window as any).__ds; ds.body(10); ds.pieces(25); });
-  await toLevel(page, 'boss');
-  await clearText(page);
-  await page.evaluate(() => { const ds = (window as any).__ds; ds.game.victory(); });
-  await waitScene(page, 'VictoryScene', 20_000);
-  await page.waitForTimeout(9000);
-  const texts = await drawn(page);
-  expect(texts.some((t) => t.startsWith('꿰맨 시체 조각 +25') && t.endsWith('몸 35/100')), 'victory row').toBe(true);
-  await shot(page, '14_victory');
-  expect((await saved(page)).body).toBe(35);
-  // a second win with the body nearly done: the loop clears
-  await startRun(page, 4);
-  await page.evaluate(() => { const ds = (window as any).__ds; ds.body(95); ds.pieces(30); });
-  await toLevel(page, 'boss');
-  await page.evaluate(() => { (window as any).__ds.game.victory(); });
-  await waitScene(page, 'VictoryScene', 20_000);
-  await page.waitForTimeout(9000);
-  expect((await saved(page)).loop).toBe(2);
-  for (let i = 0; i < 2 && (await sceneName(page)) === 'VictoryScene'; i++) {
-    await page.evaluate(() => (window as any).__ds.game.taps.byId('title')?.onTap());
-    await page.waitForTimeout(1000);
-  }
-  await waitScene(page, 'LoopClearScene', 20_000);
-  expect(c.errors).toEqual([]);
-});
-
-test('the Matron killed from far away still hands over her 12 pieces: the victory sews them all', async ({ page }) => {
+test('the Matron killed from far away still hands over her 12 pieces: the victory banks them all', async ({ page }) => {
   const c = await boot(page, { query: '?seed=3&god=1' });
   // (the last blow of a bow / grenade / turret lands far from her pile; the pieces only home within 260 px otherwise)
   for (const dist of [60, 450, 700]) {
     await startRun(page, 3);
-    await page.evaluate(() => { const ds = (window as any).__ds; ds.body(10); ds.pieces(7); });
+    await page.evaluate(() => { const ds = (window as any).__ds; ds.bank(10); ds.shards(); ds.game.save.loop = 1; ds.pieces(7); });
     await toLevel(page, 'boss');
     const before = await page.evaluate((d) => {
       const ds = (window as any).__ds, w = ds.world;
@@ -453,31 +257,9 @@ test('the Matron killed from far away still hands over her 12 pieces: the victor
     for (let i = 0; i < 60 && (await sceneName(page)) !== 'VictoryScene'; i++) await page.evaluate(() => (window as any).__ds.step(20));
     expect(await sceneName(page)).toBe('VictoryScene');
     const r = await run(page);
-    expect(r.sewn, `${dist} px: 7 carried + the Matron's 12`).toBe(7 + 12);
     expect(r.pieces).toBe(0);
-    expect((await saved(page)).body, `${dist} px`).toBe(10 + 19);
-    await page.evaluate(() => { (window as any).__ds.game.save.body = 0; });
+    expect((await saved(page)).pieces, `${dist} px: 10 banked + 7 carried + the Matron's 12`).toBe(10 + 7 + 12);
   }
-  expect(c.errors).toEqual([]);
-});
-
-test('Selma: giving up in the slow motion after the body was made whole still shows the loop clear, not the death screen', async ({ page }) => {
-  const c = await boot(page, { query: '?seed=5&god=1' });
-  await startRun(page, 5);
-  await toLevel(page, 'passage');
-  await page.evaluate(() => { const ds = (window as any).__ds; ds.body(99); ds.pieces(5); ds.step(5); });
-  await page.evaluate(() => {
-    const ds = (window as any).__ds;
-    const selma = ds.world.entities.find((e: any) => e.constructor.name === 'Seamstress');
-    selma.interact(); // the body is whole: flash + slow motion, the save has moved on to loop 2
-    ds.game.scene.ui.openPause(); // she opens the pause menu within the slow motion ...
-    ds.game.scene.ui.giveUp(); // ... and gives up
-  });
-  await waitScene(page, 'LoopClearScene', 20_000);
-  const s = await saved(page);
-  expect([s.loop, s.body, s.loopRuns]).toEqual([2, 0, 0]);
-  await page.waitForTimeout(1500);
-  expect(await sceneName(page)).toBe('LoopClearScene');
   expect(c.errors).toEqual([]);
 });
 
@@ -495,28 +277,31 @@ test('loot that dropped just before the exit is not lost to the fade', async ({ 
   await page.waitForFunction(() => { const d = (window as any).__ds; return d.game.scene !== (window as any).__prev && d.game.scene?.constructor?.name === 'LevelScene' && d.game.fade < 0.3; }, null, { timeout: 30_000 });
   const r = await run(page);
   expect(r.kind).toBe('passage');
-  expect(r.pieces, '3 ordinary kills = 3 pieces, carried into the 쉼터').toBe(3);
+  expect((await saved(page)).pieces, '3 ordinary kills = 3 pieces, banked on entering the 쉼터').toBe(3);
+  expect(r.pieces).toBe(0);
   expect(c.errors).toEqual([]);
 });
 
-test('쉼터 details: Selma\'s banter bubble is not covered by the prompt, the golem\'s hp bar sits above its head', async ({ page }) => {
+test('쉼터 details: Selma\'s banter bubble (after a craft) is not covered by the prompt, the golem\'s hp bar sits above its head', async ({ page }) => {
   const c = await boot(page, { query: '?seed=5&god=1' });
   await recordText(page);
   await startRun(page, 5);
   await toLevel(page, 'passage');
-  await page.evaluate(() => { const ds = (window as any).__ds; ds.pieces(0); ds.step(5); });
-  await interact(page, 'Seamstress'); // nothing carried: she talks
+  await page.evaluate(() => { const ds = (window as any).__ds; ds.step(5); });
+  const e = (await entitiesOf(page, 'Seamstress'))[0];
+  await teleportNear(page, e.x - 8, e.y - 2, 25);
+  await page.evaluate(() => (window as any).__ds.world.entities.find((x: any) => x.constructor.name === 'Seamstress').sew()); // after a craft she sews and says a line
   await clearText(page);
   await page.waitForTimeout(400);
   const texts = await drawn(page);
   expect(texts.some((t) => /[가-힣]/.test(t) && t.length > 8 && !t.startsWith('재봉사')), 'her line is drawn').toBe(true);
-  expect(texts, 'the prompt steps aside while she talks').not.toContain('대화');
+  expect(texts, 'the prompt steps aside while she talks').not.toContain('조합');
   await shot(page, '16_selma_banter');
   // the prompt returns when the line is gone
   await page.waitForTimeout(3300);
   await clearText(page);
   await page.waitForTimeout(300);
-  expect(await drawn(page)).toContain('대화');
+  expect(await drawn(page)).toContain('조합');
   // the golem's hp bar
   await page.evaluate(() => { const ds = (window as any).__ds; const g = ds.golem(); ds.step(30); g.takeDamage({ amount: 90, dir: 1, kind: 'melee' }); ds.step(3); });
   await page.waitForTimeout(300);

@@ -7,7 +7,7 @@ import { TileMap, T } from '../src/game/tilemap';
 import { RunState, LEVEL_SEQUENCE } from '../src/game/run';
 import { defaultSave, loadSave, MAX_LOOP, type SaveData } from '../src/game/meta/save';
 import { applyRunStart, unlockedCount } from '../src/game/meta/progression';
-import { bankPieces, winRun } from '../src/game/meta/bank';
+import { bankOnEntry, bankPieces, winRun } from '../src/game/meta/bank';
 import {
   CORPSE, GOLEM, STASH, TIER2, ELITE, golemCost, golemStatMul, loopDmgMul, loopEliteBonus, loopHpMul, loopK, enemyDmgMul, enemyHpMul,
 } from '../src/game/rules';
@@ -193,6 +193,22 @@ describe('the bank: carried pieces are kept at the 쉼터 and on victory (docs/C
     expect([run.pieces, save.pieces]).toEqual([0, 47]);
     expect(bankPieces(run, save)).toBe(0); // nothing carried: nothing happens
     expect(save.pieces).toBe(47);
+  });
+
+  it('entering a 쉼터 banks them, entering any other level leaves them carried', () => {
+    for (const spec of LEVEL_SEQUENCE) {
+      const { run, save } = fresh(9, 3);
+      const n = bankOnEntry(run, save, spec.kind);
+      if (spec.kind === 'passage') expect([n, run.pieces, save.pieces], spec.name).toEqual([9, 0, 12]);
+      else expect([n, run.pieces, save.pieces], spec.name).toEqual([0, 9, 3]);
+    }
+    // the second 쉼터 banks what was picked up since the first one
+    const { run, save } = fresh(4);
+    bankOnEntry(run, save, 'passage');
+    run.pieces = 6;
+    bankOnEntry(run, save, 'biome');
+    bankOnEntry(run, save, 'passage');
+    expect([run.pieces, save.pieces]).toEqual([0, 10]);
   });
 
   it('winning banks the carried pieces, keeps a bell shard of the loop that was won and starts the next loop', () => {
@@ -527,15 +543,23 @@ describe('쉼터: Selma and the golem pile', () => {
       steps(t.world, 2);
       return { ...t, selma };
     };
-    it('she talks (6+ lore lines, never the same twice in a row) and shows the banked pieces', () => {
+    it('her prompt is 조합 with the banked pieces; talking to her opens the craft screen (and says nothing)', () => {
+      const a = talk(12);
+      expect([a.selma.promptText(), a.selma.promptSub(), a.selma.canInteract()]).toEqual(['조합', '재봉사 셀마 · 시체 조각 12', true]);
+      let opened = 0;
+      (a.world as any).ui.openCraft = () => { opened++; };
+      a.selma.interact();
+      expect(opened).toBe(1);
+      expect(a.selma.promptText()).toBe('조합'); // no bubble: the prompt can be tapped again at once
+      expect(a.game.save.pieces).toBe(12);
+    });
+    it('after a craft she sews and says a line (6+ lore lines, never the same twice in a row)', () => {
       expect(SELMA_LINES.length).toBeGreaterThanOrEqual(6);
       const a = talk(12);
-      expect(a.selma.promptText()).toBe('조합');
-      expect(a.selma.promptSub()).toBe('재봉사 셀마 · 시체 조각 12');
       const said = new Set<string>();
       let last = '';
       for (let i = 0; i < 40; i++) {
-        a.selma.interact();
+        a.selma.sew();
         const line = (a.selma as unknown as { line: string }).line;
         expect(SELMA_LINES).toContain(line);
         expect(line).not.toBe(last);
@@ -545,10 +569,10 @@ describe('쉼터: Selma and the golem pile', () => {
       expect(said.size).toBeGreaterThanOrEqual(6);
       expect(a.game.save.pieces).toBe(12);
     });
-    it('while her banter line is up the prompt steps aside (it was drawn over the bubble), then comes back', () => {
+    it('while her line is up the prompt steps aside (it was drawn over the bubble), then comes back', () => {
       const a = talk();
       expect(a.selma.promptText()).toBe('조합');
-      a.selma.interact();
+      a.selma.sew();
       expect(a.selma.promptText()).toBe('');
       steps(a.world, 60 * 3 + 5);
       expect(a.selma.promptText()).toBe('조합');

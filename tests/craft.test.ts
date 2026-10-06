@@ -513,8 +513,9 @@ describe('Selma opens the craft screen', () => {
     (t.world as any).ui.openCraft = (fn: (id: ItemId) => void) => { cb = fn; };
     selma.interact();
     expect(cb).toBeTypeOf('function');
-    expect(selma.promptText()).toBe(''); // her banter bubble is up
+    expect(selma.promptText()).toBe('조합'); // she says nothing before the craft
     cb!('bone_cleaver');
+    expect(selma.promptText()).toBe(''); // her line is up
     steps(t.world, 2);
     expect(selma.anim?.name).toBe('sew');
     steps(t.world, 100);

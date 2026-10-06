@@ -164,13 +164,21 @@ export function hexA(hex: string, a: number): string {
 
 export interface AlchemistLayout {
   panel: AABB;
+  /** one rect per upgrade: where it sits on ITS page (only the rows of the current page are drawn) */
   rows: AABB[];
   close: AABB;
   buy: AABB;
+  prev: AABB;
+  next: AABB;
 }
+
+/** upgrades on one page of the Alchemist screen: two columns of five rows (the blueprints of the item expansion made the list longer than the screen) */
+export const ALCHEMIST_PAGE = 10;
 
 export class AlchemistModal extends Modal {
   sel: number;
+  /** the page shown; it follows the selection */
+  page: number;
   private msg: { text: string; color: string; t: number } | null = null;
   private shake = 0;
 
@@ -181,6 +189,27 @@ export class AlchemistModal extends Modal {
     const buyable = META_UPGRADES.findIndex((u) => buyBlock(u, run, save) === null);
     const avail = META_UPGRADES.findIndex((u) => u.available(save));
     this.sel = buyable >= 0 ? buyable : Math.max(0, avail);
+    this.page = Math.floor(this.sel / ALCHEMIST_PAGE);
+  }
+
+  private get pages(): number {
+    return Math.max(1, Math.ceil(META_UPGRADES.length / ALCHEMIST_PAGE));
+  }
+
+  private select(i: number): void {
+    this.sel = i;
+    this.page = Math.floor(i / ALCHEMIST_PAGE);
+  }
+
+  /** the pager buttons / LB RB: the first upgrade of the next (or previous) page, wrapping round */
+  private turn(dir: number): void {
+    const to = (this.page + dir + this.pages) % this.pages;
+    this.select(to * ALCHEMIST_PAGE);
+    this.sfx('ui_tap');
+  }
+
+  tab(dir: number): void {
+    if (this.pages > 1) this.turn(dir);
   }
 
   layout(W: number, H: number): AlchemistLayout {
@@ -191,14 +220,16 @@ export class AlchemistModal extends Modal {
     const rh = 40;
     const rg = 5;
     const y0 = p.y + 66;
-    const rows = META_UPGRADES.map((_, i) => ({ x: p.x + 12 + (i % cols) * (rw + gap), y: y0 + Math.floor(i / cols) * (rh + rg), w: rw, h: rh }));
+    const rows = META_UPGRADES.map((_, i) => {
+      const k = i % ALCHEMIST_PAGE;
+      return { x: p.x + 12 + (k % cols) * (rw + gap), y: y0 + Math.floor(k / cols) * (rh + rg), w: rw, h: rh };
+    });
     const by = p.y + p.h - 46;
-    return {
-      panel: p,
-      rows,
-      close: { x: p.x + 12, y: by, w: 104, h: 38 },
-      buy: { x: p.x + p.w - 12 - 168, y: by, w: 168, h: 38 },
-    };
+    const close = { x: p.x + 12, y: by, w: 104, h: 38 };
+    const buy = { x: p.x + p.w - 12 - 168, y: by, w: 168, h: 38 };
+    // the pager sits between them: < 1/3 >
+    const mid = Math.round((close.x + close.w + buy.x) / 2);
+    return { panel: p, rows, close, buy, prev: { x: mid - 56, y: by, w: 36, h: 38 }, next: { x: mid + 20, y: by, w: 36, h: 38 } };
   }
 
   private buySelected(): void {
@@ -212,7 +243,7 @@ export class AlchemistModal extends Modal {
       this.msg = { text: `${u.name} 구매 완료`, color: COL.green, t: 2.2 };
       // move to the next thing worth buying
       const next = META_UPGRADES.findIndex((x) => x.available(ui.game.save));
-      if (next >= 0 && META_UPGRADES[this.sel].owned(ui.game.save)) this.sel = next;
+      if (next >= 0 && META_UPGRADES[this.sel].owned(ui.game.save)) this.select(next);
     } else {
       this.sfx('error');
       this.shake = 0.3;
@@ -226,10 +257,10 @@ export class AlchemistModal extends Modal {
 
   key(k: ModalKey): void {
     const n = META_UPGRADES.length;
-    if (k === 'up') this.sel = (this.sel + n - 2) % n;
-    else if (k === 'down') this.sel = (this.sel + 2) % n;
-    else if (k === 'left') this.sel = (this.sel + n - 1) % n;
-    else if (k === 'right') this.sel = (this.sel + 1) % n;
+    if (k === 'up') this.select((this.sel + n - 2) % n);
+    else if (k === 'down') this.select((this.sel + 2) % n);
+    else if (k === 'left') this.select((this.sel + n - 1) % n);
+    else if (k === 'right') this.select((this.sel + 1) % n);
     else if (k === 'confirm') this.buySelected();
     else if (k === 'cancel') this.cancel();
   }
@@ -256,15 +287,19 @@ export class AlchemistModal extends Modal {
       hx += 56;
     }
     text(c, '연금술사 모르웬', hx, L.panel.y + 20, { size: SZ.l, bold: true });
-    text(c, '셀을 바치면 영구적인 힘을 얻을 수 있어요.', hx, L.panel.y + 40, { color: COL.dim });
+    // (the line under the name also carries the result of the last purchase)
+    if (this.msg) text(c, this.msg.text, hx, L.panel.y + 40, { bold: true, color: this.msg.color, alpha: Math.min(1, this.msg.t * 2) });
+    else text(c, '셀을 바치면 영구적인 힘을 얻을 수 있어요.', hx, L.panel.y + 40, { color: COL.dim });
     text(c, '※ 쓰지 않은 셀은 사망하면 모두 사라집니다.', hx, L.panel.y + 54, { color: COL.amber });
     const cellsX = L.panel.x + L.panel.w - 14;
     text(c, String(run.cells), cellsX, L.panel.y + 22, { size: SZ.l, bold: true, align: 'right', color: COL.cell });
     icon(assets, c, 'cells', cellsX - textWidth(c, String(run.cells), SZ.l, true) - 14, L.panel.y + 22, 22);
     text(c, '보유 셀', cellsX, L.panel.y + 42, { align: 'right', color: COL.dim });
     // rows
-    META_UPGRADES.forEach((u, i) => this.drawRow(c, u, L.rows[i], i === this.sel, run.cells, save));
-    META_UPGRADES.forEach((_, i) => this.hit('alch' + i, L.rows[i], () => { this.sel = i; this.sfx('ui_tap'); }));
+    const first = this.page * ALCHEMIST_PAGE;
+    const shown = META_UPGRADES.slice(first, first + ALCHEMIST_PAGE);
+    shown.forEach((u, k) => this.drawRow(c, u, L.rows[first + k], first + k === this.sel, run.cells, save));
+    shown.forEach((_, k) => this.hit('alch' + (first + k), L.rows[first + k], () => { this.select(first + k); this.sfx('ui_tap'); }));
     // footer
     const u = META_UPGRADES[this.sel];
     const block = u ? buyBlock(u, run, save) : 'owned';
@@ -279,7 +314,13 @@ export class AlchemistModal extends Modal {
       disabled: !!block,
     });
     this.hit('alch-buy', L.buy, () => this.buySelected());
-    if (this.msg) text(c, this.msg.text, (L.close.x + L.close.w + L.buy.x) / 2, L.close.y + L.close.h / 2, { align: 'center', bold: true, color: this.msg.color, alpha: Math.min(1, this.msg.t * 2) });
+    if (this.pages > 1) {
+      button(c, L.prev, { label: '<' });
+      button(c, L.next, { label: '>' });
+      text(c, `${this.page + 1}/${this.pages}`, (L.prev.x + L.prev.w + L.next.x) / 2, L.prev.y + L.prev.h / 2, { align: 'center', bold: true });
+      this.hit('alch-prev', L.prev, () => this.turn(-1));
+      this.hit('alch-next', L.next, () => this.turn(1));
+    }
     c.globalAlpha = 1;
   }
 

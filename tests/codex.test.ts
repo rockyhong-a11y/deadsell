@@ -271,8 +271,11 @@ describe('codex previews point at real sheets and animations (public/assets/spri
     expect(skills.get('corpse_bomb')!.preview.steps[0].anim).toBe('throw');
     for (const id of ['bone_spikes', 'soul_lantern']) expect(skills.get(id)!.preview.steps[0].anim, id).toBe('deploy');
     expect(skills.get('chain_hook')!.preview.steps[0].anim).toBe('throw');
-    // the unique skills drawn in code (spikes, flames, the hook) have no sprite of their own: only the cast is shown
-    for (const e of skills.values()) expect(e.preview.prop?.sheet, e.id).toBe(['bone_spikes', 'soul_lantern', 'chain_hook'].includes(e.id) ? undefined : 'projectiles');
+    for (const id of ['stun_grenade', 'magnet_grenade', 'cluster_grenade', 'phaser', 'tornado']) expect(skills.get(id)!.preview.steps[0].anim, id).toBe('throw');
+    for (const id of ['tesla_coil', 'flame_turret', 'wave_of_denial']) expect(skills.get(id)!.preview.steps[0].anim, id).toBe('deploy');
+    // the skills drawn in code (spikes, flames, the hook, coil, flame turret, phaser, wave, tornado) have no sprite of their own: only the cast is shown
+    const inCode = ['bone_spikes', 'soul_lantern', 'chain_hook', 'tesla_coil', 'flame_turret', 'phaser', 'wave_of_denial', 'tornado'];
+    for (const e of skills.values()) expect(e.preview.prop?.sheet, e.id).toBe(inCode.includes(e.id) ? undefined : 'projectiles');
   });
 
   it('enemies and bosses cycle through every animation of their own sheet', () => {

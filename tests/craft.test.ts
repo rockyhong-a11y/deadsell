@@ -104,9 +104,10 @@ describe('the catalogue: 63 kinds, 30 uniques in six grades', () => {
     expect(ITEMS.ninefold_whip.name).toBe('아홉 꼬리 채찍');
   });
 
-  it('the new ordinary items are not in the starting pool or the drops (their lanes add that), and the new uniques are crafted only', () => {
+  it('of the new items only the four ★ ordinary ones are in the starting pool (the other ordinary ones are Alchemist blueprints), the uniques never are', () => {
     const save = defaultSave();
-    for (const id of ITEM_IDS.slice(21)) expect(save.unlocked, id).not.toContain(id);
+    const star: ItemId[] = ['grave_shovel', 'leather_whip', 'throwing_knives', 'stun_grenade'];
+    for (const id of ITEM_IDS.slice(21)) expect(save.unlocked.includes(id), id).toBe(star.includes(id));
   });
 
   it('an item whose behaviour is not written yet is harmless to hold, show and use', () => {

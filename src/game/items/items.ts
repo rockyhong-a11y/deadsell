@@ -58,7 +58,8 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   last_bell: { id: 'last_bell', name: '마지막 종', desc: '화면의 모든 적을 강타', color: 'survival', slot: 'skill', kind: 'skill', icon: 'last_bell', cooldown: 40, unique: true, grade: 'SSS' },
   requiem: { id: 'requiem', name: '진혼곡', desc: '처치마다 질주와 쿨다운', color: 'brutality', slot: 'skill', kind: 'skill', icon: 'requiem', cooldown: 30, unique: true, grade: 'SSS' },
   // ordinary weapons and skills of the item expansion (docs/CONTENT4.md §5.1 / §5.2): not in the drop pool until a blueprint or the
-  // starter list adds them. `kind` is the family whose input model the weapon follows (ranged weapons: 'bow').
+  // starter list adds them. `kind` is the family whose input model the weapon follows (a drawn or held ranged weapon: 'bow'; the
+  // throwing knives are swung like a melee weapon).
   broadsword: { id: 'broadsword', name: '대검', desc: '느리고 넓은 3연격', color: 'brutality', slot: 'weapon', kind: 'melee', icon: 'broadsword' },
   frantic_sword: { id: 'frantic_sword', name: '광란의 검', desc: '체력 절반 이하에서 치명타', color: 'brutality', slot: 'weapon', kind: 'melee', icon: 'frantic_sword' },
   rapier: { id: 'rapier', name: '레이피어', desc: '구르기 직후 첫 타 치명타', color: 'tactics', slot: 'weapon', kind: 'melee', icon: 'rapier' },
@@ -70,7 +71,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   multi_bow: { id: 'multi_bow', name: '연발 활', desc: '완전히 당기면 3발', color: 'tactics', slot: 'weapon', kind: 'bow', icon: 'multi_bow' },
   ice_bow: { id: 'ice_bow', name: '서리 활', desc: '맞은 적을 얼린다', color: 'tactics', slot: 'weapon', kind: 'bow', icon: 'ice_bow' },
   heavy_crossbow: { id: 'heavy_crossbow', name: '중석궁', desc: '5발 산탄, 짧은 사거리', color: 'brutality', slot: 'weapon', kind: 'bow', icon: 'heavy_crossbow' },
-  throwing_knives: { id: 'throwing_knives', name: '투척 단검', desc: '단검 2개 투척, 출혈', color: 'tactics', slot: 'weapon', kind: 'bow', icon: 'throwing_knives' },
+  throwing_knives: { id: 'throwing_knives', name: '투척 단검', desc: '단검 2개 투척, 출혈', color: 'tactics', slot: 'weapon', kind: 'melee', icon: 'throwing_knives' },
   fire_staff: { id: 'fire_staff', name: '화염 지팡이', desc: '불꽃을 뿜는다, 화상', color: 'brutality', slot: 'weapon', kind: 'bow', icon: 'fire_staff' },
   spiked_shield: { id: 'spiked_shield', name: '가시 방패', desc: '패링하면 반격, 출혈', color: 'brutality', slot: 'weapon', kind: 'shield', icon: 'spiked_shield' },
   stun_grenade: { id: 'stun_grenade', name: '섬광탄', desc: '범위 안의 적 기절', color: 'tactics', slot: 'skill', kind: 'skill', icon: 'stun_grenade', cooldown: 12 },
@@ -176,6 +177,7 @@ export function itemLines(inst: ItemInstance): string[] {
   if (w?.kind === 'melee') out.push(`피해 ${(w as MeleeWeapon).hits.map((h) => cardDamage(inst, h.damage)).join(' / ')}`);
   else if (w?.kind === 'bow') out.push(`피해 최대 ${cardDamage(inst, w.damage)} (충전)`);
   else if (w?.kind === 'shield') out.push(`정면 피해 -${pct(w.reduction)} · 패링 시 기절 ${num(w.parryStun)}초`);
+  else if (w?.kind === 'staff') out.push(`피해 ${cardDamage(inst, w.flame.damage)} / ${num(w.flame.interval)}초 (누르고 있는 동안)`);
   else if (def.cooldown) out.push(`재사용 ${def.cooldown}초`);
   if (def.unique) {
     const sig = signatureText(inst.id, (b) => cardDamage(inst, b));

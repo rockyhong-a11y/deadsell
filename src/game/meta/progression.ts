@@ -45,9 +45,13 @@ export const META_UPGRADES: MetaUpgrade[] = [
     apply: (s) => { s.upgrades.gold = 1; },
     onBuy: (r) => { r.gold += 100; },
   },
+  // blueprints (docs/CONTENT4.md §5): every ordinary item that is not in STARTER_UNLOCKS; weapons first, then skills
   ...([
     ['blood_sword', 20], ['spear', 25], ['twin_daggers', 25], ['war_hammer', 35],
+    ['torch', 20], ['frantic_sword', 25], ['rapier', 25], ['sadist_stiletto', 30], ['broadsword', 35], ['iron_katana', 40],
+    ['multi_bow', 30], ['ice_bow', 30], ['heavy_crossbow', 35], ['fire_staff', 35], ['spiked_shield', 30],
     ['ice_grenade', 20], ['turret', 30], ['wolf_trap', 20],
+    ['magnet_grenade', 25], ['phaser', 25], ['cluster_grenade', 30], ['wave_of_denial', 30], ['tesla_coil', 35], ['flame_turret', 35], ['tornado', 40],
   ] as [ItemId, number][]).map(([item, cost]): MetaUpgrade => ({
     id: 'unlock_' + item, name: '청사진: ' + ITEMS[item].name, desc: '드롭 목록에 추가', cost, item, icon: ITEMS[item].icon,
     available: (s) => !s.unlocked.includes(item), owned: (s) => s.unlocked.includes(item),

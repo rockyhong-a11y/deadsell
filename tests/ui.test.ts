@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { makeTestWorld, implemented } from './helpers';
 import { LevelUI } from '../src/game/ui/levelUI';
+import { ALCHEMIST_PAGE, type AlchemistModal } from '../src/game/ui/modals';
 import { hudLayout, MIN_TAP, itemOf } from '../src/game/ui/hud';
 import { formatTime, wrap, atLeast } from '../src/game/ui/draw';
 import { TapRegistry } from '../src/game/ui/taps';
@@ -380,22 +381,84 @@ describe('LevelUI: alchemist', () => {
     expect(t.game.persist).not.toHaveBeenCalled();
   });
 
-  it('rows are tappable, buy and close buttons exist, rows fit in the view', () => {
+  it('rows are tappable (ten to a page), buy and close buttons exist, rows fit in the view', () => {
     const t = setup({ W: 480 });
     t.ui.openAlchemist();
     t.advance(0.3);
-    for (let i = 0; i < META_UPGRADES.length; i++) {
+    for (let i = 0; i < ALCHEMIST_PAGE; i++) {
       const r = t.game.taps.byId('alch' + i)!.rect;
       expect(r.h).toBeGreaterThanOrEqual(32);
       expect(r.x + r.w).toBeLessThanOrEqual(480);
       expect(r.y + r.h).toBeLessThanOrEqual(360 - 50);
     }
-    t.tap('alch3'); // select spear blueprint
+    expect(t.game.taps.byId('alch' + ALCHEMIST_PAGE), 'the next page is not on screen').toBeNull();
+    t.tap('alch3'); // the blood sword blueprint
     t.tap('alch-buy');
     expect(t.game.save.unlocked).toContain('blood_sword');
     expect(t.run.cells).toBe(80);
     t.tap('alch-close');
     expect(t.ui.modal).toBe(false);
+  });
+
+  it('the blueprints of the item expansion are paged: < > turn the pages, every upgrade is on exactly one page and fits', () => {
+    const t = setup({ W: 480 });
+    t.ui.openAlchemist();
+    t.advance(0.3);
+    const pages = Math.ceil(META_UPGRADES.length / ALCHEMIST_PAGE);
+    expect(pages).toBe(3);
+    const seen = new Set<number>();
+    for (let p = 0; p < pages; p++) {
+      const ids = t.game.taps.regions.map((r: { id: string }) => r.id).filter((id: string) => /^alch\d+$/.test(id)).map((id: string) => Number(id.slice(4)));
+      expect(ids.length, `page ${p + 1}`).toBe(Math.min(ALCHEMIST_PAGE, META_UPGRADES.length - p * ALCHEMIST_PAGE));
+      for (const i of ids) {
+        expect(Math.floor(i / ALCHEMIST_PAGE)).toBe(p);
+        const r = t.game.taps.byId('alch' + i)!.rect;
+        expect(r.y + r.h).toBeLessThanOrEqual(360 - 50);
+        seen.add(i);
+      }
+      // the pager buttons are there, below the rows and clear of the close / buy buttons
+      const prev = t.game.taps.byId('alch-prev')!.rect;
+      const next = t.game.taps.byId('alch-next')!.rect;
+      const close = t.game.taps.byId('alch-close')!.rect;
+      const buy = t.game.taps.byId('alch-buy')!.rect;
+      expect(prev.x).toBeGreaterThanOrEqual(close.x + close.w);
+      expect(next.x + next.w).toBeLessThanOrEqual(buy.x);
+      expect(prev.h).toBeGreaterThanOrEqual(32);
+      t.tap('alch-next');
+      t.advance(0.05);
+    }
+    expect(seen.size).toBe(META_UPGRADES.length);
+    // after the last page it wraps to the first; < goes back
+    expect(t.game.taps.byId('alch0')).toBeTruthy();
+    t.tap('alch-prev');
+    t.advance(0.05);
+    expect(t.game.taps.byId('alch' + (META_UPGRADES.length - 1))).toBeTruthy();
+    // a row of a later page buys its blueprint
+    t.run.cells = 100;
+    t.tap('alch' + (META_UPGRADES.length - 1));
+    t.tap('alch-buy');
+    expect(t.game.save.unlocked).toContain(META_UPGRADES[META_UPGRADES.length - 1].item);
+  });
+
+  it('keys move through all the upgrades and the page follows the selection; LB / RB turn the pages', () => {
+    const t = setup({ W: 480 });
+    t.ui.openAlchemist();
+    t.advance(0.3);
+    const modal = t.ui.top as AlchemistModal;
+    for (let i = 0; i < 6; i++) t.ui.key('down'); // two rows per key: 12 upgrades further
+    expect([modal.sel, modal.page]).toEqual([12 + 0, 1]);
+    t.ui.key('up');
+    t.ui.key('up');
+    t.ui.key('up');
+    t.ui.key('up');
+    t.ui.key('up');
+    t.ui.key('up');
+    expect([modal.sel, modal.page]).toEqual([0, 0]);
+    modal.tab(1);
+    expect([modal.sel, modal.page]).toEqual([ALCHEMIST_PAGE, 1]);
+    modal.tab(-1);
+    modal.tab(-1);
+    expect(modal.page).toBe(Math.ceil(META_UPGRADES.length / ALCHEMIST_PAGE) - 1);
   });
 });
 

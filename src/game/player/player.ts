@@ -8,9 +8,9 @@ import { moveBody } from '../physics';
 import { T } from '../tilemap';
 import { ITEMS } from '../items/items';
 import type { ItemInstance } from '../items/types';
-import { weaponDef, type BowWeapon, type MeleeHit, type MeleeWeapon, type ShieldWeapon } from './weapons';
+import { weaponDef, type BowWeapon, type DashSpec, type MeleeHit, type MeleeWeapon, type ShieldWeapon, type StaffWeapon, type Volley } from './weapons';
 import { SKILLS, type SkillDef } from './skills';
-import { Arrow, type Feel } from './projectiles';
+import { Arrow, flameBurst, type Feel } from './projectiles';
 import { calcDamage } from './damage';
 import { AFFIX, CRIT_MULT, FLASK, SPRINT } from '../rules';
 
@@ -23,9 +23,9 @@ import { AFFIX, CRIT_MULT, FLASK, SPRINT } from '../rules';
  */
 export type PlayerState =
   | 'idle' | 'run' | 'jump' | 'fall' | 'roll' | 'attack' | 'slam' | 'slam_land'
-  | 'ledge' | 'hurt' | 'heal' | 'bow' | 'block' | 'cast' | 'dead';
+  | 'ledge' | 'hurt' | 'heal' | 'bow' | 'charge' | 'dash' | 'staff' | 'block' | 'cast' | 'dead';
 
-type Mode = 'free' | 'roll' | 'attack' | 'slam' | 'slam_land' | 'ledge' | 'hurt' | 'heal' | 'bow' | 'block' | 'cast' | 'dead';
+type Mode = 'free' | 'roll' | 'attack' | 'slam' | 'slam_land' | 'ledge' | 'hurt' | 'heal' | 'bow' | 'charge' | 'dash' | 'staff' | 'block' | 'cast' | 'dead';
 
 // ---- tuning (docs/DESIGN.md §5) -------------------------------------------
 export const RUN_SPEED = 150;
@@ -66,6 +66,12 @@ interface Swing {
 }
 
 interface BowState { slot: number; item: ItemInstance; def: BowWeapon; btn: Btn; t: number; phase: 'draw' | 'shoot'; full: boolean; drawTime: number }
+/** 철 도: the attack held down, charging toward `dash.charge` s */
+interface ChargeState { slot: number; item: ItemInstance; def: MeleeWeapon; dash: DashSpec; btn: Btn; t: number; full: boolean }
+/** 철 도: the dash (`go`: invulnerable, slashing everything on its way) and the follow-through (`end`) */
+interface DashState { item: ItemInstance; dash: DashSpec; dir: 1 | -1; x0: number; t: number; phase: 'go' | 'end'; hit: Set<number> }
+/** 화염 지팡이: the attack held down, `tick` s to the next flame tick */
+interface StaffState { slot: number; item: ItemInstance; def: StaffWeapon; btn: Btn; t: number; tick: number; n: number }
 interface BlockState { slot: number; item: ItemInstance; def: ShieldWeapon; btn: Btn; t: number; reflected: WeakSet<object>; waved: boolean }
 interface CastState { slot: number; item: ItemInstance; def: SkillDef; t: number; fired: boolean }
 interface LedgeState { t: number; x0: number; y0: number; x1: number; y1: number; dir: 1 | -1 }
@@ -102,6 +108,10 @@ export class Player extends Actor {
   /** seconds since the last roll ended / since the last hit taken (unique weapons: crit windows); huge = never */
   private sinceRoll = Infinity;
   private sinceHurt = Infinity;
+  /** the first-hit crit after this roll was used up (레이피어) */
+  private rollCritSpent = false;
+  /** seconds her next weapon hit stays a crit (위상 전이) */
+  private nextCritT = 0;
   private rollT = 0;
   private rollDir: 1 | -1 = 1;
   private rollCd = 0;
@@ -122,6 +132,9 @@ export class Player extends Actor {
   private atk: Swing | null = null;
   private bow: BowState | null = null;
   private blk: BlockState | null = null;
+  private chg: ChargeState | null = null;
+  private dashS: DashState | null = null;
+  private stf: StaffState | null = null;
   private cast: CastState | null = null;
   private ledge: LedgeState | null = null;
   // ---- sprint
@@ -217,6 +230,11 @@ export class Player extends Actor {
     return true;
   }
 
+  /** 위상 전이: her next weapon hit within `secs` s is a crit. */
+  armCrit(secs: number): void {
+    this.nextCritT = Math.max(this.nextCritT, secs);
+  }
+
   /** Build a DamageInfo for one of the heroine's items (base x colour x tier x affix). */
   damageInfo(item: ItemInstance, base: number, extra: Partial<DamageInfo> = {}): DamageInfo {
     const info: DamageInfo = {
@@ -243,7 +261,7 @@ export class Player extends Actor {
     const crit = !!info.crit;
     w.addHitstop(feel.hitstop + (crit ? 0.03 : 0));
     w.shake(feel.shake + (crit ? 1 : 0), 0.12);
-    w.audio.play(crit ? 'crit' : feel.sfx ?? 'hit');
+    w.audio.play(crit ? 'crit' : feel.sfx ?? 'hit', feel.vol !== undefined ? { vol: feel.vol } : undefined);
     if (res.killed && !this.dying) {
       const wd = item ? weaponDef(item.id) : null;
       const pct = (item?.affix === 'heal_on_kill' ? AFFIX.healPct : 0) + (wd?.kind === 'melee' ? wd.healOnKill ?? 0 : 0);
@@ -315,6 +333,8 @@ export class Player extends Actor {
     if (this.mode !== 'dead') {
       this.world.lights.add(this.x, this.y - 24, 70, '#9fe8ff', 0.3);
       if (this.frenzyT > 0) this.world.lights.add(this.x, this.y - 24, 96, SPRINT.after.frenzyColor, 0.55);
+      if (this.nextCritT > 0) this.world.lights.add(this.x, this.y - 24, 60, '#c690ff', 0.5);
+      if (this.stf) this.world.lights.add(this.x + this.facing * 36, this.y - 30, 80, '#ff8a3c', 0.6);
     }
   }
 
@@ -366,6 +386,7 @@ export class Player extends Actor {
     this.ledgeCd -= dt;
     this.sinceRoll += dt;
     this.sinceHurt += dt;
+    if (this.nextCritT > 0) this.nextCritT -= dt;
     this.landT -= dt;
     this.djT -= dt;
     this.parryAnimT -= dt;
@@ -394,7 +415,7 @@ export class Player extends Actor {
         this.seenW[i] = run.weapons[i];
         this.combo[i] = 0;
         this.comboTimer[i] = 0;
-        const cur = this.atk?.slot === i || this.bow?.slot === i || this.blk?.slot === i;
+        const cur = this.atk?.slot === i || this.bow?.slot === i || this.blk?.slot === i || this.chg?.slot === i || this.stf?.slot === i;
         if (cur) this.cancelActions();
       }
       if (run.skills[i] !== this.seenS[i]) {
@@ -418,6 +439,9 @@ export class Player extends Actor {
       case 'hurt': this.tickHurt(dt); break;
       case 'heal': this.tickHeal(dt); break;
       case 'bow': this.tickBow(dt); break;
+      case 'charge': this.tickCharge(dt); break;
+      case 'dash': this.tickDash(dt); break;
+      case 'staff': this.tickStaff(dt); break;
       case 'block': this.tickBlock(dt); break;
       case 'cast': this.tickCast(dt); break;
       default: break;
@@ -632,7 +656,7 @@ export class Player extends Actor {
     this.afterT += dt;
     if (this.afterT < A.interval) return;
     this.afterT -= A.interval;
-    if (this.sprinting && this.anim) {
+    if ((this.sprinting || this.mode === 'dash') && this.anim) {
       this.afterImgs.unshift({ anim: this.anim.name, frame: this.anim.frame, x: this.x, y: this.y, flip: this.facing < 0 });
       if (this.afterImgs.length > A.count) this.afterImgs.length = A.count;
     } else if (this.afterImgs.length) this.afterImgs.pop();
@@ -641,7 +665,8 @@ export class Player extends Actor {
   // ---------------------------------------------------------------- roll
   private canRollFrom(): boolean {
     switch (this.mode) {
-      case 'free': case 'attack': case 'bow': case 'block': case 'slam_land': return true;
+      case 'free': case 'attack': case 'bow': case 'charge': case 'staff': case 'block': case 'slam_land': return true;
+      case 'dash': return this.dashS?.phase === 'end';
       case 'hurt': return this.hurtT < 0.14;
       case 'cast': return !!this.cast?.fired;
       default: return false;
@@ -682,6 +707,7 @@ export class Player extends Actor {
       this.mode = 'free';
       this.rollCd = 0.1;
       this.sinceRoll = 0;
+      this.rollCritSpent = false;
       const mx = this.moveDir();
       this.vx = mx ? mx * RUN_SPEED : this.rollDir * RUN_SPEED * 0.4;
     }
@@ -836,8 +862,10 @@ export class Player extends Actor {
       inp.consume(btn);
       const mx = this.moveDir();
       if (mx) this.facing = mx > 0 ? 1 : -1;
-      if (def.kind === 'melee') this.startSwing(slot, item, def, this.combo[slot] % def.hits.length, btn);
+      if (def.kind === 'melee' && def.dash) this.startCharge(slot, item, def, btn);
+      else if (def.kind === 'melee') this.startSwing(slot, item, def, this.combo[slot] % def.hits.length, btn);
       else if (def.kind === 'bow') this.startBow(slot, item, def, btn);
+      else if (def.kind === 'staff') this.startStaff(slot, item, def, btn);
       else this.startBlock(slot, item, def, btn);
       return true;
     }
@@ -873,10 +901,12 @@ export class Player extends Actor {
       a.fired = true;
       const h = a.hit;
       w.audio.play(h.swing);
-      w.fx.slash(this.x + this.facing * 4, this.y - 24, { dir: this.facing, radius: h.slash.radius, from: h.slash.from, to: h.slash.to, color: h.slash.color, width: h.slash.width, life: h.slash.life });
+      if (h.shoot) this.throwVolley(a, h.shoot);
+      else w.fx.slash(this.x + this.facing * 4, this.y - 24, { dir: this.facing, radius: h.slash.radius, from: h.slash.from, to: h.slash.to, color: h.slash.color, width: h.slash.width, life: h.slash.life });
     }
-    if (a.fired && act) this.swingHit(a);
-    if (inp.pressedWithin(a.btn, ACTION_BUFFER) || (inp.isDown(a.btn) && a.t >= W + A)) {
+    if (a.fired && act && !a.hit.shoot) this.swingHit(a);
+    // (a charging weapon is not chained by holding the button: holding charges it)
+    if (inp.pressedWithin(a.btn, ACTION_BUFFER) || (!a.def.dash && inp.isDown(a.btn) && a.t >= W + A)) {
       a.queued = true;
       inp.consume(a.btn);
     }
@@ -920,29 +950,60 @@ export class Player extends Actor {
     return false;
   }
 
-  /** Unique weapons: crit against a bleeding target / for a while after a roll / after taking damage. */
+  /** Weapons with a crit condition: against a bleeding / burning / frozen / stunned target, for a while after a roll or a hit taken, below some HP. */
   private signatureCrit(def: MeleeWeapon, target: Actor): boolean {
     if (def.critBleeding && target.status.bleed > 0) return true;
     if (def.critAfterRoll !== undefined && this.sinceRoll <= def.critAfterRoll) return true;
-    return def.critAfterHurt !== undefined && this.sinceHurt <= def.critAfterHurt;
+    if (def.critAfterHurt !== undefined && this.sinceHurt <= def.critAfterHurt) return true;
+    if (def.critBelowHp !== undefined && this.hp < this.maxHp * def.critBelowHp) return true;
+    return !!def.critVs?.some((k) => target.status[k] > 0);
   }
 
   private swingHit(a: Swing): void {
     const h = a.hit;
     const box = this.hitBox(h);
+    // the whip's tip: the outer `tip` px of the box
+    const tip = h.tip ? { x: this.facing > 0 ? box.x + box.w - h.tip : box.x, y: box.y, w: h.tip, h: box.h } : null;
+    const first = a.def.critFirstAfterRoll !== undefined && !this.rollCritSpent && this.sinceRoll <= a.def.critFirstAfterRoll;
+    const marked = this.nextCritT > 0;
     const infos = new Map<Actor, DamageInfo>();
     const reports = hitArea(this.world, box, 'player', (t) => {
-      const crit = h.crit === 'always' || (h.crit === 'behind' && isBehind(this, t)) || this.signatureCrit(a.def, t);
+      const crit = h.crit === 'always' || (h.crit === 'behind' && isBehind(this, t)) || this.signatureCrit(a.def, t) || first || marked || (!!tip && overlaps(tip, t.hurtbox()));
       const info = this.damageInfo(a.item, h.damage, { dir: this.facing, knockback: h.knockback, knockup: h.knockup, stun: h.stun, crit, kind: 'melee' });
       if (crit) info.amount *= CRIT_MULT;
       if (a.def.bleed) info.bleed = Math.max(info.bleed ?? 0, a.def.bleed);
+      if (a.def.burn) {
+        info.burn = Math.max(info.burn ?? 0, a.def.burn);
+        info.burnDps = Math.max(info.burnDps ?? 0, AFFIX.burnDps);
+      }
       infos.set(t, info);
       return info;
     }, a.set);
+    if (reports.some((r) => r.result.applied)) {
+      if (first) this.rollCritSpent = true;
+      if (marked) this.nextCritT = 0;
+    }
     for (const r of reports) {
       this.onDealt(r, a.item, infos.get(r.target)!, { hitstop: h.hitstop, shake: h.shake, sfx: h.hit });
       if (r.result.applied) this.world.particles.emit('spark', r.target.x, r.target.cy, { dir: this.facing, count: 3, color: h.slash.color });
     }
+  }
+
+  /** 투척 단검: the volley leaves her hand when the windup ends, the knives one above the other, each bleeding its target. */
+  private throwVolley(a: Swing, v: Volley): void {
+    const w = this.world;
+    const marked = this.nextCritT > 0;
+    for (let i = 0; i < v.count; i++) {
+      const dy = (i - (v.count - 1) / 2) * v.gap;
+      const info = this.damageInfo(a.item, a.hit.damage, { kind: 'ranged', dir: this.facing, knockback: a.hit.knockback, bleed: v.bleed });
+      if (marked) {
+        info.crit = true;
+        info.amount *= CRIT_MULT;
+      }
+      w.spawn(new Arrow(this.x + this.facing * 14, this.y - 28 + dy, this.facing * v.speed, 0, this, a.item, info, { hitstop: a.hit.hitstop, shake: a.hit.shake, sfx: a.hit.hit }, { range: v.range, knife: true }));
+    }
+    if (marked) this.nextCritT = 0;
+    w.particles.emit('spark', this.x + this.facing * 16, this.y - 28, { dir: this.facing, count: 2 });
   }
 
   // ---------------------------------------------------------------- bow
@@ -981,11 +1042,27 @@ export class Player extends Actor {
   private fireArrow(b: BowState): void {
     const w = this.world;
     const c = this.bowCharge;
-    const frac = b.def.minFrac + (1 - b.def.minFrac) * c;
-    const speed = lerp(b.def.minSpeed, b.def.maxSpeed, c);
-    const info = this.damageInfo(b.item, b.def.damage * frac, { kind: 'ranged', dir: this.facing, knockback: 50 + 150 * c, knockup: c >= 1 ? 60 : undefined });
-    const arrow = new Arrow(this.x + this.facing * 14, this.y - 26, this.facing * speed, 0, this, b.item, info, { hitstop: 0.04 + 0.04 * c, shake: 1 + c, sfx: 'arrow_hit' }, !!b.def.pierce && c >= 1);
-    w.spawn(arrow);
+    const d = b.def;
+    const frac = d.minFrac + (1 - d.minFrac) * c;
+    const speed = lerp(d.minSpeed, d.maxSpeed, c);
+    // a fully drawn volley bow fans out several arrows, each a share of the damage; every other shot is one arrow
+    const fan = d.volley && c >= 1 ? d.volley : null;
+    const n = fan ? fan.n : 1;
+    const marked = this.nextCritT > 0;
+    for (let i = 0; i < n; i++) {
+      const ang = fan && n > 1 ? ((i / (n - 1)) * 2 - 1) * fan.spread * (Math.PI / 180) : 0;
+      const info = this.damageInfo(b.item, d.damage * (fan ? fan.frac : frac), { kind: 'ranged', dir: this.facing, knockback: 50 + 150 * c, knockup: c >= 1 ? 60 : undefined, freeze: d.freeze });
+      if (marked) {
+        info.crit = true;
+        info.amount *= CRIT_MULT;
+      }
+      const arrow = new Arrow(
+        this.x + this.facing * 14, this.y - 26, this.facing * Math.cos(ang) * speed, Math.sin(ang) * speed, this, b.item, info,
+        { hitstop: 0.04 + 0.04 * c, shake: 1 + c, sfx: 'arrow_hit' }, { pierce: !!d.pierce && c >= 1, range: d.range, ...d.look },
+      );
+      w.spawn(arrow);
+    }
+    if (marked) this.nextCritT = 0;
     w.audio.play('bow_shoot', { pitch: 0.9 + 0.2 * c });
     w.particles.emit('spark', this.x + this.facing * 16, this.y - 26, { dir: this.facing, count: 2 });
     this.vx -= this.facing * 40 * c;
@@ -999,6 +1076,124 @@ export class Player extends Actor {
     this.bow = null;
     this.bowCharge = 0;
     this.mode = 'free';
+  }
+
+  // ---------------------------------------------------------------- katana (hold to charge, let go to dash)
+  private startCharge(slot: number, item: ItemInstance, def: MeleeWeapon, btn: Btn): void {
+    const dash = def.dash!;
+    this.mode = 'charge';
+    this.chg = { slot, item, def, dash, btn, t: 0, full: false };
+    this.bowCharge = 0;
+    this.jumpCut = false;
+    // the coiled pose of the swing's windup, stretched over the charge and held there
+    this.anim?.playPhased(def.hits[0].anim, dash.charge * 1.5, 1, 1);
+    this.world.audio.play('bow_draw', { pitch: 0.7 });
+  }
+
+  private tickCharge(dt: number): void {
+    const c = this.chg!;
+    const inp = this.world.input;
+    c.t += dt;
+    this.bowCharge = clamp(c.t / c.dash.charge, 0, 1);
+    if (this.anim) this.anim.t = Math.min(this.anim.t, c.dash.charge * 1.4);
+    if (this.bowCharge >= 1 && !c.full) {
+      c.full = true;
+      this.world.particles.emit('spark', this.x + this.facing * 10, this.y - 26, { count: 6, color: '#ffe9a8' });
+      this.world.fx.ring(this.x, this.y - 24, { radius: 26, color: '#ffe9a8', life: 0.25 });
+      this.world.audio.play('parry', { vol: 0.35, pitch: 1.4 });
+    }
+    this.steer(dt, 0.4, false);
+    this.tryJump();
+    this.variableJump(dt);
+    if (inp.pressedWithin('down', JUMP_BUFFER) && !this.onGround && this.trySlam()) return;
+    if (inp.isDown(c.btn) || c.t < 0.04) return;
+    // let go: a full charge dashes, anything less is the tap slash
+    this.chg = null;
+    this.bowCharge = 0;
+    if (c.full) this.startDash(c);
+    else this.startSwing(c.slot, c.item, c.def, 0, c.btn);
+  }
+
+  private startDash(c: ChargeState): void {
+    const w = this.world;
+    this.mode = 'dash';
+    this.dashS = { item: c.item, dash: c.dash, dir: this.facing, x0: this.x, t: 0, phase: 'go', hit: new Set() };
+    this.jumpCut = false;
+    this.anim?.play('sprint', true);
+    w.audio.play('swing_heavy', { pitch: 1.3 });
+    w.particles.emit('dust', this.x, this.y - 1, { dir: -this.facing, count: 5 });
+    w.shake(2, 0.12);
+  }
+
+  private tickDash(dt: number): void {
+    const d = this.dashS!;
+    const w = this.world;
+    d.t += dt;
+    if (d.phase === 'end') {
+      this.vx = approach(this.vx, 0, 2600 * dt);
+      if (d.t >= d.dash.recover) {
+        this.dashS = null;
+        this.mode = 'free';
+      }
+      return;
+    }
+    // the dash: horizontal, exactly `distance` px unless a wall is in the way; it slashes everything it passes (each once)
+    const left = d.dash.distance - Math.abs(this.x - d.x0);
+    this.facing = d.dir;
+    this.vx = d.dir * Math.min(d.dash.speed, Math.max(0, left) / dt);
+    this.vy = 0;
+    this.gravityScale = 0;
+    const box = { x: this.x + d.dir * 12 - 20, y: this.y - 50, w: 40, h: 52 };
+    const infos = new Map<Actor, DamageInfo>();
+    const reports = hitArea(w, box, 'player', (t) => {
+      const info = this.damageInfo(d.item, d.dash.damage, { dir: d.dir, knockback: d.dash.knockback, kind: 'melee' });
+      infos.set(t, info);
+      return info;
+    }, d.hit);
+    for (const r of reports) {
+      this.onDealt(r, d.item, infos.get(r.target)!, { hitstop: 0.06, shake: 2.5, sfx: 'hit_heavy' });
+      if (r.result.applied) w.particles.emit('spark', r.target.x, r.target.cy, { dir: d.dir, count: 5, color: '#e8f4ff' });
+    }
+    if (left <= 0.5 || this.hitWallX === d.dir || d.t > 0.6) {
+      // the finishing slash and the follow-through
+      d.phase = 'end';
+      d.t = 0;
+      this.gravityScale = 1;
+      w.fx.slash(this.x, this.y - 24, { dir: d.dir, radius: 64, from: -0.6, to: 0.6, color: '#e8f4ff', width: 11, life: 0.2 });
+      w.audio.play('swing_heavy');
+      w.shake(3, 0.15);
+      this.anim?.playPhased('heavy_3', 0.02, 0.06, Math.max(0.05, d.dash.recover - 0.08));
+    }
+  }
+
+  // ---------------------------------------------------------------- staff (hold to breathe a flame cone)
+  private startStaff(slot: number, item: ItemInstance, def: StaffWeapon, btn: Btn): void {
+    this.mode = 'staff';
+    this.stf = { slot, item, def, btn, t: 0, tick: 0.1, n: 0 };
+    this.jumpCut = false;
+    this.anim?.playFor('cast', 0.3);
+    this.world.audio.play('throw');
+  }
+
+  private tickStaff(dt: number): void {
+    const s = this.stf!;
+    const inp = this.world.input;
+    s.t += dt;
+    this.steer(dt, s.def.moveScale, false);
+    this.tryJump();
+    this.variableJump(dt);
+    if (inp.pressedWithin('down', JUMP_BUFFER) && !this.onGround && this.trySlam()) return;
+    const f = s.def.flame;
+    s.tick -= dt;
+    while (s.tick <= 0) {
+      s.tick += f.interval;
+      flameBurst(this, s.item, this.x + this.facing * 16, this.y - 30, this.facing, { range: f.range, spread: f.spread, base: f.damage, burn: f.burn });
+      if (s.n++ % 2 === 0) this.world.audio.play('swing', { vol: 0.15, pitch: 0.6 });
+    }
+    if (!inp.isDown(s.btn) && s.t >= 0.12) {
+      this.stf = null;
+      this.mode = 'free';
+    }
   }
 
   // ---------------------------------------------------------------- shield
@@ -1057,6 +1252,13 @@ export class Player extends Actor {
       b.waved = true;
       this.parryShockwave(b.item, b.def.shockwave);
     }
+    if (attacker && b?.def.counter) this.parryCounter(attacker, b.item, b.def.counter);
+  }
+
+  /** 가시 방패: a parry strikes the attacker back (unblockable) and makes it bleed. */
+  private parryCounter(target: Actor, item: ItemInstance, c: { damage: number; bleed: number }): void {
+    const info = this.damageInfo(item, c.damage, { kind: 'melee', unblockable: true, dir: sign(target.x - this.x) || this.facing, knockback: 120, bleed: c.bleed });
+    this.onDealt({ target, result: target.takeDamage(info) }, item, info, { hitstop: 0.06, shake: 2, sfx: 'hit_heavy' });
   }
 
   /** 관 뚜껑: a parry sends out a shockwave around the heroine (unblockable, stuns). */
@@ -1089,7 +1291,7 @@ export class Player extends Actor {
   // ---------------------------------------------------------------- damage intake
   protected intercept(info: DamageInfo): DamageResult | null {
     if (info.kind === 'dot') return null;
-    if (this.rollInvulnerable) return { applied: false, amount: 0, killed: false };
+    if (this.rollInvulnerable || (this.mode === 'dash' && this.dashS?.phase === 'go')) return { applied: false, amount: 0, killed: false };
     const b = this.blk;
     if (this.mode === 'block' && b && !info.unblockable && this.isFrontal(info)) {
       if (b.t < b.def.parryWindow) {
@@ -1242,7 +1444,11 @@ export class Player extends Actor {
     this.steer(dt, c.def.moveScale, false);
     if (!c.fired && c.t >= c.def.fireAt) {
       c.fired = true;
-      c.def.use(this, c.item);
+      if (c.def.use(this, c.item) === false) {
+        // nothing to use it on: no cooldown
+        this.skillCooldown[c.slot] = 0;
+        this.world.audio.play('error', { vol: 0.3 });
+      }
     }
     if (c.t >= c.def.castTime) {
       this.cast = null;
@@ -1260,6 +1466,9 @@ export class Player extends Actor {
     this.atk = null;
     this.bow = null;
     this.blk = null;
+    this.chg = null;
+    this.dashS = null;
+    this.stf = null;
     this.cast = null;
     this.ledge = null;
     this.bowCharge = 0;

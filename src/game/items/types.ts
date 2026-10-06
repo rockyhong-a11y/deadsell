@@ -57,7 +57,11 @@ export interface ItemDef {
   grade?: Grade;
 }
 
-export const STARTER_UNLOCKS: ItemId[] = ['rusty_sword', 'hunter_bow', 'old_shield', 'fire_grenade'];
+/** What a new save starts with: the base four and the four ★ items of docs/CONTENT4.md §5 (every other ordinary item is an Alchemist blueprint). */
+export const STARTER_UNLOCKS: ItemId[] = [
+  'rusty_sword', 'hunter_bow', 'old_shield', 'fire_grenade',
+  'grave_shovel', 'leather_whip', 'throwing_knives', 'stun_grenade',
+];
 
 /** Unique items by grade, C to SSS, five each (docs/CONTENT3.md §5, docs/CONTENT4.md §4 / §5.3): crafted by Selma, never rolled. */
 export const UNIQUE_IDS: readonly ItemId[] = [

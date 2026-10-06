@@ -169,6 +169,16 @@ describe('the catalogue of the ordinary items (docs/CONTENT4.md §5.1 / §5.2)',
       expect(r, `${id} / ${base}`).toBeGreaterThan(0.55);
       expect(r, `${id} / ${base}`).toBeLessThan(1.25);
     }
+    // bows: damage of a full draw (every arrow of a volley counted) over the draw plus the shot's recovery
+    const bowDps = (id: keyof typeof WEAPONS): number => {
+      const b = bowOf(id);
+      return (b.damage * (b.volley ? b.volley.n * b.volley.frac : 1)) / (b.drawTime + 0.2);
+    };
+    for (const id of ['multi_bow', 'ice_bow', 'heavy_crossbow'] as const) {
+      const r = bowDps(id) / bowDps('hunter_bow');
+      expect(r, `${id} / hunter_bow`).toBeGreaterThan(0.55);
+      expect(r, `${id} / hunter_bow`).toBeLessThan(1.4); // (the crossbow: every bolt hit at point blank)
+    }
     // the volley bows and crossbow draw as long as the hunter bow or longer; the ice bow does 70 % damage
     expect(bowOf('ice_bow').damage / bowOf('hunter_bow').damage).toBeCloseTo(0.7, 5);
     expect(bowOf('multi_bow').drawTime).toBeGreaterThanOrEqual(bowOf('hunter_bow').drawTime);
@@ -597,7 +607,7 @@ describe('중석궁: 5 bolts in a ±14° spread, range 160 px, slow draw (0.7 s)
     expect(bolts).toHaveLength(5);
     const deg = bolts.map((b) => Math.round((Math.atan2(b.vy, Math.abs(b.vx)) * 180) / Math.PI)).sort((a, b) => a - b);
     expect(deg).toEqual([-14, -7, 0, 7, 14]);
-    for (const b of bolts) expect(b.info.amount).toBeCloseTo(40 * 0.4, 5);
+    for (const b of bolts) expect(b.info.amount).toBeCloseTo(bowOf('heavy_crossbow').damage * 0.4, 5);
     steps(t.world, 60);
     expect(near.log.length, 'at 90 px the middle bolts hit').toBeGreaterThanOrEqual(2);
     expect(far.log, 'past the range').toHaveLength(0);
@@ -763,6 +773,63 @@ describe('가시 방패: parry deals 40 + bleed; block 75 %', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
+describe('affixes on the new weapons: none of them is a dead roll', () => {
+  const withAffix = (t: Ctx, id: ItemId, affix: NonNullable<ItemInstance['affix']>) => { t.run.weapons[0] = { id, tier: 1, affix }; };
+
+  it('speed: 철 도 charges 15 % faster, 화염 지팡이 ticks 15 % faster', () => {
+    const chargeSteps = (affix: ItemInstance['affix']) => {
+      const t = setup();
+      t.run.weapons[0] = { id: 'iron_katana', tier: 1, affix };
+      t.input.press('attack1');
+      let n = 0;
+      while (t.p.bowCharge < 1 && n < 90) { steps(t.world, 1); n++; }
+      return n;
+    };
+    expect(chargeSteps(null)).toBeGreaterThanOrEqual(Math.floor(melee('iron_katana').dash!.charge * 60));
+    expect(chargeSteps('speed')).toBeLessThan(chargeSteps(null) * 0.9);
+    const ticks = (affix: ItemInstance['affix']) => {
+      const t = setup();
+      t.run.weapons[0] = { id: 'fire_staff', tier: 1, affix };
+      const e = new Dummy(t.p.x + 40, FLOOR);
+      t.world.spawn(e);
+      steps(t.world, 1);
+      hold(t, 60);
+      return e.log.length;
+    };
+    expect(ticks('speed')).toBeGreaterThan(ticks(null));
+  });
+
+  it('burn lengthens the 화염 지팡이 fire to 3 s; bleed makes the 투척 단검 bleed 3 s instead of 2 and 화염 지팡이 bleed too', () => {
+    const t = setup();
+    withAffix(t, 'fire_staff', 'burn');
+    const e = new Dummy(t.p.x + 40, FLOOR);
+    t.world.spawn(e);
+    steps(t.world, 1);
+    hold(t, 20);
+    expect(e.log.every((i) => i.burn === AFFIX.burnSecs)).toBe(true);
+    expect(AFFIX.burnSecs).toBeGreaterThan(staffOf('fire_staff').flame.burn);
+
+    const u = setup();
+    withAffix(u, 'throwing_knives', 'bleed');
+    const f = new Dummy(u.p.x + 120, FLOOR);
+    u.world.spawn(f);
+    steps(u.world, 1);
+    u.input.tap('attack1');
+    steps(u.world, 50);
+    expect(f.log.map((i) => i.bleed)).toEqual([AFFIX.bleedSecs, AFFIX.bleedSecs]);
+    expect(AFFIX.bleedSecs).toBeGreaterThan(melee('throwing_knives').hits[0].shoot!.bleed);
+
+    const v = setup();
+    withAffix(v, 'fire_staff', 'bleed');
+    const g = new Dummy(v.p.x + 40, FLOOR);
+    v.world.spawn(g);
+    steps(v.world, 1);
+    hold(v, 20);
+    expect(g.log.length).toBeGreaterThan(0);
+    expect(g.log.every((i) => i.bleed === AFFIX.bleedSecs)).toBe(true);
+  });
+});
+
 describe('섬광탄 ★: stun 2 s in r 64, 6 dmg', () => {
   it('thrown with the skill: the blast stuns everything within 64 px for 2 s and hurts 6; farther enemies are not touched', () => {
     const t = setup();
@@ -1268,7 +1335,7 @@ describe('the codex pages of the ordinary items', () => {
     expect(row('multi_bow', '피해')).toContain(`3발 × ${Math.round(28 * 0.45)}`);
     expect(row('ice_bow', '특수')).toContain('1.2초 빙결');
     expect(row('heavy_crossbow', '특수')).toContain('160px');
-    expect(row('heavy_crossbow', '피해')).toContain(`5발 × ${Math.round(40 * 0.4)}`);
+    expect(row('heavy_crossbow', '피해')).toContain(`5발 × ${Math.round(bowOf('heavy_crossbow').damage * 0.4)}`);
     expect(row('throwing_knives', '특수')).toContain('출혈 2초');
     expect(row('fire_staff', '피해')).toContain('9 / 0.15초');
     expect(row('fire_staff', '사거리')).toContain('64px');

@@ -929,7 +929,8 @@ export function flameBurst(owner: Player, item: ItemInstance, x: number, y: numb
   const infos = new Map<Actor, DamageInfo>();
   const reports = hitArea(w, { x: dir > 0 ? x : x - o.range, y: y - half, w: o.range, h: half * 2 }, 'player', (t) => {
     if (!inCone(x, y, dir, o.range, o.spread, t.hurtbox())) return null;
-    const info = owner.damageInfo(item, o.base, { kind: 'explosion', unblockable: true, dir, knockback: 0, hitstun: 0, burn: o.burn, burnDps: AFFIX.burnDps });
+    const info = owner.damageInfo(item, o.base, { kind: 'explosion', unblockable: true, dir, knockback: 0, hitstun: 0, burnDps: AFFIX.burnDps });
+    info.burn = Math.max(info.burn ?? 0, o.burn); // (a burn affix can make it longer, never shorter)
     infos.set(t, info);
     return info;
   });

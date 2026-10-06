@@ -995,7 +995,8 @@ export class Player extends Actor {
     const marked = this.nextCritT > 0;
     for (let i = 0; i < v.count; i++) {
       const dy = (i - (v.count - 1) / 2) * v.gap;
-      const info = this.damageInfo(a.item, a.hit.damage, { kind: 'ranged', dir: this.facing, knockback: a.hit.knockback, bleed: v.bleed });
+      const info = this.damageInfo(a.item, a.hit.damage, { kind: 'ranged', dir: this.facing, knockback: a.hit.knockback });
+      info.bleed = Math.max(info.bleed ?? 0, v.bleed); // (a bleed affix can make it longer, never shorter)
       if (marked) {
         info.crit = true;
         info.amount *= CRIT_MULT;
@@ -1080,7 +1081,8 @@ export class Player extends Actor {
 
   // ---------------------------------------------------------------- katana (hold to charge, let go to dash)
   private startCharge(slot: number, item: ItemInstance, def: MeleeWeapon, btn: Btn): void {
-    const dash = def.dash!;
+    // (the speed affix shortens the charge like it shortens a swing)
+    const dash = { ...def.dash!, charge: def.dash!.charge * (item.affix === 'speed' ? AFFIX.speedMul : 1) };
     this.mode = 'charge';
     this.chg = { slot, item, def, dash, btn, t: 0, full: false };
     this.bowCharge = 0;
@@ -1186,7 +1188,7 @@ export class Player extends Actor {
     const f = s.def.flame;
     s.tick -= dt;
     while (s.tick <= 0) {
-      s.tick += f.interval;
+      s.tick += f.interval * (s.item.affix === 'speed' ? AFFIX.speedMul : 1);
       flameBurst(this, s.item, this.x + this.facing * 16, this.y - 30, this.facing, { range: f.range, spread: f.spread, base: f.damage, burn: f.burn });
       if (s.n++ % 2 === 0) this.world.audio.play('swing', { vol: 0.15, pitch: 0.6 });
     }

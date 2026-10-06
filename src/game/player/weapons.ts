@@ -262,7 +262,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     pierce: true,
   },
 
-  // ---- ordinary weapons of docs/CONTENT4.md §5.1: DPS close to the item of their family (sword ~45, spear ~45-60, daggers ~50, hammer ~55-70, bow ~46)
+  // ---- ordinary weapons of docs/CONTENT4.md §5.1: DPS close to the item of their family (sword ~60, spear ~45, daggers ~50, hammer ~70, hunter bow ~46 a second of full draws)
   broadsword: {
     kind: 'melee',
     resetDelay: 0.4,
@@ -361,7 +361,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   heavy_crossbow: {
     kind: 'bow',
-    damage: 40,
+    damage: 28,
     drawTime: 0.7,
     minFrac: 0.35,
     minSpeed: 420,

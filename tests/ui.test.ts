@@ -440,6 +440,28 @@ describe('LevelUI: alchemist', () => {
     expect(t.game.save.unlocked).toContain(META_UPGRADES[META_UPGRADES.length - 1].item);
   });
 
+  it('after a purchase the selection moves on to the next upgrade still for sale, so buying blueprints down a page stays on that page', () => {
+    const t = setup({ W: 480 });
+    t.run.cells = 500;
+    t.ui.openAlchemist();
+    t.advance(0.3);
+    const modal = t.ui.top as AlchemistModal;
+    t.tap('alch-next');
+    t.advance(0.05);
+    expect([modal.sel, modal.page]).toEqual([ALCHEMIST_PAGE, 1]);
+    t.tap('alch-buy');
+    expect(t.game.save.unlocked).toContain(META_UPGRADES[ALCHEMIST_PAGE].item);
+    expect([modal.sel, modal.page], 'the next row of the same page').toEqual([ALCHEMIST_PAGE + 1, 1]);
+    t.tap('alch-buy');
+    expect(t.game.save.unlocked).toContain(META_UPGRADES[ALCHEMIST_PAGE + 1].item);
+    // the last upgrade of the list bought: the search wraps round to the first one still for sale
+    modal.tab(1); // (page 2 of 3 -> the last page)
+    t.advance(0.05);
+    t.tap('alch' + (META_UPGRADES.length - 1));
+    t.tap('alch-buy');
+    expect([modal.sel, modal.page]).toEqual([0, 0]);
+  });
+
   it('keys move through all the upgrades and the page follows the selection; LB / RB turn the pages', () => {
     const t = setup({ W: 480 });
     t.ui.openAlchemist();

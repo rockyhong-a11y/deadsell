@@ -399,3 +399,186 @@ test('the grade table: the badges of all six grades on the craft tabs and the st
   await shot(page, '33_craft_ss');
   expect(c.errors, 'no console / page errors').toEqual([]);
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// the ordinary weapons and skills of docs/CONTENT4.md §5.1 / §5.2
+
+/** the 14 new ordinary weapons: the player states each one passes through, and the projectile class it puts on the screen (if any) */
+const NEW_WEAPONS: Record<string, { states: string[]; spawns?: string }> = {
+  broadsword: { states: ['attack'] },
+  frantic_sword: { states: ['attack'] },
+  rapier: { states: ['attack'] },
+  sadist_stiletto: { states: ['attack'] },
+  grave_shovel: { states: ['attack'] },
+  torch: { states: ['attack'] },
+  leather_whip: { states: ['attack'] },
+  iron_katana: { states: ['charge', 'dash'] },
+  multi_bow: { states: ['bow'], spawns: 'Arrow' },
+  ice_bow: { states: ['bow'], spawns: 'Arrow' },
+  heavy_crossbow: { states: ['bow'], spawns: 'Arrow' },
+  throwing_knives: { states: ['attack'], spawns: 'Arrow' },
+  fire_staff: { states: ['staff'] },
+  spiked_shield: { states: ['block'] },
+};
+/** the 8 new ordinary skills: the entity each leaves on the screen (null: none), whether it hurts the ghouls (the phaser only stuns) */
+const NEW_SKILLS: Record<string, { spawns: string | null; hurts: boolean }> = {
+  stun_grenade: { spawns: 'Grenade', hurts: true },
+  magnet_grenade: { spawns: 'MagnetWell', hurts: true },
+  cluster_grenade: { spawns: 'Grenade', hurts: true },
+  tesla_coil: { spawns: 'TeslaCoil', hurts: true },
+  flame_turret: { spawns: 'FlameTurret', hurts: true },
+  phaser: { spawns: null, hurts: false },
+  wave_of_denial: { spawns: null, hurts: true },
+  tornado: { spawns: 'Tornado', hurts: true },
+};
+/** what a use leaves behind (cleared before the next item) */
+const LEFTOVERS = ['Arrow', 'Grenade', 'MagnetWell', 'TeslaCoil', 'FlameTurret', 'Tornado', 'Turret', 'Glow'];
+
+/**
+ * Back to `home`, clean up, equip `id` in slot 0 and put three ghouls in front of her; `window.__look()` records what happens from now on.
+ * While `window.__calm` is set the ghouls are kept stunned, so a blow they land cannot cancel what she is doing (a charge, a draw, a cast).
+ */
+function prepareUse(page: Page, id: string, home: { x: number; y: number }) {
+  return page.evaluate(([uid, hx, hy, leftovers]) => {
+    const ds = (window as any).__ds;
+    const w = ds.world, p = w.player;
+    for (const e of w.entities) if ((leftovers as string[]).includes(e.constructor.name)) e.dead = true;
+    ds.killAll();
+    ds.teleport(hx, hy);
+    ds.step(2);
+    p.hp = p.maxHp;
+    p.facing = 1;
+    ds.give(uid, 0);
+    ds.step(2);
+    (window as any).__calm = true;
+    const foes = ((window as any).__foes = [40, 70, 100].map((dx) => ds.spawn('ghoul', dx)));
+    for (const e of foes) e.status.stun = 1.5;
+    const seen = ((window as any).__seen = { classes: [] as string[], states: [] as string[], maxGrenades: 0, maxDx: 0 });
+    const x0 = p.x as number;
+    ds.step(2);
+    (window as any).__look = () => {
+      let grenades = 0;
+      for (const e of w.entities) {
+        if (e.dead) continue;
+        if (!seen.classes.includes(e.constructor.name)) seen.classes.push(e.constructor.name);
+        if (e.constructor.name === 'Grenade') grenades++;
+      }
+      seen.maxGrenades = Math.max(seen.maxGrenades, grenades);
+      seen.maxDx = Math.max(seen.maxDx, Math.abs(p.x - x0));
+      if (!seen.states.includes(p.state)) seen.states.push(p.state);
+      if ((window as any).__calm) for (const e of foes) e.status.stun = Math.max(e.status.stun, 1);
+    };
+  }, [id, home.x, home.y, LEFTOVERS] as const);
+}
+/** How the three ghouls fared and what was seen; the ghouls are removed afterwards. */
+const useResult = (page: Page) =>
+  page.evaluate(() => {
+    const ds = (window as any).__ds;
+    const p = ds.world.player;
+    const foes = (window as any).__foes as any[];
+    const hurt = foes.filter((e) => e.dead || e.dying || e.hp < e.maxHp).length;
+    for (const e of foes) e.dead = true;
+    return { ...((window as any).__seen as { classes: string[]; states: string[]; maxGrenades: number; maxDx: number }), hurt, cooldown: p.skillCooldown[0] as number };
+  });
+
+test('every new ordinary weapon and skill can be equipped (__ds.give) and used once in the real game: its entities draw, no console errors', async ({ page }) => {
+  const c = await boot(page, { query: '?seed=4&god=1' });
+  await startRun(page, 4);
+  const home = await page.evaluate(() => { const p = (window as any).__ds.player; return { x: p.x as number, y: p.y as number }; });
+
+  for (const [id, want] of Object.entries(NEW_WEAPONS)) {
+    await prepareUse(page, id, home);
+    // hold the attack for a second (chains the combo, draws the bow, charges the katana, breathes fire, blocks) with real frames in between
+    await page.evaluate(() => {
+      const ds = (window as any).__ds;
+      (window as any).__ds.world.input.press('attack1');
+      for (let f = 0; f < 60; f++) { ds.step(1); (window as any).__look(); }
+    });
+    await page.waitForTimeout(80);
+    await shot(page, `40_item_${id}`);
+    await page.evaluate(() => {
+      const ds = (window as any).__ds;
+      ds.world.input.release('attack1');
+      for (let f = 0; f < 45; f++) { ds.step(1); (window as any).__look(); }
+    });
+    await page.waitForTimeout(60);
+    const r = await useResult(page);
+    expect((await equipped(page)).weapons[0], `${id} is in the first weapon slot`).toBe(id);
+    for (const st of want.states) expect(r.states, `${id} passes through the ${st} state (saw ${r.states})`).toContain(st);
+    if (want.spawns) expect(r.classes, `${id} puts a ${want.spawns} on the screen`).toContain(want.spawns);
+    // (the shield only answers a blow; every other weapon reaches the ghouls in front of her)
+    if (id !== 'spiked_shield') expect(r.hurt, `${id} hurt a ghoul`).toBeGreaterThan(0);
+  }
+
+  for (const [id, want] of Object.entries(NEW_SKILLS)) {
+    await prepareUse(page, id, home);
+    await page.evaluate((key) => {
+      const ds = (window as any).__ds;
+      ds.world.input.tap('skill1');
+      // until the thing it leaves on the screen exists (a grenade has to fly first), then a few frames more
+      for (let f = 0; f < 120; f++) {
+        ds.step(1);
+        (window as any).__look();
+        if (key ? ((window as any).__seen.classes as string[]).includes(key) : f >= 30) break;
+      }
+      for (let f = 0; f < 6; f++) { ds.step(1); (window as any).__look(); }
+      (window as any).__calm = false; // now they may fight back
+    }, want.spawns);
+    await page.waitForTimeout(100); // real frames draw the effect
+    await shot(page, `41_item_${id}`);
+    await page.evaluate(() => {
+      const ds = (window as any).__ds;
+      for (let f = 0; f < 200; f++) { ds.step(1); (window as any).__look(); }
+    });
+    const r = await useResult(page);
+    expect((await equipped(page)).skills[0], `${id} is in the first skill slot`).toBe(id);
+    if (want.spawns) expect(r.classes, `${id} puts a ${want.spawns} on the screen (states ${r.states}, cooldown ${r.cooldown})`).toContain(want.spawns);
+    expect(r.cooldown, `${id} started its cooldown`).toBeGreaterThan(0);
+    if (want.hurts) expect(r.hurt, `${id} hurt a ghoul`).toBeGreaterThan(0);
+    if (id === 'cluster_grenade') expect(r.maxGrenades, 'the blast splits into four bomblets').toBeGreaterThanOrEqual(4);
+    if (id === 'phaser') expect(r.maxDx, 'she teleported to the ghoul (its stun: tests/normalItems.test.ts)').toBeGreaterThan(10);
+  }
+  expect(c.errors, 'no console / page errors').toEqual([]);
+});
+
+test('blueprints: the Alchemist lists them over several pages (touch), a bought blueprint is saved; the ★ items are unlocked from the start', async ({ page }) => {
+  const c = await boot(page, { query: '?seed=1&god=1' });
+  await recordText(page);
+  await startRun(page, 1);
+  await toLevel(page, 'passage');
+  await page.evaluate(() => { (window as any).__ds.game.run.cells = 500; });
+  await interact(page, 'Alchemist');
+  expect(await topModal(page)).toBe('AlchemistModal');
+  await page.waitForTimeout(600);
+  const modal = () => page.evaluate(() => { const m = (window as any).__ds.game.scene.ui.top; return { page: m.page as number, pages: m.pages as number }; });
+  const start = await modal();
+  expect(start.pages, 'the 25 blueprints and 3 other upgrades do not fit on one page').toBeGreaterThanOrEqual(3);
+  await shotBoth(page, '42_alchemist_page1');
+
+  // the pager button turns to page 2, whose rows are blueprints
+  const unlockedBefore = (await saved(page))?.unlocked ?? [];
+  await tapRegion(c, 'alch-next');
+  await expect.poll(async () => (await modal()).page).toBe(1);
+  await clearText(page);
+  await page.waitForTimeout(300);
+  const texts = await drawn(page);
+  expect(texts.filter((t) => t.startsWith('청사진: ')).length, 'the rows of page 2 are blueprints').toBeGreaterThanOrEqual(5);
+  expect(texts).toEqual(expect.arrayContaining([`2/${start.pages}`]));
+  await shotBoth(page, '42_alchemist_page2');
+
+  // buy the selected blueprint with a real touch: cells go down by its cost, the save lists the item, nothing else changes
+  const before = await page.evaluate(() => (window as any).__ds.game.run.cells as number);
+  await tapRegion(c, 'alch-buy');
+  await expect.poll(async () => (await saved(page))?.unlocked.length ?? 0, { timeout: 4_000 }).toBe(unlockedBefore.length + 1);
+  const added = (await saved(page)).unlocked.filter((id: string) => !unlockedBefore.includes(id));
+  expect(added, 'one new item id').toHaveLength(1);
+  const NEW = [...Object.keys(NEW_WEAPONS), ...Object.keys(NEW_SKILLS)];
+  const old = ['blood_sword', 'spear', 'twin_daggers', 'war_hammer', 'ice_grenade', 'turret', 'wolf_trap'];
+  expect([...NEW, ...old], `${added[0]} is a blueprint item`).toContain(added[0]);
+  for (const star of ['grave_shovel', 'leather_whip', 'throwing_knives', 'stun_grenade']) expect(unlockedBefore, `${star} is unlocked from the start`).toContain(star);
+  expect(await page.evaluate(() => (window as any).__ds.game.run.cells as number), 'the cost was paid').toBeLessThan(before);
+  expect((await modal()).page, 'the selection moves on to the next blueprint of the same page').toBe(1);
+  await shot(page, '42_alchemist_bought');
+  await page.keyboard.press('Escape');
+  expect(c.errors, 'no console / page errors').toEqual([]);
+});

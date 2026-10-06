@@ -241,9 +241,10 @@ export class AlchemistModal extends Modal {
       ui.game.persist();
       this.sfx('buy');
       this.msg = { text: `${u.name} 구매 완료`, color: COL.green, t: 2.2 };
-      // move to the next thing worth buying
-      const next = META_UPGRADES.findIndex((x) => x.available(ui.game.save));
-      if (next >= 0 && META_UPGRADES[this.sel].owned(ui.game.save)) this.select(next);
+      // move to the next thing worth buying: the next available one after this (wrapping), so buying down a page stays on that page
+      const n = META_UPGRADES.length;
+      const next = Array.from({ length: n - 1 }, (_, k) => (this.sel + 1 + k) % n).find((i) => META_UPGRADES[i].available(ui.game.save));
+      if (next !== undefined && META_UPGRADES[this.sel].owned(ui.game.save)) this.select(next);
     } else {
       this.sfx('error');
       this.shake = 0.3;

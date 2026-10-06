@@ -114,9 +114,9 @@ note the dependency in your report; do not edit the other module.
   쉼터) opens `StashModal` (`ui/stashModal.ts`, `LevelUI.openStash`): equipment row + 6 x 4 grid + item card; `장착` (asks which slot when both are taken, `pending`), `맡기기`, `분해` (armed by the
   first press, done by the second within 3 s); keys arrows / Enter / X (`ModalKey` `'special'`, the pad's Y) / Esc. `stashLayout(W, H)` is the pure geometry.
 * **Grades and recipes.** `rules.ts`: `GRADE_IDS` C B A S SS SSS, `GRADES` (badge colour, salvage, power target), `CRAFT[grade]` (`items`: stash lines `any` / `affix` / `tier` (>= `CRAFT_MIN_TIER`) / `mb` / `unique` of a grade;
-  `shards: { n, minLoop }`; `pieces`; `tier` of the crafted unique). `ItemDef.grade` marks the 30 uniques (`UNIQUE_IDS`, five per grade, C and B are the ten of docs/CONTENT3.md); the 20 new unique and 22 new ordinary ids
-  are registered (names, colours, slots, icon = id) before their behaviour exists: such an item does nothing when used, shows no signature line and has no codex page (`buildCodex` lists items that have a
-  `WEAPONS` / `SKILL_BASE` entry). `rollItem` still never returns a unique and the new ordinary ones are not in `STARTER_UNLOCKS` / blueprints until their lane adds them.
+  `shards: { n, minLoop }`; `pieces`; `tier` of the crafted unique). `ItemDef.grade` marks the 30 uniques (`UNIQUE_IDS`, five per grade, C and B are the ten of docs/CONTENT3.md); the 20 new unique ids are registered (names, colours, slots, icon = id) before their behaviour exists:
+  such an item does nothing when used, shows no signature line and has no codex page (`buildCodex` lists items that have a `WEAPONS` / `SKILLS` entry). `rollItem` never returns a unique. The 22 new ordinary
+  items are complete (next section).
 * **Crafting.** `meta/craft.ts`: `planCraft(grade, save)` -> `CraftPlan` (`lines` with have / need, `picks` = the stash indices that would be consumed, `shardPicks`); lines claim entries most specific first
   (unique, mb, tier, affix, any), cheapest first (lowest tier, no affix, not mb, oldest); `craftUnique(save, grade, id)` consumes them, takes the bank pieces and the shards (lowest loops first) and
   puts the unique (tier by grade, no affix) into the stash. `Seamstress` (prompt `조합`; after a craft she plays `sew` and says one of `SELMA_LINES`) opens `CraftModal` (`ui/craftModal.ts`, `LevelUI.openCraft(onCraft)`): grade tabs (Q / E, LB / RB, left / right),
@@ -132,6 +132,22 @@ note the dependency in your report; do not edit the other module.
 * `engine/assets.ts` `ANIM_FALLBACK` / `resolveAnim`: `AnimPlayer.play*` maps an animation the sheet does not have to its fallback (`whip_*` -> `spear_*`, `heavy_1 / 2 / 3` -> `hammer_1 / hammer_2 / sword_3`,
   `cast` -> `throw`, `sprint` -> `run`).
 
+## Ordinary items of the expansion (docs/CONTENT4.md §5.1 / §5.2)
+* **Tables.** 14 weapons in `player/weapons.ts` (`WEAPONS`) and 8 skills in `player/skills.ts` (`SKILL_BASE` + one spec constant each: `STUN_GRENADE`, `MAGNET_GRENADE`, `CLUSTER_GRENADE`, `TESLA_COIL`, `FLAME_TURRET`, `PHASER`,
+  `WAVE_OF_DENIAL`, `TORNADO`; cooldowns in `ITEMS`). `WeaponDef` is `melee` | `bow` | `shield` | `staff`. New fields: melee `burn` (every hit ignites), `critBelowHp`, `critFirstAfterRoll`, `critVs` (burn / freeze / stun),
+  `dash` (철 도), per hit `tip` (whip: the outer px crit) and `shoot` (`Volley`: the throwing knives leave the hand when the windup ends); bow `volley` (a full draw fans out `n` arrows over +-`spread` degrees at `frac` of the
+  damage), `freeze`, `range`, `look`; shield `counter` (가시 방패: a parry strikes the attacker); staff `flame` (화염 지팡이: hold to breathe a cone).
+* **Player modes.** `charge` -> `dash` (철 도: hold `dash.charge` s, let go to dash `dash.distance` px, invulnerable while `go`, every enemy on the line hit once; letting go early is the tap slash `hits[0]`), `staff` (hold: `flameBurst`
+  every `flame.interval` s). `nextCritT` / `armCrit` (위상 전이: the next weapon hit within `PHASER.critWindow` s crits, whatever it is: swing, arrow, knife); `rollCritSpent` (레이피어: the first hit after a roll only).
+  A skill whose `use` returns `false` (the phaser with nobody in reach) spends no cooldown. The `speed` affix shortens the katana's charge and the staff's tick like a swing; a `burn` / `bleed` affix lengthens the burn / bleed
+  of items that have their own (`Math.max`), never shortens it.
+* **Entities** (`player/projectiles.ts`). `Arrow` takes `ArrowOpts` (`pierce`, `range`, `outline`, `scale`, `knife`); `Grenade` has the types `stun`, `magnet` (spawns a `MagnetWell`: pulls, then bursts), `cluster` (splits into four `bomblet`s
+  that burst after `BOMBLET_FUSE`, never on contact); `explode` takes a `BlastKind` (`BLAST` table) and `extra` fields (stun, knockback); `TeslaCoil` (zap + one chain, line of sight), `FlameTurret`, `Tornado` (drags enemies unless
+  `knockbackTaken` < `minKnockback`, ends at a wall), `denialWave` (knockback + wipes enemy `Arrow` / `Bolt` / `Bomb` / `WebBlob`, not the ones she reflected), `flameBurst` (the cone shared by the staff and the turret).
+* **Pool.** `STARTER_UNLOCKS` = the base four + the four ★ items (`grave_shovel`, `leather_whip`, `throwing_knives`, `stun_grenade`); `loadSave` always merges it in, so an old save gains the ★ items and keeps what it unlocked. Every
+  other ordinary item is a `META_UPGRADES` blueprint row (`unlock_<id>`, 20-40 cells, weapons first). The Alchemist screen shows `ALCHEMIST_PAGE` (10) rows per page (`<` `>`, LB / RB, the page follows the selection; after a purchase the
+  selection moves to the next upgrade still for sale). Codex: group `일반` with a `해금` row (`기본` or `연금술사 {cost}셀`).
+
 ## Unique items (docs/CONTENT3.md §5)
 * **Identity.** An `ItemDef` with `unique: true` and a `grade` (items.ts): thirty of them (`UNIQUE_IDS`, the ten of docs/CONTENT3.md are grades C and B), crafted only at Selma. `rollItem` filters them out of every pool (drops, chests,
   pedestals, the gold shop, mid-boss drops), `affixPool` is empty for them, `loadSave` drops them from `unlocked` and `unlockedCount` does not count them.
@@ -140,7 +156,7 @@ note the dependency in your report; do not edit the other module.
 * **Numbers.** Weapons: `player/weapons.ts` (`bleed` + `critBleeding`, `healOnKill`, `critAfterRoll`, `critAfterHurt`, shield `shockwave`, bow `pierce`);
   skills: `player/skills.ts` (`SKILL_BASE`, `CORPSE_BOMB`, `BONE_SPIKES`, `SOUL_LANTERN`, `CHAIN_HOOK`). Every number the UI shows comes from there.
 * **Hooks.** `Player` keeps `sinceRoll` / `sinceHurt` for the two crit windows and `signatureCrit` in `swingHit`; the shield's parry (`parryFeedback`)
-  releases the shockwave once per block; `Arrow` takes a `pierce` flag (a fully drawn 골수 활 shot); `Grenade` has a `corpse` type (the blast of the 시체 폭탄,
+  releases the shockwave once per block; `Arrow` takes `ArrowOpts.pierce` (a fully drawn 골수 활 shot); `Grenade` has a `corpse` type (the blast of the 시체 폭탄,
   and one chain burst for each enemy it kills). New entities in `player/projectiles.ts`: `BoneSpikes`, `SoulFlames`, `ChainHook` (the hook holds its victim
   stunned for the full `CHAIN_HOOK.stun` while it drags it, so the stun runs out after the pull).
 
@@ -202,6 +218,8 @@ The detail text of a page that does not fit (final boss on a narrow view: up to 
   * `e2e/content4.spec.ts` - docs/CONTENT4.md: the sprint (run-up, 240 px/s, sprint animation, air keep), the kill-streak frenzy, the stash (send from the field with a real touch, the chest, equip with a slot choice, put
     away, salvage, reload), the keyboard flow, a C unique crafted end to end (stash + bank -> craft -> equip -> swing), the victory that banks pieces, advances the loop and keeps a bell shard, screenshots of the
     stash and craft screens at 844x390 and 667x375.
+    Also: every new ordinary weapon and skill equipped with `__ds.give` and used once in the real loop (states, projectiles, hurt ghouls, cooldown, screenshots `40_item_*` / `41_item_*`), and the paged Alchemist
+    screen bought from by touch (screenshots `42_alchemist_*` at 844x390 and 667x375).
   * `e2e/codex.spec.ts` - the codex from the title (touch, keyboard, mocked pad) and from the pause menu; one screenshot per tab
     (`e2e-shots/codex_*.png`).
   * `e2e/settings.spec.ts` - settings by touch, virtual buttons with real multi-touch, a mocked `navigator.getGamepads`

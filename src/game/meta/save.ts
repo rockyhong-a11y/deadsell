@@ -1,7 +1,7 @@
 import { ITEM_IDS, STARTER_UNLOCKS, UNIQUE_IDS, type ItemId } from '../items/types';
 import { DEFAULT_GFX, sanitizeGfx, type GfxSettings } from '../../engine/filters';
 import { DEFAULT_PAD_MAP, sanitizePadMap, type PadMap } from '../../engine/gamepad';
-import { CORPSE } from '../rules';
+import { STASH } from '../rules';
 
 /** 터치 제스처 / 가상 버튼 / 게임패드 (the keyboard always works in every mode) */
 export type ControlMode = 'gesture' | 'buttons' | 'gamepad';
@@ -35,12 +35,12 @@ export interface SaveData {
   wins: number;
   bestTime: number | null;
   totalKills: number;
-  /** 회차: the current loop, starts at 1 (docs/CONTENT3.md §1) */
+  /** 회차: the current loop, starts at 1 and goes up when the Iron Matron falls (docs/CONTENT4.md §0) */
   loop: number;
-  /** pieces sewn into Cinder's body in the current loop, 0..99 (100 completes the loop and resets to 0) */
-  body: number;
-  /** runs started in the current loop (reset when the loop is cleared) */
-  loopRuns: number;
+  /** 시체 조각 banked at the 쉼터 / on victory: pays for crafting and the golem (docs/CONTENT4.md §3) */
+  pieces: number;
+  /** 종탑의 파편: one per Iron Matron kill, each the loop it was won in (docs/CONTENT4.md §4) */
+  shards: number[];
   settings: Settings;
 }
 
@@ -59,8 +59,8 @@ export function defaultSave(): SaveData {
     bestTime: null,
     totalKills: 0,
     loop: 1,
-    body: 0,
-    loopRuns: 0,
+    pieces: 0,
+    shards: [],
     settings: {
       sfx: 0.8, music: 0.5, hints: true, muted: false,
       controlMode: 'gesture', btnSize: 'medium', btnOpacity: 0.6, gamepadMap: { ...DEFAULT_PAD_MAP },
@@ -92,8 +92,11 @@ export function loadSave(): SaveData {
       bestTime: typeof d.bestTime === 'number' && Number.isFinite(d.bestTime) && d.bestTime > 0 ? d.bestTime : null,
       totalKills: Math.floor(num(d.totalKills, 0)),
       loop: Math.min(MAX_LOOP, Math.floor(num(d.loop, 1, 1))),
-      body: Math.min(CORPSE.body - 1, Math.floor(num(d.body, 0))),
-      loopRuns: Math.floor(num(d.loopRuns, 0)),
+      // (`body` / `loopRuns` of the old body-sewing saves are ignored)
+      pieces: Math.floor(num(d.pieces, 0)),
+      shards: Array.isArray(d.shards)
+        ? (d.shards as unknown[]).filter((v): v is number => typeof v === 'number' && Number.isFinite(v)).map((v) => Math.min(MAX_LOOP, Math.max(1, Math.floor(v)))).slice(0, STASH.shardCap)
+        : [],
       settings: {
         sfx: Math.min(1, num(st.sfx, base.settings.sfx)),
         music: Math.min(1, num(st.music, base.settings.music)),

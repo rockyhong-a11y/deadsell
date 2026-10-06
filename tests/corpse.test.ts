@@ -7,9 +7,9 @@ import { TileMap, T } from '../src/game/tilemap';
 import { RunState, LEVEL_SEQUENCE } from '../src/game/run';
 import { defaultSave, loadSave, MAX_LOOP, type SaveData } from '../src/game/meta/save';
 import { applyRunStart, unlockedCount } from '../src/game/meta/progression';
-import { bodyNeed, completeLoop, sewPieces, sewPlan } from '../src/game/meta/body';
+import { bankPieces, winRun } from '../src/game/meta/bank';
 import {
-  CORPSE, GOLEM, TIER2, ELITE, golemCost, golemStatMul, loopDmgMul, loopEliteBonus, loopHpMul, loopK, loopPriceMul, enemyDmgMul, enemyHpMul,
+  CORPSE, GOLEM, STASH, TIER2, ELITE, golemCost, golemStatMul, loopDmgMul, loopEliteBonus, loopHpMul, loopK, enemyDmgMul, enemyHpMul,
 } from '../src/game/rules';
 import { createEnemy } from '../src/game/enemies/factory';
 import type { Enemy } from '../src/game/enemies/base';
@@ -17,11 +17,11 @@ import { ENEMY_DEFS } from '../src/game/enemies/variants';
 import { createMiniBoss, MINIBOSS_IDS, MINIBOSS_SPECS, type MiniBoss } from '../src/game/miniboss';
 import { createBoss, MATRON, type Matron } from '../src/game/boss/matron';
 import { collectAllPieces, collectCoinsInRange, dropLoot, homeAllPieces } from '../src/game/items/pickups';
-import { ITEMS, rollItem, uniquePrice, UNIQUE_PRICE } from '../src/game/items/items';
-import { ITEM_IDS, UNIQUE_IDS, type ItemId, type ItemInstance } from '../src/game/items/types';
+import { ITEMS, rollItem } from '../src/game/items/items';
+import { ITEM_IDS, UNIQUE_IDS, type ItemId } from '../src/game/items/types';
 import { Rng } from '../src/engine/rng';
 import { hitArea } from '../src/game/combat';
-import { Seamstress, SELMA_LINES, CorpseShopItem, corpseShopStock, GolemPile } from '../src/game/props';
+import { Seamstress, SELMA_LINES, GolemPile } from '../src/game/props';
 import { Golem, golemDamage, golemMaxHp, newGolemState, spawnRunGolem } from '../src/game/allies/golem';
 import { buildLevel, populateLevel } from '../src/game/level/build';
 import { generateBiome } from '../src/game/level/generator';
@@ -29,7 +29,6 @@ import { hudLayout } from '../src/game/ui/hud';
 import { Game } from '../src/game/game';
 import { DeathScene } from '../src/game/scenes/deathScene';
 import { VictoryScene } from '../src/game/scenes/victoryScene';
-import { LoopClearScene } from '../src/game/scenes/loopClearScene';
 
 const FLOOR = 16 * 24;
 
@@ -45,8 +44,7 @@ function setup(map: TileMap = flatMap(), x = 120) {
   t.world.on((e) => events.push(e as { type: string }));
   // the in-game bits the props call on the Game
   const persisted: number[] = [];
-  t.game.persist = () => { persisted.push(t.game.save.body); };
-  t.game.loopClear = (info: unknown) => { events.push({ type: 'loopClear', info }); };
+  t.game.persist = () => { persisted.push(t.game.save.pieces); };
   steps(t.world, 3);
   return { ...t, p, sounds, events, persisted };
 }
@@ -79,8 +77,7 @@ const piecesLying = (world: ReturnType<typeof setup>['world']) => pieceDrops(wor
 
 // ---------------------------------------------------------------------------------------------------------------------
 describe('rules: loops, pieces and the golem tables', () => {
-  it('the body is 100 pieces and the drop table is 1 / 3 / 8 / 12', () => {
-    expect(CORPSE.body).toBe(100);
+  it('the drop table is 1 / 3 / 8 / 12', () => {
     expect(CORPSE.drop).toEqual({ enemy: 1, elite: 3, miniboss: 8, matron: 12 });
   });
 
@@ -101,9 +98,8 @@ describe('rules: loops, pieces and the golem tables', () => {
     expect(loopEliteBonus(12)).toBeCloseTo(0.2);
   });
 
-  it('golem cost is 30 + 15 per step (30 in loop 1), shop prices x(1 + 0.5 per step)', () => {
+  it('golem cost is 30 + 15 per step (30 in loop 1)', () => {
     expect([1, 2, 3, 4, 5, 8].map(golemCost)).toEqual([30, 45, 60, 75, 90, 90]);
-    expect([1, 2, 3, 5, 9].map(loopPriceMul)).toEqual([1, 1.5, 2, 3, 3]);
     expect(golemStatMul(1)).toBe(1);
     expect(golemStatMul(3)).toBeCloseTo(1.6);
     expect(golemStatMul(7)).toBeCloseTo(2.2);
@@ -116,27 +112,10 @@ describe('rules: loops, pieces and the golem tables', () => {
     expect(enemyDmgMul(1, 2, false)).toBe(TIER2.dmg);
     expect(enemyDmgMul(1, 1, false, 5)).toBeCloseTo(1.8);
   });
-
-  it('uniquePrice = base price x the loop multiplier, rounded (a trivial table the unique items extend)', () => {
-    const id = 'rusty_sword' as ItemId;
-    const before = UNIQUE_PRICE[id];
-    try {
-      UNIQUE_PRICE[id] = 22;
-      expect(uniquePrice(id, 1)).toBe(22);
-      expect(uniquePrice(id, 2)).toBe(33);
-      expect(uniquePrice(id, 3)).toBe(44);
-      expect(uniquePrice(id, 7)).toBe(66);
-      UNIQUE_PRICE[id] = 17;
-      expect(uniquePrice(id, 2)).toBe(26); // 25.5 rounds up
-    } finally {
-      if (before === undefined) delete UNIQUE_PRICE[id];
-      else UNIQUE_PRICE[id] = before;
-    }
-  });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-describe('save: loop, body and loopRuns', () => {
+describe('save: loop, shards, the bank and old saves', () => {
   const store = new Map<string, string>();
   const KEY = 'deadsell.save.v1';
   (globalThis as { localStorage?: unknown }).localStorage = {
@@ -148,48 +127,49 @@ describe('save: loop, body and loopRuns', () => {
     return loadSave();
   };
 
-  it('a new save is loop 1, body 0, no runs in the loop', () => {
+  it('a new save is loop 1 with an empty bank and no bell shards', () => {
     const s = defaultSave();
-    expect([s.loop, s.body, s.loopRuns]).toEqual([1, 0, 0]);
+    expect([s.loop, s.pieces, s.shards]).toEqual([1, 0, []]);
   });
 
-  it('old saves without the fields load with the defaults', () => {
+  it('old saves without the fields load with the defaults; the removed body / loopRuns are ignored', () => {
     const s = load({ version: 1, runs: 7, wins: 2, totalKills: 90 });
-    expect([s.loop, s.body, s.loopRuns]).toEqual([1, 0, 0]);
+    expect([s.loop, s.pieces, s.shards]).toEqual([1, 0, []]);
     expect(s.runs).toBe(7);
+    const old = load({ version: 1, loop: 2, body: 63, loopRuns: 9 }) as unknown as Record<string, unknown>;
+    expect(old.loop).toBe(2);
+    expect('body' in old).toBe(false);
+    expect('loopRuns' in old).toBe(false);
     store.clear();
     expect(loadSave().loop).toBe(1);
   });
 
-  it('keeps valid values', () => {
-    const s = load({ version: 1, loop: 4, body: 63, loopRuns: 9 });
-    expect([s.loop, s.body, s.loopRuns]).toEqual([4, 63, 9]);
-  });
-
-  it('sanitises: loop is an integer 1..99, body 0..99, loopRuns >= 0, junk falls back', () => {
+  it('sanitises: loop is an integer 1..99, shards are loops 1..99, the bank is an integer >= 0, junk falls back', () => {
     expect(load({ loop: 0 }).loop).toBe(1);
     expect(load({ loop: -5 }).loop).toBe(1);
     expect(load({ loop: 2.9 }).loop).toBe(2);
     expect(load({ loop: 1000 }).loop).toBe(MAX_LOOP);
     expect(load({ loop: '3' }).loop).toBe(1);
     expect(load({ loop: null }).loop).toBe(1);
-    expect(load({ body: -1 }).body).toBe(0);
-    expect(load({ body: 100 }).body).toBe(99);
-    expect(load({ body: 5000 }).body).toBe(99);
-    expect(load({ body: 12.7 }).body).toBe(12);
-    expect(load({ body: 'x' }).body).toBe(0);
-    expect(load({ loopRuns: -4 }).loopRuns).toBe(0);
-    expect(load({ loopRuns: 3.5 }).loopRuns).toBe(3);
-    expect(load({ loopRuns: NaN }).loopRuns).toBe(0);
+    expect(load({ pieces: 41 }).pieces).toBe(41);
+    expect(load({ pieces: -3 }).pieces).toBe(0);
+    expect(load({ pieces: 12.7 }).pieces).toBe(12);
+    expect(load({ pieces: 'x' }).pieces).toBe(0);
+    expect(load({ shards: [1, 3, 2] }).shards).toEqual([1, 3, 2]);
+    expect(load({ shards: [0, -4, 2.8, 500, 'a', null, NaN] }).shards).toEqual([1, 1, 2, MAX_LOOP]);
+    expect(load({ shards: 'many' }).shards).toEqual([]);
+    expect(load({ shards: Array.from({ length: 300 }, () => 2) }).shards).toHaveLength(STASH.shardCap);
     store.clear();
   });
 
   it('a run starts in the save\'s loop with nothing carried and no golem', () => {
     const s = defaultSave();
     s.loop = 3;
+    s.pieces = 50;
     const run = new RunState(5);
     applyRunStart(run, s);
-    expect([run.loop, run.pieces, run.piecesSewn, run.golem]).toEqual([3, 0, 0, null]);
+    expect([run.loop, run.pieces, run.golem]).toEqual([3, 0, null]);
+    expect(s.pieces).toBe(50);
   });
 
   it('the passage level is called 쉼터', () => {
@@ -198,58 +178,46 @@ describe('save: loop, body and loopRuns', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-describe('sewing the body', () => {
-  const fresh = (pieces: number, body = 0) => {
+describe('the bank: carried pieces are kept at the 쉼터 and on victory (docs/CONTENT4.md §3)', () => {
+  const fresh = (pieces: number, bank = 0) => {
     const run = new RunState(1);
     run.pieces = pieces;
     const save = defaultSave();
-    save.body = body;
-    save.loopRuns = 4;
+    save.pieces = bank;
     return { run, save };
   };
 
-  it('sewing moves every carried piece into the body, permanently', () => {
-    const { run, save } = fresh(37);
-    const r = sewPieces(run, save);
-    expect(r.cleared).toBeNull();
-    expect(r.plan).toEqual({ n: 37, completes: false, surplus: 0 });
-    expect([run.pieces, run.piecesSewn, save.body]).toEqual([0, 37, 37]);
-    const r2 = sewPieces(run, save); // nothing carried: nothing happens
-    expect(r2.plan.n).toBe(0);
-    expect(save.body).toBe(37);
+  it('banking moves every carried piece into the permanent bank', () => {
+    const { run, save } = fresh(37, 10);
+    expect(bankPieces(run, save)).toBe(37);
+    expect([run.pieces, save.pieces]).toEqual([0, 47]);
+    expect(bankPieces(run, save)).toBe(0); // nothing carried: nothing happens
+    expect(save.pieces).toBe(47);
   });
 
-  it('sews at most what the body still needs; 99 + 1 completes it exactly', () => {
-    expect(sewPlan(0, 50)).toEqual({ n: 0, completes: false, surplus: 0 });
-    expect(sewPlan(49, 50)).toEqual({ n: 49, completes: false, surplus: 0 });
-    expect(sewPlan(50, 50)).toEqual({ n: 50, completes: true, surplus: 0 });
-    expect(sewPlan(1, 99)).toEqual({ n: 1, completes: true, surplus: 0 });
-    expect(sewPlan(120, 70)).toEqual({ n: 30, completes: true, surplus: 90 });
-    expect(bodyNeed(99)).toBe(1);
-    expect(bodyNeed(0)).toBe(100);
-  });
-
-  it('completing the body clears the loop: loop + 1, body 0, runs reset, the surplus is lost', () => {
-    const { run, save } = fresh(120, 70);
+  it('winning banks the carried pieces, keeps a bell shard of the loop that was won and starts the next loop', () => {
+    const { run, save } = fresh(25, 5);
+    run.loop = 2;
     save.loop = 2;
-    const r = sewPieces(run, save);
-    expect(r.cleared).toEqual({ loop: 2, runs: 4 });
-    expect([save.loop, save.body, save.loopRuns]).toEqual([3, 0, 0]);
-    expect(run.pieces).toBe(0);
-    expect(run.piecesSewn).toBe(30);
+    save.shards = [1];
+    const win = winRun(run, save);
+    expect(win).toEqual({ banked: 25, loop: 2, nextLoop: 3 });
+    expect([run.pieces, save.pieces, save.loop, save.shards]).toEqual([0, 30, 3, [1, 2]]);
   });
 
-  it('99 + 1 carried clears the loop with nothing left over', () => {
-    const { run, save } = fresh(1, 99);
-    expect(sewPieces(run, save).cleared).toEqual({ loop: 1, runs: 4 });
-    expect([save.loop, save.body]).toEqual([2, 0]);
-  });
-
-  it('the loop number stops at the save limit', () => {
-    const save = defaultSave();
+  it('the loop number and the shard list stop at their limits', () => {
+    const { run, save } = fresh(0);
+    run.loop = MAX_LOOP;
     save.loop = MAX_LOOP;
-    completeLoop(save);
-    expect(save.loop).toBe(MAX_LOOP);
+    expect(winRun(run, save).nextLoop).toBe(MAX_LOOP);
+    expect(save.shards).toEqual([MAX_LOOP]);
+    save.shards = Array.from({ length: STASH.shardCap }, () => 5);
+    save.shards[7] = 1;
+    run.loop = 3;
+    winRun(run, save);
+    expect(save.shards).toHaveLength(STASH.shardCap);
+    expect(save.shards).not.toContain(1); // the lowest shard made room
+    expect(save.shards).toContain(3);
   });
 });
 
@@ -520,18 +488,16 @@ describe('loops make the world harder', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-describe('쉼터: Selma, the 시체 상점 and the golem pile', () => {
+describe('쉼터: Selma and the golem pile', () => {
   const tpl = () => buildLevel(LEVEL_SEQUENCE.find((l) => l.kind === 'passage')!, 7);
 
-  it('the passage level has Selma, three corpse-shop pedestals 2 tiles apart and the golem pile', () => {
+  it('the passage level has Selma and the golem pile, left to right after the alchemist and the fountain, and no corpse shop', () => {
     const lvl = tpl();
     const by = (type: string) => lvl.spawns.filter((s) => s.type === type);
     expect(by('seamstress')).toHaveLength(1);
     expect(by('golem_pile')).toHaveLength(1);
-    const shop = by('corpse_shop');
-    expect(shop).toHaveLength(3);
-    expect(shop.map((s) => s.tx).sort((a, b) => a - b).map((x, i, a) => (i ? x - a[i - 1] : 2))).toEqual([2, 2, 2]);
-    const order = ['alchemist', 'fountain', 'seamstress', 'corpse_shop', 'golem_pile', 'exit'].map((t) => by(t)[0].tx);
+    expect(lvl.spawns.some((s) => (s.type as string) === 'corpse_shop')).toBe(false);
+    const order = ['alchemist', 'fountain', 'seamstress', 'golem_pile', 'exit'].map((t) => by(t)[0].tx);
     expect(order).toEqual([...order].sort((a, b) => a - b));
     // nothing stands on the fountain or the door
     const fountain = by('fountain')[0];
@@ -542,7 +508,7 @@ describe('쉼터: Selma, the 시체 상점 and the golem pile', () => {
     }
   });
 
-  it('populateLevel spawns the props (no unique items yet = three empty 품절 pedestals)', () => {
+  it('populateLevel spawns the props', () => {
     const t = setup();
     t.world.entities.length = 0;
     populateLevel(t.world, tpl());
@@ -550,96 +516,22 @@ describe('쉼터: Selma, the 시체 상점 and the golem pile', () => {
     const of = <C>(c: new (...a: never[]) => C) => t.world.entities.filter((e) => e instanceof c) as unknown as C[];
     expect(of(Seamstress as never)).toHaveLength(1);
     expect(of(GolemPile as never)).toHaveLength(1);
-    const pedestals = of(CorpseShopItem as never) as unknown as CorpseShopItem[];
-    expect(pedestals).toHaveLength(3);
-    if (UNIQUE_IDS.length === 0) for (const p of pedestals) expect([p.item, p.sold, p.canInteract(), p.promptText()]).toEqual([null, true, false, '품절']);
-    else expect(new Set(pedestals.map((p) => p.item?.id)).size).toBe(Math.min(3, UNIQUE_IDS.length));
-  });
-
-  describe('shop stock', () => {
-    const ids = ['rusty_sword', 'spear', 'twin_daggers', 'war_hammer', 'hunter_bow'] as ItemId[];
-    it('3 distinct ids drawn with the level rng; deterministic per seed; fewer when there are fewer', () => {
-      for (let seed = 1; seed <= 30; seed++) {
-        const a = corpseShopStock(new Rng(seed), 3, ids);
-        expect(a).toHaveLength(3);
-        expect(new Set(a).size).toBe(3);
-        for (const id of a) expect(ids).toContain(id);
-        expect(corpseShopStock(new Rng(seed), 3, ids)).toEqual(a);
-      }
-      const seen = new Set<string>();
-      for (let seed = 1; seed <= 40; seed++) corpseShopStock(new Rng(seed), 3, ids).forEach((i) => seen.add(i));
-      expect(seen.size).toBe(ids.length);
-      expect(corpseShopStock(new Rng(1), 3, ids.slice(0, 2))).toHaveLength(2);
-      expect(corpseShopStock(new Rng(1), 3, [])).toEqual([]);
-    });
-    it('the shop reads UNIQUE_IDS by default', () => {
-      expect(corpseShopStock(new Rng(3), 3).every((i) => UNIQUE_IDS.includes(i))).toBe(true);
-    });
-  });
-
-  describe('a pedestal', () => {
-    const buy = (pieces: number, loop = 1) => {
-      const t = setup();
-      t.run.pieces = pieces;
-      t.run.loop = loop;
-      const inst: ItemInstance = { id: 'spear', tier: 2, affix: null };
-      const shop = new CorpseShopItem(300, FLOOR, inst, loop);
-      t.world.spawn(shop);
-      steps(t.world, 2);
-      return { ...t, shop, inst };
-    };
-    it('sells its item for pieces: price x loop multiplier, red when unaffordable', () => {
-      const a = buy(5);
-      expect(a.shop.price).toBe(uniquePrice('spear', 1));
-      expect(a.shop.affordable).toBe(false);
-      expect(a.shop.promptText()).toBe('구매 · 창 +1');
-      expect(a.shop.promptSub()).toContain(`${a.shop.price}조각`);
-      a.shop.interact();
-      expect(a.sounds).toContain('error');
-      expect(a.events.find((e) => e.type === 'toast')?.text).toBe('시체 조각이 부족하다');
-      expect(a.run.pieces).toBe(5);
-      expect(a.shop.sold).toBe(false);
-      expect(buy(0, 3).shop.price).toBe(uniquePrice('spear', 3));
-    });
-    it('buying pays carried pieces, empties the slot and drops the item at the pedestal', () => {
-      const a = buy(100, 2);
-      const price = a.shop.price;
-      expect(price).toBe(uniquePrice('spear', 2));
-      a.shop.interact();
-      expect(a.run.pieces).toBe(100 - price);
-      expect(a.shop.sold).toBe(true);
-      expect(a.shop.canInteract()).toBe(false);
-      expect(a.events.find((e) => e.type === 'toast')?.text).toBe('창 +1 구매');
-      steps(a.world, 1);
-      const drop = a.world.entities.find((e) => e.constructor.name === 'ItemDrop') as unknown as { inst: ItemInstance };
-      expect(drop.inst).toEqual(a.inst);
-      a.shop.interact(); // sold out: nothing more
-      expect(a.run.pieces).toBe(100 - price);
-    });
-    it('gold is not accepted', () => {
-      const a = buy(0);
-      a.run.gold = 9999;
-      a.shop.interact();
-      expect(a.shop.sold).toBe(false);
-    });
   });
 
   describe('Selma', () => {
-    const talk = (pieces: number, body = 0, loop = 1) => {
+    const talk = (bank = 0) => {
       const t = setup();
-      t.game.save.body = body;
-      t.game.save.loop = loop;
-      t.run.pieces = pieces;
+      t.game.save.pieces = bank;
       const selma = new Seamstress(300, FLOOR);
       t.world.spawn(selma);
       steps(t.world, 2);
       return { ...t, selma };
     };
-    it('with nothing carried she just talks (6+ lore lines, never the same twice in a row)', () => {
+    it('she talks (6+ lore lines, never the same twice in a row) and shows the banked pieces', () => {
       expect(SELMA_LINES.length).toBeGreaterThanOrEqual(6);
-      const a = talk(0, 12);
+      const a = talk(12);
       expect(a.selma.promptText()).toBe('대화');
-      expect(a.selma.promptSub()).toBe('재봉사 셀마 · 몸 12/100');
+      expect(a.selma.promptSub()).toBe('재봉사 셀마 · 시체 조각 12');
       const said = new Set<string>();
       let last = '';
       for (let i = 0; i < 40; i++) {
@@ -651,89 +543,50 @@ describe('쉼터: Selma, the 시체 상점 and the golem pile', () => {
         said.add(line);
       }
       expect(said.size).toBeGreaterThanOrEqual(6);
-      expect(a.run.pieces).toBe(0);
-      expect(a.game.save.body).toBe(12);
-    });
-    it('carrying pieces: "몸 꿰매기 · n조각" sews them all into the body, saves at once, toasts', () => {
-      const a = talk(37, 20);
-      expect(a.selma.promptText()).toBe('몸 꿰매기 · 37조각');
-      expect(a.selma.promptSub()).toBe('재봉사 셀마 · 몸 20/100');
-      a.selma.interact();
-      expect(a.run.pieces).toBe(0);
-      expect(a.run.piecesSewn).toBe(37);
-      expect(a.game.save.body).toBe(57);
-      expect(a.persisted).toEqual([57]);
-      expect(a.sounds).toContain('heal');
-      expect(a.events.find((e) => e.type === 'toast')?.text).toBe('시체 조각 37개를 꿰맸다 · 몸 57/100');
-      expect(a.events.some((e) => e.type === 'loopClear')).toBe(false);
-      expect(a.selma.promptText()).toBe('대화');
+      expect(a.game.save.pieces).toBe(12);
     });
     it('while her banter line is up the prompt steps aside (it was drawn over the bubble), then comes back', () => {
-      const a = talk(0, 12);
+      const a = talk();
       expect(a.selma.promptText()).toBe('대화');
       a.selma.interact();
       expect(a.selma.promptText()).toBe('');
       steps(a.world, 60 * 3 + 5);
       expect(a.selma.promptText()).toBe('대화');
-      // carrying pieces: the sew prompt is never hidden
-      const b = talk(5, 12);
-      (b.selma as unknown as { lineT: number }).lineT = 2;
-      expect(b.selma.promptText()).toBe('몸 꿰매기 · 5조각');
-    });
-    it('the sew that completes the body says so, warns about the surplus, then clears the loop after the slow motion', () => {
-      const a = talk(95, 80, 2);
-      expect(a.selma.promptText()).toBe('몸 완성하기 · 20조각');
-      expect(a.selma.promptSub()).toBe('2회차 클리어! · 남는 75조각은 사라짐');
-      const exact = talk(20, 80, 2);
-      expect(exact.selma.promptSub()).toBe('2회차 클리어!');
-      a.selma.interact();
-      expect(a.game.save.loop).toBe(3);
-      expect(a.game.save.body).toBe(0);
-      expect(a.run.pieces).toBe(0);
-      expect(a.run.piecesSewn).toBe(20);
-      expect(a.world.timeScale).toBeLessThan(1);
-      // from here on the run can only end with the loop-clear scene (see 'run flow')
-      expect(a.run.clearedLoop).toEqual({ loop: 2, runs: 0 });
-      expect(a.events.find((e) => e.type === 'toast')?.text).toBe('시체 조각 20개를 꿰맸다 · 몸 100/100');
-      expect(a.events.some((e) => e.type === 'loopClear')).toBe(false);
-      expect(a.selma.canInteract()).toBe(false);
-      steps(a.world, 90);
-      const clear = a.events.filter((e) => e.type === 'loopClear');
-      expect(clear).toHaveLength(1);
-      expect(clear[0].info).toEqual({ loop: 2, runs: 0 });
-      steps(a.world, 200);
-      expect(a.events.filter((e) => e.type === 'loopClear')).toHaveLength(1);
     });
   });
 
   describe('the golem pile', () => {
-    const pile = (pieces: number, loop = 1) => {
+    /** `bank` pieces in the bank; the pieces carried by the run are never used */
+    const pile = (bank: number, loop = 1) => {
       const t = setup();
-      t.run.pieces = pieces;
+      t.game.save.pieces = bank;
+      t.run.pieces = 500;
       t.run.loop = loop;
       const p = new GolemPile(300, FLOOR);
       t.world.spawn(p);
       steps(t.world, 2);
       return { ...t, pile: p };
     };
-    it('costs 30 pieces in loop 1, 15 more per loop; too few is an error toast', () => {
+    it('costs 30 banked pieces in loop 1, 15 more per loop; too few is an error toast', () => {
       const a = pile(29);
       expect(a.pile.promptText()).toBe('누더기 골렘 제작');
-      expect(a.pile.promptSub()).toBe('30조각 · 조력자 (이번 런 동안 함께 싸움)');
+      expect(a.pile.promptSub()).toBe('30조각 (맡긴 29) · 조력자 (이번 런 동안 함께 싸움)');
       a.pile.interact();
       expect(a.sounds).toContain('error');
       expect(a.events.find((e) => e.type === 'toast')?.text).toBe('시체 조각이 부족하다');
       expect(a.run.golem).toBeNull();
-      expect(a.run.pieces).toBe(29);
+      expect(a.game.save.pieces).toBe(29);
       expect(pile(0, 3).pile.promptSub()).toContain('60조각');
       const b = pile(59, 3);
       b.pile.interact();
       expect(b.run.golem).toBeNull();
     });
-    it('buying pays the pieces, stores the golem in the run and raises it from the pile', () => {
+    it('buying pays from the bank (saved at once), not from the carried pieces; the golem is raised from the pile', () => {
       const a = pile(40);
       a.pile.interact();
-      expect(a.run.pieces).toBe(10);
+      expect(a.game.save.pieces).toBe(10);
+      expect(a.run.pieces).toBe(500);
+      expect(a.persisted).toEqual([10]);
       expect(a.run.golem).toEqual({ hp: GOLEM.hp, maxHp: GOLEM.hp });
       expect(a.events.find((e) => e.type === 'toast')?.text).toBe('누더기 골렘이 일어섰다');
       expect(a.pile.canInteract()).toBe(false);
@@ -743,7 +596,7 @@ describe('쉼터: Selma, the 시체 상점 and the golem pile', () => {
       expect(golems).toHaveLength(1);
       expect(Math.abs(golems[0].x - 300)).toBeLessThan(80);
       a.pile.interact();
-      expect(a.run.pieces).toBe(10);
+      expect(a.game.save.pieces).toBe(10);
     });
     it('a golem that already follows her leaves nothing to buy', () => {
       const t = setup();
@@ -1147,7 +1000,7 @@ describe('누더기 골렘', () => {
 
 // ---------------------------------------------------------------------------------------------------------------------
 describe('run flow: the Game owns the save, the run and the scene changes', () => {
-  /** a Game without its devices: only what startRun / playerDied / victory / loopClear touch */
+  /** a Game without its devices: only what startRun / playerDied / victory touch */
   function fakeGame() {
     const game = Object.create(Game.prototype) as Game & { made: (() => unknown)[]; persisted: number };
     const g = game as unknown as Record<string, unknown>;
@@ -1162,110 +1015,50 @@ describe('run flow: the Game owns the save, the run and the scene changes', () =
   }
   const lastScene = (game: ReturnType<typeof fakeGame>) => game.made[game.made.length - 1]();
 
-  it('a new run carries nothing: pieces 0, no golem, the save\'s loop; the loop\'s run counter goes up', () => {
+  it('a new run carries nothing: pieces 0, no golem, the save\'s loop', () => {
     const game = fakeGame();
     game.save.loop = 3;
+    game.save.pieces = 22;
     game.startRun(11);
     expect(game.run!.pieces).toBe(0);
     expect(game.run!.golem).toBeNull();
     expect(game.run!.loop).toBe(3);
-    expect([game.save.runs, game.save.loopRuns]).toEqual([1, 1]);
+    expect([game.save.runs, game.save.pieces]).toEqual([1, 22]);
     game.startRun(12);
-    expect([game.save.runs, game.save.loopRuns]).toEqual([2, 2]);
+    expect(game.save.runs).toBe(2);
   });
 
-  it('dying loses the carried pieces: the body stays, nothing reaches the save, the next run starts empty', () => {
+  it('dying loses the carried pieces: the bank stays, nothing reaches the save, the next run starts empty', () => {
     const game = fakeGame();
-    game.save.body = 41;
+    game.save.pieces = 41;
     game.startRun(1);
     game.run!.pieces = 17;
     game.run!.kills = 9;
     game.playerDied();
-    expect(game.save.body).toBe(41);
+    expect(game.save.pieces).toBe(41);
     expect(game.save.totalKills).toBe(9);
-    expect(JSON.stringify(game.save)).not.toContain('"pieces"');
     expect(lastScene(game)).toBeInstanceOf(DeathScene);
     game.startRun(2);
     expect(game.run!.pieces).toBe(0);
-    expect(game.save.body).toBe(41);
+    expect(game.save.pieces).toBe(41);
   });
 
-  it('winning sews the carried pieces on the spot and counts the win once', () => {
+  it('winning banks the carried pieces, counts the win once, goes on to the next loop and keeps a bell shard', () => {
     const game = fakeGame();
-    game.save.body = 30;
+    game.save.pieces = 30;
     game.startRun(1);
     game.run!.pieces = 25;
     game.run!.kills = 40;
     game.victory();
-    expect(game.save.body).toBe(55);
+    expect(game.save.pieces).toBe(55);
     expect(game.run!.pieces).toBe(0);
-    expect(game.run!.piecesSewn).toBe(25);
-    expect([game.save.wins, game.save.totalKills, game.save.loop]).toEqual([1, 40, 1]);
+    expect([game.save.wins, game.save.totalKills, game.save.loop, game.save.shards]).toEqual([1, 40, 2, [1]]);
+    expect(game.persisted).toBeGreaterThan(0);
     expect(lastScene(game)).toBeInstanceOf(VictoryScene);
-  });
-
-  it('a won run that completes the body: the loop is cleared, the victory scene hands over to the loop-clear scene', () => {
-    const game = fakeGame();
-    game.save.body = 90;
-    game.startRun(1);
-    game.run!.pieces = 25;
-    game.run!.kills = 40;
+    // the next run is a loop-2 run, and winning that one tags its shard with loop 2
+    game.startRun(2);
+    expect(game.run!.loop).toBe(2);
     game.victory();
-    expect([game.save.loop, game.save.body, game.save.loopRuns]).toEqual([2, 0, 0]);
-    expect(game.save.wins).toBe(1);
-    const scene = lastScene(game) as VictoryScene;
-    expect(scene).toBeInstanceOf(VictoryScene);
-    game.made.length = 0;
-    (scene as unknown as { t: number; tap(): void; skipped: boolean }).t = 5;
-    (scene as unknown as { skipped: boolean }).skipped = true;
-    (scene as unknown as { tap(): void }).tap();
-    expect(lastScene(game)).toBeInstanceOf(LoopClearScene);
-    // a won run's kills were counted by victory(), not again by the loop clear
-    expect(game.save.totalKills).toBe(40);
-  });
-
-  it('giving up (or dying) in the slow motion after Selma completed the body still ends with the loop-clear scene', () => {
-    const game = fakeGame();
-    game.startRun(1);
-    game.save.loopRuns = 3;
-    game.save.body = 99;
-    game.run!.pieces = 5;
-    game.run!.kills = 12;
-    const sewn = sewPieces(game.run!, game.save);
-    expect(sewn.cleared).toEqual({ loop: 1, runs: 3 });
-    game.run!.clearedLoop = sewn.cleared; // what Selma does when she sews the last piece
-    expect(game.save.loop).toBe(2); // the save has moved on already
-    // the pause menu's "give up" inside the slow motion: playerDied()
-    game.playerDied();
-    expect(lastScene(game)).toBeInstanceOf(LoopClearScene);
-    expect(game.save.totalKills).toBe(12);
-    // the world then reaches the end of the slow motion as well: still one loop-clear, kills counted once
-    const scenes = game.made.length;
-    game.loopClear(sewn.cleared!);
-    game.playerDied();
-    expect(game.made.length).toBe(scenes);
-    expect(game.save.totalKills).toBe(12);
-    // an ordinary death is still a death
-    const g2 = fakeGame();
-    g2.startRun(2);
-    g2.run!.kills = 4;
-    g2.playerDied();
-    expect(lastScene(g2)).toBeInstanceOf(DeathScene);
-    expect(g2.save.totalKills).toBe(4);
-  });
-
-  it('Selma\'s loop clear counts the run\'s kills once and shows the cleared loop', () => {
-    const game = fakeGame();
-    game.startRun(1);
-    game.run!.kills = 12;
-    game.save.loopRuns = 4;
-    game.save.body = 99;
-    game.run!.pieces = 1;
-    const sewn = sewPieces(game.run!, game.save);
-    expect(sewn.cleared).toEqual({ loop: 1, runs: 4 });
-    game.loopClear(sewn.cleared!);
-    expect(game.save.totalKills).toBe(12);
-    expect(lastScene(game)).toBeInstanceOf(LoopClearScene);
-    expect(game.save.loop).toBe(2);
+    expect([game.save.wins, game.save.loop, game.save.shards]).toEqual([2, 3, [1, 2]]);
   });
 });

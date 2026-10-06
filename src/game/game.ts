@@ -14,8 +14,7 @@ import { LevelScene } from './scenes/levelScene';
 import { TitleScene } from './scenes/titleScene';
 import { DeathScene } from './scenes/deathScene';
 import { VictoryScene } from './scenes/victoryScene';
-import { LoopClearScene } from './scenes/loopClearScene';
-import { sewPieces, type LoopInfo } from './meta/body';
+import { winRun } from './meta/bank';
 import { applyRunStart } from './meta/progression';
 
 export interface Scene {
@@ -51,8 +50,6 @@ export class Game {
   private fadeTarget = 0;
   private fadeSpeed = 3;
   private pendingScene: (() => Scene) | null = null;
-  /** the run whose loop-clear scene has been started (it is started once) */
-  private clearingRun: RunState | null = null;
   private acc = 0;
   private last = 0;
   /** measured frames per second (debug/tests) */
@@ -128,7 +125,6 @@ export class Game {
     const run = new RunState(s);
     applyRunStart(run, this.save);
     this.save.runs++;
-    this.save.loopRuns++;
     this.persist();
     this.run = run;
     if (DEBUG.level) {
@@ -151,41 +147,21 @@ export class Game {
 
   playerDied(): void {
     const run = this.run!;
-    // the body was made whole a moment ago (Selma's slow motion): the save is already in the next loop, so this run ends
-    // with the loop-clear scene, not the death screen
-    if (run.clearedLoop) {
-      this.loopClear(run.clearedLoop);
-      return;
-    }
     this.save.totalKills += run.kills;
     this.persist();
     this.goto(() => new DeathScene(this, run));
   }
 
+  /** The Iron Matron fell: the run is won, the carried pieces are banked, the loop goes up and a bell shard is kept (docs/CONTENT4.md §0). */
   victory(): void {
     const run = this.run!;
     run.bossDefeated = true;
     this.save.wins++;
     this.save.totalKills += run.kills;
     if (this.save.bestTime === null || run.time < this.save.bestTime) this.save.bestTime = run.time;
-    // the pieces she still carries are sewn into the body on the spot (a body made whole clears the loop)
-    const sew = sewPieces(run, this.save);
+    const win = winRun(run, this.save);
     this.persist();
-    this.goto(() => new VictoryScene(this, run, sew));
-  }
-
-  /**
-   * The body is whole: the run ends with the loop-clear scene (the next loop has already begun in the save, see
-   * `completeLoop`). Selma calls it after she sewed the last piece; the victory scene hands over to it after a won run.
-   */
-  loopClear(info: LoopInfo): void {
-    const run = this.run!;
-    if (this.clearingRun === run) return; // already on its way (the pause menu's give-up during the slow motion)
-    this.clearingRun = run;
-    // a won run was counted by victory() already
-    if (!run.bossDefeated) this.save.totalKills += run.kills;
-    this.persist();
-    this.goto(() => new LoopClearScene(this, run, info));
+    this.goto(() => new VictoryScene(this, run, win));
   }
 
   start(): void {

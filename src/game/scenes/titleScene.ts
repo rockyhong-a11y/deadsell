@@ -5,7 +5,6 @@ import { CodexScreen } from '../ui/codex';
 import type { NavKey, ScrollKey } from '../../engine/gamepad';
 import { Embers, drawBiomeBg, gradientBg, vignette } from '../ui/backdrop';
 import { unlockedCount } from '../meta/progression';
-import { CORPSE } from '../rules';
 
 const NAV_KEYS: Record<string, 'left' | 'right' | 'up' | 'down' | 'confirm'> = {
   ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyA: 'left', KeyD: 'right', KeyW: 'up', KeyS: 'down',
@@ -148,39 +147,12 @@ export class TitleScene implements Scene {
     if (this.t > 0.3 && (i.pressed('confirm') || i.pressed('attack1') || i.pressed('jump'))) this.activate();
   }
 
-  /**
-   * `{loop}회차 · 몸 {body}/100` with a small body meter: the heroine's idle frame as a dark silhouette, the sewn share filled
-   * in bone from the feet up, a thread-red rim around it (docs/CONTENT3.md §2). Between the start prompt and the stats line.
-   */
-  private drawBody(c: CanvasRenderingContext2D, lx: number, H: number): void {
+  /** `{loop}회차` between the start prompt and the stats line (docs/CONTENT4.md §0) */
+  private drawLoop(c: CanvasRenderingContext2D, lx: number, H: number): void {
     const save = this.game.save;
-    const label = `${save.loop}회차 · 몸 ${save.body}/${CORPSE.body}`;
-    const sheet = this.game.assets.sheet('heroine');
-    const k = 0.62;
-    const mw = 26;
-    const total = mw + 10 + textWidth(c, label, SZ.m, true);
-    const x0 = Math.round(Math.max(total / 2 + 8, lx) - total / 2);
-    const feet = H - 40;
-    if (!sheet.placeholder) {
-      const a = sheet.anim('idle');
-      const sy = a.row * sheet.frameH;
-      const mx = x0 + mw / 2;
-      const dx = mx - sheet.ax * k;
-      const dy = feet - sheet.ay * k;
-      const draw = (img: CanvasImageSource, ox = 0, oy = 0) => c.drawImage(img, 0, 0, sheet.frameW, sheet.frameH, dx + ox, dy + oy, sheet.frameW * k, sheet.frameH * k);
-      c.save();
-      c.imageSmoothingEnabled = false;
-      for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) draw(sheet.silhouette('#c8324a', 0, sy), ox, oy);
-      draw(sheet.silhouette('#1b1626', 0, sy));
-      // the share of the body that is sewn, from the feet up (the figure is about 58 px tall in its frame)
-      const hh = 58 * k * (save.body / CORPSE.body);
-      c.beginPath();
-      c.rect(dx - 2, feet + 1 - hh, sheet.frameW * k + 4, hh + 2);
-      c.clip();
-      draw(sheet.silhouette('#e8d7c3', 0, sy));
-      c.restore();
-    }
-    text(c, label, x0 + mw + 10, feet - 17, { size: SZ.m, bold: true, color: save.body > 0 ? '#e8d7c3' : COL.dim });
+    const label = `${save.loop}회차`;
+    const x = Math.max(textWidth(c, label, SZ.m, true) / 2 + 8, lx);
+    text(c, label, x, H - 40, { size: SZ.m, bold: true, align: 'center', color: save.loop > 1 ? COL.bone : COL.dim });
   }
 
   render(): void {
@@ -239,7 +211,7 @@ export class TitleScene implements Scene {
     c.fillStyle = 'rgba(159,232,255,0.55)';
     c.fillRect(Math.round(lx - 110), ly + 30, 220, 1);
     text(c, '재의 감옥에서 깨어난 죄수, 신더', lx, ly + 48, { size: SZ.m, align: 'center', color: '#b9cbe6' });
-    text(c, '그들은 나를 백 조각으로 나눠 팔았다.', lx, ly + 70, { size: SZ.m, align: 'center', color: '#e8d7c3', alpha: 0.9 });
+    text(c, '그들은 죽은 자를 팔았다.', lx, ly + 70, { size: SZ.m, align: 'center', color: '#e8d7c3', alpha: 0.9 });
     const padMode = g.save.settings.controlMode === 'gamepad';
     // 게임패드 mode hides the touch hint; otherwise the hint follows the last device used
     const dev = padMode && g.input.device === 'touch' ? 'gamepad' : g.input.device;
@@ -262,7 +234,7 @@ export class TitleScene implements Scene {
     const statsLine = parts.join('  ·  ');
     // (on a narrow view the line is wider than the space left of the key art: keep it on screen)
     text(c, statsLine, Math.max(lx, textWidth(c, statsLine, SZ.s) / 2 + 8), H - 18, { align: 'center', color: COL.dim });
-    this.drawBody(c, lx, H);
+    this.drawLoop(c, lx, H);
     c.globalAlpha = 1;
     g.taps.add({ id: 'start', rect: { x: 0, y: 0, w: W, h: H }, mode: 'up', onTap: () => this.start() });
     // 설정 button (top right, 40 px tall touch target); added after 'start' so it wins the hit test

@@ -7,7 +7,7 @@ import { Prop, drawSoftGlow } from './common';
 const ASSEMBLE = 0.9;
 
 /**
- * The rag pile of a 쉼터 where Selma stitches the golem (docs/CONTENT3.md §3): pay carried pieces, the pile rises into a
+ * The rag pile of a 쉼터 where Selma stitches the golem (docs/CONTENT3.md §3): pay banked pieces, the pile rises into a
  * 누더기 골렘 that fights beside the heroine for the rest of the run. One golem at a time: while it lives (or when one
  * already follows her into the level) the pile is gone and there is nothing to buy.
  */
@@ -35,13 +35,18 @@ export class GolemPile extends Prop implements Interactable {
     return golemCost(this.world.run.loop);
   }
 
+  /** the banked pieces pay for it (docs/CONTENT4.md §3) */
+  private get bank(): number {
+    return this.world.game.save.pieces;
+  }
+
   promptText(): string {
     return this.world.run.golem ? '골렘 수선' : '누더기 골렘 제작';
   }
 
   promptSub(): string | null {
     const g = this.world.run.golem;
-    return g ? `체력 ${Math.ceil(g.hp)}/${g.maxHp}` : `${this.cost}조각 · 조력자 (이번 런 동안 함께 싸움)`;
+    return g ? `체력 ${Math.ceil(g.hp)}/${g.maxHp}` : `${this.cost}조각 (맡긴 ${this.bank}) · 조력자 (이번 런 동안 함께 싸움)`;
   }
 
   canInteract(): boolean {
@@ -51,12 +56,13 @@ export class GolemPile extends Prop implements Interactable {
   interact(): void {
     if (!this.canInteract()) return;
     const w = this.world;
-    if (w.run.pieces < this.cost) {
+    if (this.bank < this.cost) {
       w.audio.play('error');
       w.emit({ type: 'toast', text: '시체 조각이 부족하다', color: '#ff7a7a' });
       return;
     }
-    w.run.pieces -= this.cost;
+    w.game.save.pieces -= this.cost;
+    w.game.persist();
     newGolemState(w.run);
     this.state = 'rising';
     this.riseT = 0;

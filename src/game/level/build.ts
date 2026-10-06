@@ -10,7 +10,7 @@ import { createBoss } from '../boss/matron';
 import { createMiniBoss, pickMiniBoss } from '../miniboss';
 import { rollItem } from '../items/items';
 import { loopEliteBonus } from '../rules';
-import { Alchemist, Altar, BossGate, Chest, CorpseShopItem, Deco, ExitDoor, Fountain, GolemPile, Merchant, Pedestal, RoomTracker, Seamstress, ShopItem, Torch, corpseShopStock, pickDeco, type DecoKind } from '../props';
+import { Alchemist, Altar, BossGate, Chest, Deco, ExitDoor, Fountain, GolemPile, Merchant, Pedestal, RoomTracker, Seamstress, ShopItem, Torch, pickDeco, type DecoKind } from '../props';
 
 /**
  * Build the level for a spec: procedural biome (generator.ts), passage or boss arena (special.ts).
@@ -27,7 +27,7 @@ const TORCH_COLOR: Record<string, string> = { prison: '#ffa040', ramparts: '#ffb
 /**
  * Spawn every entity described by the level's spawn list (not the player): enemies (pool weights,
  * elites later in the level), chests, altars, pedestals, the shop, NPCs, the exit door, decoration,
- * torches, the biome's mid-boss ('N' marker), Selma / the 시체 상점 / the golem pile of the 쉼터 and - in the boss arena - the
+ * torches, the biome's mid-boss ('N' marker), Selma / the stash chest / the golem pile of the 쉼터 and - in the boss arena - the
  * boss and the gate. Uses world.rng (seeded per level).
  */
 export function populateLevel(world: World, level: LevelData): void {
@@ -38,10 +38,6 @@ export function populateLevel(world: World, level: LevelData): void {
   const rooms = level.rooms;
   const shopCount = new Map<number, number>();
   const shopIds = new Map<number, Set<string>>();
-  // 시체 상점: one distinct unique item per pedestal (none left over = an empty "품절" pedestal)
-  const corpseSlots = level.spawns.filter((s) => s.type === 'corpse_shop').length;
-  const corpseStock = corpseSlots > 0 ? corpseShopStock(rng, corpseSlots) : [];
-  let corpseNext = 0;
 
   const spawnEnemy = (s: Spawn, flyer: boolean): void => {
     const room = rooms[s.roomId];
@@ -99,11 +95,6 @@ export function populateLevel(world: World, level: LevelData): void {
       case 'seamstress':
         world.spawn(new Seamstress(s.x, s.y));
         break;
-      case 'corpse_shop': {
-        const id = corpseStock[corpseNext++];
-        world.spawn(new CorpseShopItem(s.x, s.y, id ? { id, tier, affix: null } : null, run.loop));
-        break;
-      }
       case 'golem_pile':
         world.spawn(new GolemPile(s.x, s.y));
         break;

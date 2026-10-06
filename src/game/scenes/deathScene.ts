@@ -103,7 +103,7 @@ export class DeathScene implements Scene {
       text(c, '※ 쓰지 않은 셀은 사라졌습니다. 쉼터의 연금술사에게 맡기세요.', cx, hy, { align: 'center', color: COL.amber });
       hy += 16;
     }
-    if (run.pieces > 0) text(c, '※ 꿰매지 않은 시체 조각은 사라졌습니다. 쉼터의 재봉사 셀마에게 맡기세요.', cx, hy, { align: 'center', color: COL.bone });
+    if (run.pieces > 0) text(c, '※ 쉼터에 맡기지 못한 시체 조각은 사라졌습니다.', cx, hy, { align: 'center', color: COL.bone });
     c.globalAlpha = 1;
 
     if (t > 1) {

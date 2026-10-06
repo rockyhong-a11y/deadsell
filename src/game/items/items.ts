@@ -3,7 +3,7 @@ import type { ItemDef, ItemId, ItemInstance, AffixId } from './types';
 import { WEAPONS, type MeleeWeapon } from '../player/weapons';
 import { BONE_SPIKES, CHAIN_HOOK, CORPSE_BOMB, SKILL_BASE, SOUL_LANTERN } from '../player/skills';
 import { COLOR_HEX } from '../combat';
-import { AFFIX, AFFIX_ROLL, TIER_DMG, loopPriceMul } from '../rules';
+import { AFFIX, AFFIX_ROLL, TIER_DMG } from '../rules';
 
 /**
  * Item catalogue + rolling. OWNER: player agent.
@@ -22,7 +22,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   ice_grenade: { id: 'ice_grenade', name: '얼음 수류탄', desc: '주변 적 빙결', color: 'tactics', slot: 'skill', kind: 'skill', icon: 'ice_grenade', cooldown: 12 },
   turret: { id: 'turret', name: '석궁 포탑', desc: '자동으로 적을 사격', color: 'tactics', slot: 'skill', kind: 'skill', icon: 'turret', cooldown: 14 },
   wolf_trap: { id: 'wolf_trap', name: '늑대 덫', desc: '밟은 적을 속박', color: 'tactics', slot: 'skill', kind: 'skill', icon: 'wolf_trap', cooldown: 8 },
-  // unique items (docs/CONTENT3.md §5): the 시체 상점 only. Numbers of the signatures: player/weapons.ts, player/skills.ts
+  // unique items (docs/CONTENT3.md §5, docs/CONTENT4.md §4): crafted at Selma only. Numbers of the signatures: player/weapons.ts, player/skills.ts
   bone_cleaver: { id: 'bone_cleaver', name: '뼈 도살검', desc: '적중 출혈, 출혈 적 치명타', color: 'brutality', slot: 'weapon', kind: 'melee', icon: 'bone_cleaver', unique: true },
   reaper_scythe: { id: 'reaper_scythe', name: '사신의 낫', desc: '처치할 때마다 체력 회복', color: 'brutality', slot: 'weapon', kind: 'melee', icon: 'reaper_scythe', unique: true },
   stitch_needle: { id: 'stitch_needle', name: '재봉 바늘', desc: '구르기 직후 치명타', color: 'tactics', slot: 'weapon', kind: 'melee', icon: 'stitch_needle', unique: true },
@@ -138,15 +138,4 @@ export function itemLines(inst: ItemInstance): string[] {
 export function itemPrice(inst: ItemInstance): number {
   const base = ITEMS[inst.id].slot === 'skill' ? 100 : 80;
   return base + 60 * (inst.tier - 1) + (inst.affix ? 40 : 0);
-}
-
-/** 시체 상점 base price (pieces, loop 1) of each unique item (docs/CONTENT3.md §5). */
-export const UNIQUE_PRICE: Partial<Record<ItemId, number>> = {
-  bone_cleaver: 22, reaper_scythe: 26, stitch_needle: 22, widow_fangs: 24, coffin_lid: 20, marrow_bow: 24,
-  corpse_bomb: 18, bone_spikes: 16, soul_lantern: 20, chain_hook: 16,
-};
-
-/** What Selma asks for a unique item in the given loop: its base price times the loop multiplier, rounded. */
-export function uniquePrice(id: ItemId, loop: number): number {
-  return Math.round((UNIQUE_PRICE[id] ?? 20) * loopPriceMul(loop));
 }

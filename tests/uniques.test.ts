@@ -4,15 +4,13 @@ import { Player } from '../src/game/player/player';
 import { Actor } from '../src/game/entity';
 import type { DamageInfo } from '../src/game/combat';
 import { T, type TileMap } from '../src/game/tilemap';
-import { LEVEL_SEQUENCE } from '../src/game/run';
 import { defaultSave, loadSave } from '../src/game/meta/save';
 import { unlockedCount } from '../src/game/meta/progression';
 import { AFFIX, CRIT_MULT } from '../src/game/rules';
-import { ITEMS, UNIQUE_COLOR, UNIQUE_PRICE, affixPool, itemColor, itemLines, itemName, rollItem, signatureText, uniquePrice } from '../src/game/items/items';
+import { ITEMS, UNIQUE_COLOR, affixPool, itemColor, itemLines, itemName, rollItem, signatureText } from '../src/game/items/items';
+import { spawnItemDrop } from '../src/game/items/pickups';
 import { ITEM_IDS, STARTER_UNLOCKS, UNIQUE_IDS, type ItemId, type ItemInstance } from '../src/game/items/types';
 import { Rng } from '../src/engine/rng';
-import { CorpseShopItem, corpseShopStock } from '../src/game/props';
-import { buildLevel, populateLevel } from '../src/game/level/build';
 import { WEAPONS, type BowWeapon, type MeleeWeapon, type ShieldWeapon, type WeaponDef } from '../src/game/player/weapons';
 import { BONE_SPIKES, CHAIN_HOOK, CORPSE_BOMB, SKILLS, SKILL_BASE, SOUL_LANTERN } from '../src/game/player/skills';
 import { Arrow, BoneSpikes, ChainHook, Grenade, SoulFlames } from '../src/game/player/projectiles';
@@ -99,26 +97,24 @@ const shieldOf = (id: keyof typeof WEAPONS): ShieldWeapon => weapon(id, 'shield'
 
 // ---------------------------------------------------------------------------------------------------------------------
 describe('the catalogue of unique items (docs/CONTENT3.md §5)', () => {
-  const spec: [ItemId, string, string, string, string, number][] = [
-    ['bone_cleaver', '뼈 도살검', 'brutality', 'weapon', 'melee', 22],
-    ['reaper_scythe', '사신의 낫', 'brutality', 'weapon', 'melee', 26],
-    ['stitch_needle', '재봉 바늘', 'tactics', 'weapon', 'melee', 22],
-    ['widow_fangs', '과부의 송곳니', 'tactics', 'weapon', 'melee', 24],
-    ['coffin_lid', '관 뚜껑', 'survival', 'weapon', 'shield', 20],
-    ['marrow_bow', '골수 활', 'tactics', 'weapon', 'bow', 24],
-    ['corpse_bomb', '시체 폭탄', 'brutality', 'skill', 'skill', 18],
-    ['bone_spikes', '뼈 가시', 'tactics', 'skill', 'skill', 16],
-    ['soul_lantern', '영혼 등불', 'survival', 'skill', 'skill', 20],
-    ['chain_hook', '사슬 갈고리', 'tactics', 'skill', 'skill', 16],
+  const spec: [ItemId, string, string, string, string][] = [
+    ['bone_cleaver', '뼈 도살검', 'brutality', 'weapon', 'melee'],
+    ['reaper_scythe', '사신의 낫', 'brutality', 'weapon', 'melee'],
+    ['stitch_needle', '재봉 바늘', 'tactics', 'weapon', 'melee'],
+    ['widow_fangs', '과부의 송곳니', 'tactics', 'weapon', 'melee'],
+    ['coffin_lid', '관 뚜껑', 'survival', 'weapon', 'shield'],
+    ['marrow_bow', '골수 활', 'tactics', 'weapon', 'bow'],
+    ['corpse_bomb', '시체 폭탄', 'brutality', 'skill', 'skill'],
+    ['bone_spikes', '뼈 가시', 'tactics', 'skill', 'skill'],
+    ['soul_lantern', '영혼 등불', 'survival', 'skill', 'skill'],
+    ['chain_hook', '사슬 갈고리', 'tactics', 'skill', 'skill'],
   ];
 
-  it('UNIQUE_IDS are the ten ids of the spec, flagged `unique`, with the spec name / colour / slot / price', () => {
+  it('the ten first UNIQUE_IDS are the ids of CONTENT3, flagged `unique`, with the spec name / colour / slot', () => {
     expect([...UNIQUE_IDS].sort()).toEqual(spec.map((s) => s[0]).sort());
-    for (const [id, name, color, slot, kind, price] of spec) {
+    for (const [id, name, color, slot, kind] of spec) {
       const d = ITEMS[id];
       expect([d.name, d.color, d.slot, d.kind, d.unique, d.icon]).toEqual([name, color, slot, kind, true, id]);
-      expect(UNIQUE_PRICE[id], id).toBe(price);
-      expect(uniquePrice(id, 1), id).toBe(price);
       expect(ITEM_IDS).toContain(id);
       expect([...d.desc].length, `${id} desc`).toBeLessThanOrEqual(16);
     }
@@ -239,95 +235,30 @@ describe('unique items stay out of every random pool', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-describe('the 시체 상점 stocks three distinct uniques', () => {
-  it('corpseShopStock reads UNIQUE_IDS: 3 distinct uniques for every seed, every unique turns up', () => {
-    const seen = new Set<string>();
-    for (let seed = 1; seed <= 60; seed++) {
-      const a = corpseShopStock(new Rng(seed), 3);
-      expect(a).toHaveLength(3);
-      expect(new Set(a).size).toBe(3);
-      for (const id of a) {
-        expect(UNIQUE_IDS).toContain(id);
-        seen.add(id);
-      }
-    }
-    expect(seen.size).toBe(UNIQUE_IDS.length);
-  });
-
-  it('populateLevel puts three pedestals with distinct uniques (tier of the run, no affix) into the 쉼터', () => {
-    for (const seed of [1, 7, 13]) {
-      const t = setup();
-      t.run.levelIndex = 3; // the second 쉼터: item tier 2
-      t.world.entities.length = 0;
-      populateLevel(t.world, buildLevel(LEVEL_SEQUENCE.find((l) => l.kind === 'passage')!, seed));
-      steps(t.world, 1);
-      const peds = t.world.entities.filter((e): e is CorpseShopItem => e instanceof CorpseShopItem);
-      expect(peds).toHaveLength(3);
-      expect(new Set(peds.map((p) => p.item!.id)).size).toBe(3);
-      for (const p of peds) {
-        expect(UNIQUE_IDS).toContain(p.item!.id);
-        expect([p.item!.tier, p.item!.affix, p.sold]).toEqual([2, null, false]);
-        expect(p.price).toBe(uniquePrice(p.item!.id, 1));
-        expect(p.promptSub()).toContain(ITEMS[p.item!.id].desc);
-      }
-    }
-  });
-});
-
-// ---------------------------------------------------------------------------------------------------------------------
-describe('buying a unique at the 시체 상점 leaves a usable item', () => {
-  /** a pedestal with `id` in front of the heroine, and `pieces` carried; `toasts` records the toast events */
-  function shopFor(id: ItemId, pieces: number, loop = 1) {
+describe('a unique item on the floor is a usable item', () => {
+  /** an item drop with `inst` in front of the heroine */
+  function dropFor(inst: ItemInstance) {
     const t = setup();
-    t.run.loop = loop;
-    const ped = new CorpseShopItem(t.p.x + 10, FLOOR, { id, tier: 1, affix: null }, loop);
-    t.world.spawn(ped);
-    steps(t.world, 1);
-    t.run.pieces = pieces;
-    const toasts: string[] = [];
-    t.world.on((e) => { if (e.type === 'toast') toasts.push(e.text); });
-    return { ...t, ped, toasts };
+    spawnItemDrop(t.world, t.p.x + 10, FLOOR, inst);
+    steps(t.world, 40);
+    return { ...t, drop: dropsOf(t)[0] };
   }
   type Drop = { inst: ItemInstance; x: number; canInteract(): boolean; interact(): void };
   const dropsOf = (t: Ctx): Drop[] => t.world.entities.filter((e): e is typeof e & Drop => !e.dead && (e as unknown as Drop).inst !== undefined);
 
-  it('too few pieces: error sound, toast, nothing spent, nothing dropped, the pedestal still sells', () => {
-    const t = shopFor('bone_cleaver', UNIQUE_PRICE.bone_cleaver! - 1);
-    t.ped.interact();
-    expect(t.sounds).toContain('error');
-    expect(t.toasts).toEqual(['시체 조각이 부족하다']);
-    expect([t.run.pieces, t.ped.sold, t.ped.canInteract(), dropsOf(t).length]).toEqual([UNIQUE_PRICE.bone_cleaver! - 1, false, true, 0]);
-    expect(t.ped.promptText()).toBe(`구매 · ${ITEMS.bone_cleaver.name}`);
-  });
-
-  it('paying drops the item at the pedestal; it can be picked up into the matching slot with tier and no affix', () => {
-    const t = shopFor('chain_hook', 30);
-    t.ped.interact();
-    expect(t.run.pieces).toBe(30 - UNIQUE_PRICE.chain_hook!);
-    expect([t.ped.sold, t.ped.canInteract()]).toEqual([true, false]);
-    expect(t.toasts).toEqual([`${ITEMS.chain_hook.name} 구매`]);
-    // sold out: a second try neither charges nor drops
-    t.ped.interact();
-    expect(t.run.pieces).toBe(30 - UNIQUE_PRICE.chain_hook!);
-    steps(t.world, 40);
-    const drops = dropsOf(t);
-    expect(drops).toHaveLength(1);
-    expect(drops[0].inst).toEqual({ id: 'chain_hook', tier: 1, affix: null });
-    expect(drops[0].canInteract()).toBe(true);
-    expect(Math.abs(drops[0].x - t.ped.x)).toBeLessThan(20);
-    // the prompt-bubble target is the item now, not the empty pedestal
-    expect(t.world.nearestInteractable(t.p.x, t.p.y - 16)).toBe(drops[0]);
-    drops[0].interact();
+  it('it is picked up into the matching slot with its tier and no affix', () => {
+    const t = dropFor({ id: 'chain_hook', tier: 1, affix: null });
+    expect(t.drop.canInteract()).toBe(true);
+    expect(t.world.nearestInteractable(t.p.x, t.p.y - 16)).toBe(t.drop);
+    t.drop.interact();
     expect(t.run.skills).toEqual([{ id: 'chain_hook', tier: 1, affix: null }, null]);
     expect(dropsOf(t)).toHaveLength(0);
   });
 
-  it('the loop multiplier is the price; a full slot asks which to replace and drops the old item', () => {
-    const t = shopFor('marrow_bow', 100, 3); // loop 3: x2
-    expect(t.ped.price).toBe(UNIQUE_PRICE.marrow_bow! * 2);
+  it('a full slot asks which to replace and drops the old item', () => {
+    const t = setup();
     t.run.weapons = [item('rusty_sword'), item('spear')];
-    t.ped.interact();
-    expect(t.run.pieces).toBe(100 - UNIQUE_PRICE.marrow_bow! * 2);
+    spawnItemDrop(t.world, t.p.x + 10, FLOOR, item('marrow_bow'));
     steps(t.world, 40);
     dropsOf(t)[0].interact(); // the test UI picks the first option: the main hand
     expect(t.run.weapons.map((w) => w?.id)).toEqual(['marrow_bow', 'spear']);
@@ -335,16 +266,13 @@ describe('buying a unique at the 시체 상점 leaves a usable item', () => {
     expect(dropsOf(t).map((d) => d.inst.id)).toEqual(['rusty_sword']);
   });
 
-  it('every unique: buy, pick up, use once (a weapon swings / draws / blocks, a skill starts its cooldown)', () => {
+  it('every unique: pick up, use once (a weapon swings / draws / blocks, a skill starts its cooldown)', () => {
     for (const id of UNIQUE_IDS) {
-      const t = shopFor(id, 99);
+      const t = dropFor({ id, tier: 1, affix: null });
       const e = new Dummy(t.p.x + 40, FLOOR);
       t.world.spawn(e);
-      t.ped.interact();
-      steps(t.world, 40);
-      const [drop] = dropsOf(t);
-      expect(drop.inst.id, id).toBe(id);
-      drop.interact();
+      expect(t.drop.inst.id, id).toBe(id);
+      t.drop.interact();
       const slot = ITEMS[id].slot === 'skill' ? t.run.skills : t.run.weapons;
       expect(slot.map((s) => s?.id), id).toContain(id);
       const states = new Set<string>();
@@ -890,15 +818,13 @@ describe('the codex pages of the unique items', () => {
   const skills = new Map(codexEntries('skill').map((e) => [e.id, e]));
   const uniques = [...UNIQUE_IDS].map((id) => (weapons.get(id) ?? skills.get(id))!);
 
-  it('every unique is in the weapon / skill tab with the 유니크 tag, the bone-gold name, a price row and a signature row', () => {
+  it('every unique is in the weapon / skill tab with the 유니크 tag, the bone-gold name and a signature row', () => {
     expect(uniques.every(Boolean)).toBe(true);
     for (const e of uniques) {
       expect(e.tag, e.id).toMatch(/^유니크/);
       expect(e.nameColor, e.id).toBe(UNIQUE_COLOR);
       expect(e.group, e.id).toBe('유니크');
       expect(e.rows[0], e.id).toMatchObject({ label: '고유 효과', text: signatureText(e.id as ItemId) });
-      const price = e.rows.find((r) => r.label === '가격')!;
-      expect(price.text, e.id).toBe(`시체 상점 · ${uniquePrice(e.id as ItemId, 1)}조각 (회차 배율)`);
       expect(e.rows.find((r) => r.label === '접사')!.text, e.id).toContain('붙지 않음');
       expect(e.icon, e.id).toEqual({ sheet: 'icons', anim: e.id });
     }

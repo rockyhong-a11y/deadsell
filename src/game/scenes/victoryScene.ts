@@ -1,8 +1,7 @@
 import type { Game, Scene } from '../game';
 import type { RunState } from '../run';
 import { COL, SZ, formatTime, pulse, text, wrap } from '../ui/draw';
-import type { SewResult } from '../meta/body';
-import { CORPSE } from '../rules';
+import type { WinInfo } from '../meta/bank';
 import { Embers, gradientBg, statRow, vignette } from '../ui/backdrop';
 import type { NavKey } from '../../engine/gamepad';
 
@@ -15,7 +14,7 @@ export const EPILOGUE = [
 const TYPE_SPEED = 28; // characters per second
 const TYPE_START = 1.0;
 
-/** Victory: "자유", typewriter epilogue, run stats, best time and the pieces sewn; tap → title (or the loop-clear scene). */
+/** Victory: "자유", typewriter epilogue, run stats, best time, the pieces banked, the bell shard and the next loop; tap → title. */
 export class VictoryScene implements Scene {
   private t = 0;
   private leaving = false;
@@ -25,8 +24,8 @@ export class VictoryScene implements Scene {
   private embers = new Embers(60, ['#ffd27a', '#ffb347', '#fff2c8'], 11);
   private total = EPILOGUE.join('').length;
 
-  /** `sew` = what the automatic sewing of the carried pieces did (a body made whole hands over to the loop-clear scene) */
-  constructor(private game: Game, private run: RunState, private sew: SewResult = { plan: { n: 0, completes: false, surplus: 0 }, cleared: null }) {}
+  /** `win` = what winning did to the save: the pieces banked, the loop that was won and the one that starts next (docs/CONTENT4.md §0) */
+  constructor(private game: Game, private run: RunState, private win: WinInfo = { banked: 0, loop: run.loop, nextLoop: run.loop + 1 }) {}
 
   enter(): void {
     this.game.audio.music('victory');
@@ -45,8 +44,7 @@ export class VictoryScene implements Scene {
     }
     this.leaving = true;
     this.game.audio.play('ui_tap');
-    if (this.sew.cleared) this.game.loopClear(this.sew.cleared);
-    else this.game.showTitle();
+    this.game.showTitle();
   }
 
   /** gamepad: A / B = continue (the first press finishes the epilogue) */
@@ -122,12 +120,13 @@ export class VictoryScene implements Scene {
       { label: '최고 기록', value: save.bestTime === null ? '--:--' : formatTime(save.bestTime), color: COL.cyan },
       { label: '승리 횟수', value: String(save.wins) },
     ], cx, Math.round(H * 0.72), Math.min(120, (W - 40) / 4), sa);
-    // 시체 조각: what was sewn this run, and how far the body is
-    const body = this.sew.cleared ? CORPSE.body : g.save.body;
-    text(c, `꿰맨 시체 조각 +${run.piecesSewn}  ·  몸 ${body}/${CORPSE.body}`, cx, Math.round(H * 0.72) + 52, { align: 'center', color: COL.bone, alpha: sa });
+    // 시체 조각 banked, the bell shard of this loop, and the loop that starts next
+    const rowY = Math.round(H * 0.72) + 46;
+    text(c, `맡긴 시체 조각 +${this.win.banked}  ·  종탑의 파편 +1 (${this.win.loop}회차)`, cx, rowY, { align: 'center', color: COL.bone, alpha: sa });
+    text(c, `다음 회차: ${this.win.nextLoop}`, cx, rowY + 16, { align: 'center', bold: true, color: COL.gold, alpha: sa });
     if (record && sa > 0.5) text(c, '신기록!', cx - Math.min(120, (W - 40) / 4) * 1.5, Math.round(H * 0.72) - 16, { color: COL.gold, bold: true, align: 'center', alpha: 0.5 + 0.5 * pulse(t, 1.5) });
     if (t > 0.8) {
-      text(c, done ? (this.sew.cleared ? '화면을 터치하여 계속' : '화면을 터치하여 타이틀로') : '터치하면 건너뜁니다', cx, H - 22, { size: done ? SZ.m : SZ.s, bold: done, align: 'center', color: done ? COL.text : COL.dim, alpha: done ? 0.45 + 0.55 * pulse(t, 0.8) : 0.7 });
+      text(c, done ? '화면을 터치하여 타이틀로' : '터치하면 건너뜁니다', cx, H - 22, { size: done ? SZ.m : SZ.s, bold: done, align: 'center', color: done ? COL.text : COL.dim, alpha: done ? 0.45 + 0.55 * pulse(t, 0.8) : 0.7 });
       g.taps.add({ id: 'title', rect: { x: 0, y: 0, w: W, h: H }, mode: 'up', onTap: () => this.tap() });
     }
   }

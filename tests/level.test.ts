@@ -116,7 +116,6 @@ describe('passage and boss arena', () => {
     expect(t.counts.X).toBe(1);
     expect(t.counts.P).toBe(1);
     expect(t.counts.Z).toBe(1);
-    expect(t.counts.C).toBe(3);
     expect(t.counts.G).toBe(1);
     expect(t.tw).toBe(2 * CHUNK_W);
     expect(t.th).toBe(CHUNK_H);
@@ -129,7 +128,7 @@ describe('passage and boss arena', () => {
       const grid: NavGrid = { w: lvl.map.w, h: lvl.map.h, tiles: lvl.map.tiles };
       const { tx, ty } = cell(lvl, lvl.playerStart.x, lvl.playerStart.y);
       const r = reach(grid, [ty * grid.w + tx]);
-      for (const s of lvl.spawns.filter((s) => ['alchemist', 'fountain', 'exit', 'seamstress', 'corpse_shop', 'golem_pile'].includes(s.type))) {
+      for (const s of lvl.spawns.filter((s) => ['alchemist', 'fountain', 'exit', 'seamstress', 'golem_pile'].includes(s.type))) {
         expect(r.visited[s.ty * grid.w + s.tx], `${s.type} reachable in passage`).toBe(1);
       }
       expect(lvl.spawns.some((s) => s.type === 'enemy' || s.type === 'flyer')).toBe(false);

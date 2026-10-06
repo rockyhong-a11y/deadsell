@@ -1,5 +1,5 @@
 import { ITEM_IDS, type AffixId, type ItemId } from '../items/types';
-import { AFFIX_NAMES, COLOR_NAMES, ITEMS, UNIQUE_COLOR, UNIQUE_TAG, affixPool, signatureText, uniquePrice } from '../items/items';
+import { AFFIX_NAMES, COLOR_NAMES, ITEMS, UNIQUE_COLOR, UNIQUE_TAG, affixPool, signatureText } from '../items/items';
 import { WEAPONS, type MeleeWeapon, type WeaponId } from '../player/weapons';
 import { BONE_SPIKES, CHAIN_HOOK, CORPSE_BOMB, SKILLS, SKILL_BASE, SOUL_LANTERN, type SkillId } from '../player/skills';
 import { GRENADE, Turret, WolfTrap } from '../player/projectiles';
@@ -12,7 +12,7 @@ import { META_UPGRADES } from '../meta/progression';
 import { SCROLL_COLORS, SCROLL_SPRITE } from '../items/pickups';
 import { COLOR_HEX } from '../combat';
 import { LEVEL_SEQUENCE, type BiomeId } from '../run';
-import { AFFIX, AFFIX_ROLL, CORPSE, CRIT_MULT, ELITE, FLASK, FOODS, GOLEM, LOOP, LOOT, SCROLL, TIER2, TIER_DMG, enemyDmgMul, enemyHpMul, golemCost } from '../rules';
+import { AFFIX, AFFIX_ROLL, CORPSE, CRAFT, CRIT_MULT, ELITE, FLASK, FOODS, GOLEM, LOOP, LOOT, SCROLL, TIER2, TIER_DMG, enemyDmgMul, enemyHpMul, golemCost } from '../rules';
 
 /**
  * 도감 (codex) data: one entry per weapon, skill, enemy, boss and item of the game, built from the game's own tables
@@ -101,8 +101,6 @@ export interface CodexEntry {
 // helpers
 
 const HEROINE = 'heroine';
-/** the colour of corpse pieces (`PIECE_COLOR` of items/pickups.ts is a UI-side constant; same value) */
-const COL_PIECE = '#e8d7c3';
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 const num = (v: number): string => String(Math.round(v * 100) / 100);
 const secs = (v: number): string => `${num(v)}초`;
@@ -131,7 +129,6 @@ function uniqueRows(id: ItemId, rows: CodexRow[]): CodexRow[] {
   return [
     { label: '고유 효과', text: signatureText(id), color: UNIQUE_COLOR },
     ...out,
-    { label: '가격', text: `시체 상점 · ${uniquePrice(id, 1)}조각 (회차 배율)`, color: COL_PIECE },
   ];
 }
 
@@ -518,15 +515,14 @@ function itemEntries(): CodexEntry[] {
   const loopStep = '회차마다';
   add({
     id: 'corpse_piece', group: '재화', name: '시체 조각', nameColor: '#e8d7c3', tag: '재화', icon: { sheet: 'icons', anim: 'corpse_piece' },
-    desc: '쓰러진 자들에게서 떨어지는 죽은 자의 조각. 쉼터의 재봉사 셀마가 신더의 몸을 꿰매는 데 쓴다. 꿰매지 않고 죽으면 사라진다.',
+    desc: '쓰러진 자들에게서 떨어지는 죽은 자의 조각. 쉼터에 들어서면 셀마에게 맡겨져 조합과 골렘 제작에 쓰인다. 맡기기 전에 죽으면 사라진다.',
     rows: [
       { label: '획득', text: `일반 적 ${P.enemy} · 정예 ${P.elite} · 중간 보스 ${P.miniboss} · 강철 여교도관 ${P.matron} (상자는 주지 않음)` },
-      { label: '꿰매기', text: `쉼터의 셀마에게 말을 걸면 들고 있는 조각을 모두 몸에 꿰맨다. 꿰맨 조각은 사라지지 않는다 (몸 ${CORPSE.body}조각이 완성)` },
-      { label: '사망', text: '꿰매지 않은 조각은 셀처럼 사라진다' },
-      { label: '승리', text: '강철 여교도관을 쓰러뜨리면 들고 있는 조각이 자동으로 꿰매진다' },
-      { label: '회차', text: `몸이 ${CORPSE.body}/${CORPSE.body}가 되면 그 회차를 클리어하고 다음 회차가 시작된다 (남은 조각은 사라짐)` },
-      { label: '', text: `${loopStep} 적 체력 +${pct(LOOP.hp)} · 피해 +${pct(LOOP.dmg)} · 정예 확률 +${Math.round(LOOP.elite * 100)}%p (${LOOP.cap}회차가 한계)` },
-      { label: '쓰임', text: `셀마의 시체 상점 (유니크 장비, 조각으로 구매 · 가격 ${loopStep} +${pct(LOOP.price)}) · 누더기 골렘 (${golemCost(1)}조각)` },
+      { label: '맡기기', text: '쉼터에 들어서면 들고 있는 조각이 모두 셀마에게 맡겨진다 (영구 보관). 강철 여교도관을 쓰러뜨려도 맡겨진다' },
+      { label: '사망', text: '맡기지 못한 조각은 셀처럼 사라진다' },
+      { label: '쓰임', text: `셀마의 조합 (유니크 제작, 등급마다 ${CRAFT.C.pieces}–${CRAFT.SSS.pieces}조각) · 누더기 골렘 (${golemCost(1)}조각)` },
+      { label: '', text: '보관함에서 장비를 분해하면 조각으로 돌아온다' },
+      { label: '회차', text: `강철 여교도관을 쓰러뜨리면 다음 회차가 시작된다 · ${loopStep} 적 체력 +${pct(LOOP.hp)} · 피해 +${pct(LOOP.dmg)} · 정예 확률 +${Math.round(LOOP.elite * 100)}%p (${LOOP.cap}회차가 한계)` },
     ],
     preview: { sheet: 'corpse', steps: [{ anim: 'piece', dur: 1.2, hold: 0 }, { anim: 'piece_big', dur: 1.2, hold: 0 }], ground: false },
   });
@@ -534,7 +530,7 @@ function itemEntries(): CodexEntry[] {
     id: 'rag_golem', group: '조력자', name: '누더기 골렘', tag: '조력자', icon: { sheet: 'icons', anim: 'golem' },
     desc: '셀마가 시체 조각으로 꿰맨 누더기 거인. 신더 곁을 따라다니며 가까운 적을 내려친다. 쉼터의 누더기 더미에서 만든다.',
     rows: [
-      { label: '제작', text: `쉼터의 누더기 더미 · 시체 조각 ${golemCost(1)}개 (${loopStep} +${LOOP.golem.perStep}, 최대 ${golemCost(LOOP.cap)}개) · 한 번에 한 마리` },
+      { label: '제작', text: `쉼터의 누더기 더미 · 맡겨 둔 시체 조각 ${golemCost(1)}개 (${loopStep} +${LOOP.golem.perStep}, 최대 ${golemCost(LOOP.cap)}개) · 한 번에 한 마리` },
       { label: '체력', text: `${GOLEM.hp} (${loopStep} +${pct(LOOP.golem.stat)}) · 적의 근접·범위 공격에 맞는다` },
       { label: '공격', text: `내려치기 피해 ${GOLEM.damage} (티어당 +${pct(TIER_DMG)}, ${loopStep} +${pct(LOOP.golem.stat)}) · 넉백 ${GOLEM.slam.knockback} · 기절 ${secs(GOLEM.slam.stun)}` },
       { label: '', text: `예비동작 ${secs(GOLEM.slam.windup)} · 재사용 ${secs(GOLEM.slam.cooldown)} · 사거리 ${GOLEM.slam.w}px` },

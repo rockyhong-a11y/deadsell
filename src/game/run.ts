@@ -1,6 +1,5 @@
 import type { ItemColor } from './combat';
 import type { ItemInstance } from './items/types';
-import type { LoopInfo } from './meta/body';
 import { SCROLL } from './rules';
 
 export type BiomeId = 'prison' | 'ramparts' | 'tower';
@@ -41,19 +40,12 @@ export class RunState {
   scrolls = 0;
   cellsSpentThisRun = 0;
   bossDefeated = false;
-  /** 회차, copied from the save when the run starts (docs/CONTENT3.md §1) */
+  /** 회차, copied from the save when the run starts (docs/CONTENT3.md §1); it goes up in the save when the Matron falls */
   loop = 1;
-  /** 시체 조각 carried (lost on death, sewn into the body at Selma's) */
+  /** 시체 조각 carried (lost on death; banked into `save.pieces` when a 쉼터 is entered or the run is won) */
   pieces = 0;
-  /** pieces sewn into the body during this run (stats) */
-  piecesSewn = 0;
   /** the rag golem fighting beside the heroine; null while there is none */
   golem: { hp: number; maxHp: number } | null = null;
-  /**
-   * Set the moment Selma sews the body whole: the save has already moved on to the next loop, so the run can only end with
-   * the loop-clear scene (even if the heroine gives up or falls in the short slow motion before it).
-   */
-  clearedLoop: LoopInfo | null = null;
 
   constructor(seed: number) {
     this.seed = seed >>> 0;

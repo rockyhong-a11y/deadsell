@@ -163,9 +163,8 @@ describe('codex entries cover the whole game', () => {
     const text = piece.rows.map((r) => r.text).join(' | ');
     expect(piece.name).toBe('시체 조각');
     expect(text).toContain(`일반 적 ${CORPSE.drop.enemy} · 정예 ${CORPSE.drop.elite} · 중간 보스 ${CORPSE.drop.miniboss} · 강철 여교도관 ${CORPSE.drop.matron}`);
-    expect(text).toContain(`${CORPSE.body}/${CORPSE.body}`);
     expect(text).toContain('셀마');
-    expect(text).toContain('시체 상점');
+    expect(text).toContain('맡겨');
     expect(text).toContain(`적 체력 +${Math.round(LOOP.hp * 100)}%`);
     expect(text).toContain(`정예 확률 +${Math.round(LOOP.elite * 100)}%p`);
     expect(piece.preview.sheet).toBe('corpse');

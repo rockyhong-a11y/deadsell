@@ -93,8 +93,9 @@ export class StashModal extends Modal {
   i = 0;
   /** a stash index waiting for the slot it should replace (both slots of its kind are taken) */
   pending: number | null = null;
-  /** the stash index whose 분해 was pressed once: pressing it again within ARM_TIME s does it */
-  private armed: { index: number; t: number } | null = null;
+  /** the stash item whose 분해 was pressed once: pressing it again within ARM_TIME s does it. Armed on the item itself, never on
+   *  its cell: whatever slides into that cell later (an equip, a swap, a deposit) is not armed. */
+  private armed: { inst: ItemInstance; t: number } | null = null;
   private msg: { text: string; color: string; t: number } | null = null;
 
   constructor(ui: LevelUI) {
@@ -134,6 +135,11 @@ export class StashModal extends Modal {
 
   // ---- actions ------------------------------------------------------------
 
+  /** is the 분해 of the stash cell `i` armed (it is the very item that was pressed) */
+  private isArmed(i: number): boolean {
+    return this.armed !== null && this.armed.inst === this.save.stash[i];
+  }
+
   private select(zone: Zone, i: number): void {
     if (this.zone !== zone || this.i !== i) this.armed = null;
     this.zone = zone;
@@ -156,6 +162,7 @@ export class StashModal extends Modal {
         this.fail('보관함이 가득 찼다');
         return;
       }
+      this.armed = null;
       depositEquipped(this.run, this.save, EQUIP_KIND[this.i], this.i % 2);
       this.persist();
       this.sfx('ui_tap');
@@ -177,6 +184,7 @@ export class StashModal extends Modal {
   private equip(stashIndex: number, slot: number): void {
     const inst = this.save.stash[stashIndex];
     if (!inst || !equipFromStash(this.run, this.save, stashIndex, slot)) return;
+    this.armed = null;
     this.persist();
     this.ui.game.audio.play('pickup_item');
     this.say(`${itemName(inst)} 장착`);
@@ -199,8 +207,8 @@ export class StashModal extends Modal {
       this.sfx('error');
       return;
     }
-    if (!this.armed || this.armed.index !== this.i) {
-      this.armed = { index: this.i, t: ARM_TIME };
+    if (!this.isArmed(this.i)) {
+      this.armed = { inst, t: ARM_TIME };
       this.sfx('ui_tap');
       return;
     }
@@ -213,6 +221,7 @@ export class StashModal extends Modal {
 
   private cancelPending(): boolean {
     if (this.pending === null) return false;
+    this.armed = null;
     this.zone = 'grid';
     this.i = this.pending;
     this.pending = null;
@@ -294,7 +303,7 @@ export class StashModal extends Modal {
     // stash grid
     text(c, `보관함  ${save.stash.length}/${STASH.capacity}`, L.grid[0].x, L.gridLabelY, { color: stashFull(save) ? COL.amber : COL.dim });
     L.grid.forEach((r, i) => {
-      this.drawCell(c, r, save.stash[i] ?? null, this.zone === 'grid' && this.i === i, null, this.pending === i, this.armed?.index === i);
+      this.drawCell(c, r, save.stash[i] ?? null, this.zone === 'grid' && this.i === i, null, this.pending === i, this.isArmed(i));
       this.hit('stash-cell' + i, r, () => this.tapCell('grid', i));
     });
 
@@ -315,7 +324,7 @@ export class StashModal extends Modal {
       });
       this.hit('stash-act', L.act, () => this.primary());
       const canSalvage = !equipZone && !!inst;
-      const armed = this.armed?.index === this.i && canSalvage;
+      const armed = canSalvage && this.isArmed(this.i);
       button(c, L.salvage, {
         label: armed ? '정말?' : '분해', sub: canSalvage ? `시체 조각 +${salvageValue(inst!)}` : undefined, color: armed ? COL.red : PIECE_COLOR, selected: armed, disabled: !canSalvage,
       });

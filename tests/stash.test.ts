@@ -519,6 +519,48 @@ describe('StashModal: keyboard / pad, touch, drawing', () => {
     expect(a.save.pieces).toBe(12);
   });
 
+  it('분해 armed on one item never carries over to the item that slides into its cell (equip / swap / deposit / cancel)', () => {
+    const a = uiSetup();
+    a.save.pieces = 4;
+    a.run.weapons = [it_('rusty_sword'), null];
+    a.save.stash = [it_('spear'), it_('war_hammer', 3, 'burn'), it_('blood_sword', 2)];
+    const m = a.open();
+    expect(m.zone).toBe('grid');
+    a.ui.key('special'); // arms the spear
+    a.ui.key('confirm'); // equips it into the free slot 1: the war hammer slides into cell 0
+    expect(a.save.stash.map((s) => s.id)).toEqual(['war_hammer', 'blood_sword']);
+    a.ui.key('special'); // a first press on the hammer: only arms it
+    expect(a.save.stash.map((s) => s.id)).toEqual(['war_hammer', 'blood_sword']);
+    expect(a.save.pieces).toBe(4);
+    a.ui.key('special'); // the second press is the real one
+    expect(a.save.stash.map((s) => s.id)).toEqual(['blood_sword']);
+    expect(a.save.pieces).toBe(4 + 1 + 2 + 1);
+    // a swap through the slot choice: armed on cell 0, replace the spear, the spear takes cell 0
+    a.save.stash = [it_('war_hammer'), it_('blood_sword', 2)];
+    a.run.weapons = [it_('rusty_sword'), it_('spear')];
+    m.zone = 'grid';
+    m.i = 0;
+    a.ui.key('special');
+    a.ui.key('confirm'); // both weapon slots are taken: pick one
+    expect(m.pending).toBe(0);
+    m.i = 1;
+    a.ui.key('confirm');
+    expect(a.save.stash.map((s) => s.id)).toEqual(['spear', 'blood_sword']);
+    a.ui.key('special');
+    expect(a.save.stash.map((s) => s.id), 'the spear was not armed').toEqual(['spear', 'blood_sword']);
+    // a deposit: the item put away does not make the next one armed
+    a.advance(3.2);
+    a.ui.key('special'); // arms the spear in cell 0
+    m.zone = 'equip';
+    m.i = 0;
+    a.ui.key('confirm'); // the rusty sword goes to the end of the stash
+    m.zone = 'grid';
+    m.i = 0;
+    expect(a.save.stash.map((s) => s.id)).toEqual(['spear', 'blood_sword', 'rusty_sword']);
+    a.ui.key('special');
+    expect(a.save.stash, 'the spear was armed before the deposit, the press after it only re-arms').toHaveLength(3);
+  });
+
   it('Esc closes the screen; the pad Y is `special`', () => {
     const a = uiSetup();
     const m = a.open();

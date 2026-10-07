@@ -9,7 +9,7 @@ import { COLOR_HEX } from '../combat';
 import { touchView } from './touch';
 import { drawVButtons, vbLayout, type VSkillView } from './vbuttons';
 import { MapView } from './mapview';
-import { COL, SZ, atLeast, gradeBadge, gradeBadgeW, gradeLetter, icon, panel, pie, pieceIcon, pulse, text, textWidth, wrap } from './draw';
+import { COL, SZ, atLeast, gradeBadge, gradeBadgeW, gradePill, icon, panel, pie, pieceIcon, pulse, text, textWidth, wrap } from './draw';
 
 /** Minimum size (virtual px) of anything tappable. */
 export const MIN_TAP = 40;
@@ -469,7 +469,7 @@ export class Hud {
       const def = ITEMS[wp.id];
       panel(c, r.x, r.y, r.w, r.h, { fill: '#07060b', alpha: i === 0 ? 0.55 : 0.4, stroke: COLOR_HEX[def.color], r: 4 });
       icon(game.assets, c, def.icon, r.x + r.w / 2, r.y + r.h / 2, 20, i === 0 ? 0.95 : 0.7);
-      if (def.grade) gradeLetter(c, def.grade, r.x + r.w, r.y + r.h - 4);
+      if (def.grade) gradePill(c, def.grade, r.x + r.w / 2, r.y + r.h); // hangs on the bottom edge: the icon stays clear
     });
   }
 
@@ -492,7 +492,7 @@ export class Hud {
       c.fill();
       c.globalAlpha = 1;
       icon(game.assets, c, def.icon, s.cx, s.cy, 24, onCd ? 0.5 : 1);
-      if (def.grade) gradeLetter(c, def.grade, s.cx + s.r - 2, s.cy + s.r - 6);
+      if (def.grade) gradePill(c, def.grade, s.cx, s.cy + s.r); // on the ring's bottom edge, inside the button's width
       if (onCd) {
         pie(c, s.cx, s.cy, s.r - 1, cd / cdMax, 'rgba(7,6,11,0.72)');
         text(c, String(Math.ceil(cd)), s.cx, s.cy + 1, { align: 'center', bold: true });

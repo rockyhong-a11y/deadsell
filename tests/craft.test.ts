@@ -12,6 +12,8 @@ import { craftUnique, materialLabel, planCraft, qualifies, recipeText, shardLabe
 import { Seamstress } from '../src/game/props';
 import { buildCodex, codexEntries } from '../src/game/ui/codexData';
 import { Hud } from '../src/game/ui/hud';
+import { SZ, textWidth } from '../src/game/ui/draw';
+import { drawVButtons, vbLayout } from '../src/game/ui/vbuttons';
 
 const FLOOR = 16 * 24;
 const mk = (id: ItemId, tier = 1, affix: ItemInstance['affix'] = null, mb = false): ItemInstance => ({ id, tier, affix, ...(mb ? { mb: true as const } : {}) });
@@ -605,7 +607,7 @@ describe('Selma keeps her prompt up while she talks after a craft (qa#3)', () =>
           expect(r, `tap region at frame ${f} (lineT ${(selma as any).lineT.toFixed(2)}, worldH ${worldH})`).toBeTruthy();
           bubble.length = 0;
           selma.draw(rec);
-          const bg = bubble.find((b) => b.h === 20); // (the bubble is 20 px high; the glow is a bigger fillRect)
+          const bg = bubble.find((b) => b.h === 20)!; // (the bubble is 20 px high; the glow is a bigger fillRect)
           expect(bg, 'the bubble background is drawn while she talks').toBeTruthy();
           // bubble bottom edge (world px, y down) vs the top of the prompt (UI px -> world px)
           const bubbleBottom = bg.by + bg.h;
@@ -617,6 +619,57 @@ describe('Selma keeps her prompt up while she talks after a craft (qa#3)', () =>
       expect((selma as any).lineT, 'the line ran out and she is quiet again').toBeLessThanOrEqual(0);
       expect(selma.promptText()).toBe('조합');
     }
+  });
+});
+
+describe('the grade in the HUD is a tiny pill, not 11 px letters over the icon (qa#5)', () => {
+  /** a 2D context that logs every fillText with the pixel size of the font it was drawn in */
+  const sizedCtx = () => {
+    const calls: { s: string; size: number }[] = [];
+    let font = '11px x';
+    const rec = new Proxy(ctxFake() as any, {
+      get(tg, key: string) {
+        if (key === 'fillText') return (s: string) => { calls.push({ s, size: parseInt(font.match(/(\d+)px/)?.[1] ?? '11', 10) }); };
+        return tg[key];
+      },
+      set(tg, key: string, v) {
+        if (key === 'font') font = v;
+        tg[key] = v;
+        return true;
+      },
+    }) as CanvasRenderingContext2D;
+    return { rec, calls, letters: () => calls.filter((c) => (GRADE_IDS as readonly string[]).includes(c.s)) };
+  };
+
+  it('weapon slots and the skill buttons of the HUD draw their grade at SZ.xs', () => {
+    const t = makeTestWorld(flatMap());
+    (t.world as any).player = { hp: 60, maxHp: 100, recoverable: 0, nearInteract: null, skillCooldown: [0, 3], skillCooldownMax: [10, 10], x: 200, y: 200, h: 40, w: 14, dying: false };
+    t.game.display = { W: 640, H: 360, scale: 1, canvas: null };
+    t.game.taps = new TapRegistry();
+    t.game.scene = null;
+    const ui = new LevelUI(t.game, t.world);
+    t.world.ui = ui;
+    t.run.weapons = [mk('grave_bell', 2), mk('selma_shears')];
+    t.run.skills = [mk('chain_prison', 2), mk('last_bell')];
+    const g = sizedCtx();
+    t.game.taps.clear();
+    ui.update(1 / 60);
+    ui.hud.draw(g.rec, 640, 360, true);
+    expect(g.letters().map((l) => l.s).sort()).toEqual(['A', 'S', 'SSS', 'SSS']);
+    for (const l of g.letters()) expect(l.size, l.s).toBe(SZ.xs);
+  });
+
+  it('the virtual skill buttons too; the pill is at most 18 x 11 px', () => {
+    const g = sizedCtx();
+    const t = makeTestWorld(flatMap());
+    const L = vbLayout(640, 360, 'medium', [true, true]);
+    const sv = (grade: 'S' | 'SSS') => ({ icon: 'chain_prison', color: '#fff', cd: 0, cdMax: 1, flash: 0, grade });
+    drawVButtons(g.rec, L, { opacity: 0.6, isDown: () => false, skills: [sv('S'), sv('SSS')], assets: t.game.assets });
+    expect(g.letters().map((l) => l.s).sort()).toEqual(['S', 'SSS']);
+    for (const l of g.letters()) expect(l.size, l.s).toBe(SZ.xs);
+    const c = ctxFake();
+    for (const gr of GRADE_IDS) expect(Math.round(textWidth(c, gr, SZ.xs, true)) + 5, gr).toBeLessThanOrEqual(18);
+    expect(SZ.xs + 3).toBeLessThanOrEqual(11);
   });
 });
 

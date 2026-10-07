@@ -1,7 +1,7 @@
 import type { AABB } from '../../engine/math';
 import type { LevelUI } from './levelUI';
 import { Modal, hexA, type ModalKey } from './modals';
-import { COL, SZ, button, clampLines, gradeBadge, gradeBadgeW, gradeLetter, icon, panel, pieceIcon, pulse, text, textWidth, wrap } from './draw';
+import { COL, SZ, button, clampLines, gradeBadge, gradeBadgeW, gradePill, icon, panel, pieceIcon, pulse, text, textWidth, wrap } from './draw';
 import { ITEMS, UNIQUE_TAG, itemColor, itemLines, itemName } from '../items/items';
 import type { ItemInstance, ItemSlot } from '../items/types';
 import { STASH } from '../rules';
@@ -384,7 +384,7 @@ export class StashModal extends Modal {
       c.closePath();
       c.fill();
     }
-    if (def.grade) gradeLetter(c, def.grade, r.x + r.w - 2, r.y + r.h - 8);
+    if (def.grade) gradePill(c, def.grade, r.x + r.w - 12, r.y + r.h - 6);
     if (armed) {
       c.fillStyle = 'rgba(255,90,95,0.3)';
       c.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);

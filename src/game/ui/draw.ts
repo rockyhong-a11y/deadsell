@@ -7,9 +7,9 @@ import { GRADES, type Grade } from '../rules';
  * Small canvas helpers shared by the HUD, overlays and scenes. All coordinates are
  * virtual pixels (the UI transform is applied by Display.beginUI).
  * Galmuri11 is a pixel-style face: it is crispest at 11 px and its multiples, so the
- * size scale below sticks to those (plus 13 for the few places that need to stand out).
+ * size scale below sticks to those (plus 13 for the few places that need to stand out; `xs` only for the tiny grade pills).
  */
-export const SZ = { s: 11, m: 13, l: 22, xl: 33 } as const;
+export const SZ = { xs: 8, s: 11, m: 13, l: 22, xl: 33 } as const;
 
 export const COL = {
   ink: '#07060b',
@@ -236,10 +236,16 @@ export function gradeBadgeW(c: CanvasRenderingContext2D, grade: Grade, size: num
   return Math.round(textWidth(c, grade, size, true)) + 8;
 }
 
-/** The small corner version of the grade (HUD weapon slots, stash cells): the letters in the grade colour, outlined. `x`/`y` = right-bottom corner. */
-export function gradeLetter(c: CanvasRenderingContext2D, grade: Grade, x: number, y: number, size: number = SZ.s): void {
+/**
+ * The tiny grade pill of the HUD weapon slots, the skill buttons and the stash cells: a dark pill with the grade letters in the
+ * grade colour at SZ.xs, centred on (cx, cy). At most about 17 x 10 px (SSS), so it only ever covers a corner of an icon.
+ */
+export function gradePill(c: CanvasRenderingContext2D, grade: Grade, cx: number, cy: number): void {
   const g = GRADES[grade];
-  text(c, grade, x, y, { size, bold: true, align: 'right', color: g.color, shadow: g.outline ?? '#07060b' });
+  const w = Math.round(textWidth(c, grade, SZ.xs, true)) + 5;
+  const h = SZ.xs + 3;
+  panel(c, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h, { fill: '#07060b', alpha: 0.88, stroke: g.outline ?? g.color, lineWidth: 1, r: 3 });
+  text(c, grade, Math.round(cx), Math.round(cy) + 0.5, { size: SZ.xs, bold: true, align: 'center', color: g.color, shadow: null });
 }
 
 /** m:ss (or h:mm:ss) */

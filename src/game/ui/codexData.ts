@@ -402,7 +402,7 @@ function skillEntry(id: ItemId): CodexEntry {
     const v = WAVE_OF_DENIAL;
     rows.push(
       { label: '피해', text: `${base} (반경 ${v.radius}px) · 방어 불가` },
-      { label: '효과', text: `범위 안의 모든 적을 밀어내고 (넉백 ${v.knockback}) 적이 쏜 화살·볼트·폭탄·거미줄을 없앤다` },
+      { label: '효과', text: `범위 안의 모든 적을 밀어내고 (넉백 ${v.knockback}) 적이 쏜 투사체(화살·볼트·폭탄·거미줄·검기·사슬 갈고리·달 파편)를 없앤다` },
     );
   } else if (id === 'tornado') {
     const t = TORNADO;

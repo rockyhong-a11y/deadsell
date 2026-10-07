@@ -8,8 +8,8 @@ import { GRAVITY, MAX_FALL, TILE } from '../../engine/config';
 import { approach, overlaps, type AABB } from '../../engine/math';
 import type { Sfx } from '../../engine/audio';
 import type { ParticlePreset } from '../fx/particles';
-import { Arrow as EnemyArrow, Bolt, Bomb, circleHitsBox } from '../enemies/projectiles';
-import { WebBlob } from '../miniboss/hazards';
+import { Arrow as EnemyArrow, Bolt, Bomb, ChainHook as EnemyChainHook, circleHitsBox } from '../enemies/projectiles';
+import { MoonShard, SwordBeam, WebBlob } from '../miniboss/hazards';
 import { AFFIX } from '../rules';
 
 /** How a hit should feel (hit-stop seconds, camera shake, sfx, and the sfx volume when it should be quiet: a flame ticks many times a second). */
@@ -1227,15 +1227,19 @@ export class FlameTurret extends Entity {
   }
 }
 
-/** Is it a shot an enemy sent at her (an arrow of the enemy team, a bolt, a bomb, a web blob)? */
+/**
+ * Is it a shot an enemy sent at her? Every projectile class of the enemies and the mid-bosses: an arrow of the enemy team (not one she
+ * reflected), a bolt, a bomb, a web blob, the valkyrie's sword beam, the jailer's chain hook, the witch's moon shard.
+ */
 function isEnemyShot(e: Entity): boolean {
-  return (e instanceof EnemyArrow && e.team === ENEMY_TEAM) || e instanceof Bolt || e instanceof Bomb || e instanceof WebBlob;
+  return (e instanceof EnemyArrow && e.team === ENEMY_TEAM) || e instanceof Bolt || e instanceof Bomb || e instanceof WebBlob
+    || e instanceof SwordBeam || e instanceof EnemyChainHook || e instanceof MoonShard;
 }
 
 /** 거부의 파동 numbers: radius (px) and the knockback speed it throws every enemy with. */
 export interface WaveSpec { radius: number; knockback: number }
 
-/** 거부의 파동: everything in `radius` is thrown away and hurt, and every enemy shot in it is wiped out. */
+/** 거부의 파동: everything in `radius` is thrown away and hurt, and every enemy shot in it is wiped out (a moon shard counts by the spot it falls on). */
 export function denialWave(owner: Player, item: ItemInstance, base: number, o: WaveSpec): void {
   const w = owner.world;
   const x = owner.x;
@@ -1243,7 +1247,9 @@ export function denialWave(owner: Player, item: ItemInstance, base: number, o: W
   explode(owner, item, x, y, { radius: o.radius, base, kind: 'wave', extra: { knockback: o.knockback } });
   w.fx.ring(x, y, { radius: o.radius * 0.6, color: '#ffffff', life: 0.22 });
   for (const e of w.entities) {
-    if (e.dead || !isEnemyShot(e) || Math.hypot(e.x - x, e.cy - y) > o.radius) continue;
+    if (e.dead || !isEnemyShot(e)) continue;
+    const d = e instanceof MoonShard ? Math.min(Math.hypot(e.x - x, e.cy - y), Math.hypot(e.x - x, e.groundY - y)) : Math.hypot(e.x - x, e.cy - y);
+    if (d > o.radius) continue;
     e.dead = true;
     w.particles.emit('spark', e.x, e.cy, { count: 5, color: '#9bff7a' });
   }

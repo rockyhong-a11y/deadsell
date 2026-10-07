@@ -371,7 +371,7 @@ export class MoonShard extends Entity {
 
   constructor(
     x: number,
-    private groundY: number,
+    readonly groundY: number,
     topY: number,
     private delay: number,
     readonly damage: number,

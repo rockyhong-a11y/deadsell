@@ -16,7 +16,8 @@ import {
   CLUSTER_GRENADE, FLAME_TURRET, MAGNET_GRENADE, PHASER, SKILLS, SKILL_BASE, STUN_GRENADE, TESLA_COIL, TORNADO, WAVE_OF_DENIAL,
 } from '../src/game/player/skills';
 import { Arrow, FlameTurret, Grenade, MagnetWell, TeslaCoil, Tornado, BOMBLET_FUSE } from '../src/game/player/projectiles';
-import { Arrow as EnemyArrow, Bolt } from '../src/game/enemies/projectiles';
+import { Arrow as EnemyArrow, Bolt, Bomb, ChainHook as EnemyChainHook } from '../src/game/enemies/projectiles';
+import { MoonShard, SwordBeam, WebBlob } from '../src/game/miniboss/hazards';
 import { buildCodex, codexEntries } from '../src/game/ui/codexData';
 
 /**
@@ -1302,6 +1303,33 @@ describe('거부의 파동: pushes every enemy in r 110 away (knockback 420), 12
     expect(t.boltIn.dead).toBe(true);
     expect(t.arrowOut.dead).toBe(false);
     expect(t.mine.dead).toBe(false);
+  });
+});
+
+describe('거부의 파동 wipes every enemy projectile class in range, not only arrows (spec#2)', () => {
+  it('the sword beam, the chain hook, the moon shard (by its landing spot) and the bomb / web blob go; the ones outside the radius, and the jailer itself, stay', () => {
+    const t = setup(flatMap(), 300);
+    equip(t, 'wave_of_denial');
+    const jailer = new Dummy(300 + 90, FLOOR);
+    t.world.spawn(jailer);
+    // (all of them fly away from her, so none can hurt her before the wave goes off)
+    const beamIn = new SwordBeam(300 + 70, FLOOR - 24, 1, 20, 10, null, 300);
+    const beamOut = new SwordBeam(300 + 240, FLOOR - 24, 1, 20, 10, null, 300);
+    const hookIn = new EnemyChainHook(300 + 60, FLOOR - 24, 1, 0, jailer, { range: 180, speed: 20, damage: 5, pull: 1 });
+    const hookOut = new EnemyChainHook(300 + 230, FLOOR - 24, 1, 0, jailer, { range: 180, speed: 20, damage: 5, pull: 1 });
+    // a shard that still hangs high above her (its marker is on the floor beside her): wiped; one marked far away: not
+    const shardIn = new MoonShard(300 - 40, FLOOR, FLOOR - 400, 5, 10, null);
+    const shardOut = new MoonShard(300 + 300, FLOOR, FLOOR - 400, 5, 10, null);
+    const bombIn = new Bomb(300 - 60, FLOOR - 60, 0, 0, { damage: 10, fuse: 30 });
+    const blobIn = new WebBlob(300 + 50, FLOOR - 70, 1, 0, 10, 1, null);
+    const all = [beamIn, beamOut, hookIn, hookOut, shardIn, shardOut, bombIn, blobIn];
+    for (const e of all) t.world.spawn(e);
+    steps(t.world, 1);
+    t.input.tap('skill1');
+    steps(t.world, 20);
+    expect([beamIn.dead, hookIn.dead, shardIn.dead, bombIn.dead, blobIn.dead], 'inside the radius').toEqual([true, true, true, true, true]);
+    expect([beamOut.dead, hookOut.dead, shardOut.dead], 'outside the radius').toEqual([false, false, false]);
+    expect(jailer.dead).toBe(false);
   });
 });
 

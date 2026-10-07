@@ -309,6 +309,33 @@ describe('sprint: the kill-streak frenzy (광란 질주)', () => {
     expect(t.p.sprinting).toBe(true);
   });
 
+  it('a wall in front ends the sprint in the frenzy too (no sprint pose, no after-images on a standing heroine); the frenzy stays and the sprint is back as soon as she turns away', () => {
+    const m = flatMap(120);
+    for (let y = 1; y < 16; y++) m.set(10, y, T.Solid);
+    const t = setup(m, 400);
+    left(t);
+    t.p.startFrenzy();
+    steps(t.world, 5);
+    expect(t.p.sprinting, 'the frenzy sprints at once').toBe(true);
+    // run into the wall and keep pushing (the frenzy timer is topped up so it does not run out meanwhile)
+    for (let i = 0; i < 200; i++) {
+      t.p.frenzyT = SPRINT.frenzyTime;
+      steps(t.world, 1);
+    }
+    expect(t.p.x).toBeLessThan(10 * 24 + 40);
+    expect(t.p.hitWallX).toBe(-1);
+    expect(t.p.vx).toBe(0);
+    expect(t.p.frenzyT, 'the frenzy itself stays').toBeGreaterThan(0);
+    expect(t.p.sprinting, 'pushing against the wall in the frenzy').toBe(false);
+    expect(t.p.anim!.name).not.toBe('sprint');
+    steps(t.world, 30);
+    expect((t.p as any).afterImgs.length, 'no after-images stored on a standing heroine').toBe(0);
+    // turning away: the frenzy sprints again at once
+    right(t);
+    steps(t.world, 8);
+    expect(t.p.sprinting).toBe(true);
+  });
+
   it('when the frenzy runs out a sprint it carried falls back to a normal run and the run-up starts over', () => {
     const t = setup(flatMap(200), 120);
     kill(t); kill(t); kill(t);

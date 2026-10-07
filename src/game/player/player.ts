@@ -648,7 +648,8 @@ export class Player extends Actor {
       this.runDir = mx;
       if (this.onGround && this.hitWallX !== mx) this.runT += dt;
     }
-    this.sprinting = this.runDir !== 0 && (this.frenzyT > 0 || this.runT >= SPRINT.runUp);
+    // (a wall in front ends it even in the frenzy: the frenzy itself stays, the sprint comes back the moment she turns away)
+    this.sprinting = this.runDir !== 0 && (mx === 0 || this.hitWallX !== mx) && (this.frenzyT > 0 || this.runT >= SPRINT.runUp);
     return this.sprinting ? SPRINT.mult : 1;
   }
 

@@ -1,5 +1,7 @@
 # Content expansion 3 — 시체 조각 (corpse pieces), 시체 상점, 누더기 골렘, 회차 (NG+)
 
+> **Parts replaced by docs/CONTENT4.md §0:** the body sewing (몸 꿰매기), the loop-clear ending and the 시체 상점 (corpse shop) described below were removed; Selma is now the crafting NPC and the golem is paid from the bank. Read CONTENT4 §0 before building anything from this file. Everything else (시체 조각 drops, 누더기 골렘, 회차) still applies unless CONTENT4 says otherwise.
+
 Extends docs/DESIGN.md and docs/CONTENT2.md. Shared contract for the art and code agents of this expansion.
 All characters are female (the golem is a female rag-doll construct). Names below are exact (ids, sheet names,
 animation names). Every number lives in `src/game/rules.ts` (`CORPSE`, `LOOP`, `GOLEM`) or in the table of its owner

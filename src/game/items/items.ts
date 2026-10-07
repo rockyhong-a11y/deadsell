@@ -116,7 +116,7 @@ export function affixPool(id: ItemId): AffixId[] {
 }
 
 /**
- * Roll a random item from the unlocked pool for the given tier. Unique items are never in the pool (only the 시체 상점 sells them).
+ * Roll a random item from the unlocked pool for the given tier. Unique items are never in the pool (they are crafted at Selma only, docs/CONTENT4.md §4).
  * `opts.guaranteeAffix` (mid-boss drops) always rolls an affix; the rng call sequence of a normal roll is unchanged.
  */
 export function rollItem(

@@ -547,11 +547,17 @@ test.describe('full run', () => {
         const w = ds.world, p = w.player, inp = w.input;
         // real enemies only: arrows / bolts / orbs on the enemy team have no hp (a lingering arrow made the sum NaN)
         const en = w.entities.filter((e: any) => e.team === 'enemy' && !e.dead && typeof e.hp === 'number' && e.targetable);
-        const tgt = en[(k * 7) % en.length];
+        // a reachable ground target, picked deterministically (not by an index into the live enemy list, which could be a harpy):
+        // the nearest non-flyer on her floor (else the nearest non-flyer anywhere), ties by id
+        const walker = (e: any) => e.gravityScale !== 0 && !e.dying;
+        const dist = (e: any) => Math.hypot(e.x - p.x, e.y - p.y);
+        const onFloor = en.filter((e: any) => walker(e) && Math.abs(e.y - p.y) < 60);
+        const pool = onFloor.length ? onFloor : en.filter(walker);
+        const tgt = pool.sort((a: any, b: any) => dist(a) - dist(b) || a.id - b.id)[0];
         ds.teleport(tgt.x - 60, tgt.y - 2); ds.step(15);
         const hp0 = en.reduce((a: number, e: any) => a + e.hp, 0);
         for (let f = 0; f < 600; f++) {
-          const near = w.entities.filter((e: any) => e.team === 'enemy' && !e.dead && !e.dying && Math.abs(e.y - p.y) < 60 && Math.abs(e.x - p.x) < 300).sort((a: any, b: any) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
+          const near = w.entities.filter((e: any) => e.team === 'enemy' && !e.dead && !e.dying && e.gravityScale !== 0 && Math.abs(e.y - p.y) < 60 && Math.abs(e.x - p.x) < 300).sort((a: any, b: any) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
           inp.setAxis('sweep', near && Math.abs(near.x - p.x) > 45 ? Math.sign(near.x - p.x) : 0, 0);
           if (f % 14 === 0) inp.tap('attack1');
           if (f % 140 === 70) inp.press('attack2');

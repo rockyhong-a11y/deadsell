@@ -22,7 +22,7 @@ export const BASE_KINDS: readonly BaseKind[] = ['ghoul', 'jailer', 'archer', 'bo
 /** Hit points and elite-aura colour of each base type (hp before the tier / elite / variant multipliers). */
 export const BASE_STATS: Record<BaseKind, { hp: number; aura: string }> = {
   ghoul: { hp: 40, aura: '#ff9b2e' },
-  jailer: { hp: 90, aura: '#ff5a5a' },
+  jailer: { hp: 65, aura: '#ff5a5a' },
   archer: { hp: 30, aura: '#7dff6a' },
   bomber: { hp: 35, aura: '#ffd23f' },
   harpy: { hp: 30, aura: '#c77dff' },

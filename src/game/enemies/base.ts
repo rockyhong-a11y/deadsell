@@ -7,7 +7,7 @@ import { dropLoot, spawnItemDrop } from '../items/pickups';
 import { rollItem } from '../items/items';
 import { warnBang } from './telegraph';
 import type { BaseKind, EnemyDef, EnemyKind } from './variants';
-import { CORPSE, ELITE, LOOT, enemyDmgMul, enemyHpMul, loopDmgMul } from '../rules';
+import { CORPSE, ELITE, GUARD, LOOT, enemyDmgMul, enemyHpMul, loopDmgMul } from '../rules';
 
 export type { BaseKind, EnemyKind } from './variants';
 
@@ -91,10 +91,13 @@ export abstract class Enemy extends Actor {
   aggroRange = AGGRO_RANGE;
   /** follow-up swings of the current attack (combos); `endActive` starts the next one */
   protected queue: AttackStep[] = [];
-  /** frontal guard: 'shield' blocks like the jailer's, 'parry' deflects the first hit after each attack */
+  /** frontal guard: 'shield' blocks like the jailer's (and breaks after `GUARD.hits` blocks), 'parry' deflects the first hit after each attack */
   protected guard: 'shield' | 'parry' | null = null;
   protected parryReady = false;
   protected blockT = 0;
+  /** blocks of a 'shield' guard in a row (each within `GUARD.window` s of the one before): `GUARD.hits` of them break it */
+  protected guardHits = 0;
+  protected guardT = 0;
   protected textCd = 0;
   /** hits never push it (but they still interrupt) */
   protected kbImmune = false;
@@ -230,6 +233,10 @@ export abstract class Enemy extends Actor {
   update(dt: number): void {
     if (this.textCd > 0) this.textCd -= dt;
     if (this.blockT > 0) this.blockT -= dt;
+    if (this.guardT > 0) {
+      this.guardT -= dt;
+      if (this.guardT <= 0) this.guardHits = 0;
+    }
     this.updateStatus(dt);
     this.stateT += dt;
     this.time += dt;
@@ -527,22 +534,42 @@ export abstract class Enemy extends Actor {
     if (!this.attackerInFront(info)) return null;
     const w = this.world;
     const parry = this.guard === 'parry';
-    this.blockT = 0.22;
+    const broke = !parry && this.countBlock();
+    this.blockT = broke ? 0 : 0.22;
     this.flash = 0;
     const sx = this.x + this.facing * (this.w / 2 + 3);
     const sy = this.y - this.h * 0.55;
-    w.particles.emit(parry ? 'parry' : 'spark', sx, sy, { dir: this.facing, count: 7 });
-    w.audio.play(parry ? 'parry' : 'block');
-    if (this.textCd <= 0) {
+    w.particles.emit(parry || broke ? 'parry' : 'spark', sx, sy, { dir: this.facing, count: broke ? 12 : 7 });
+    w.audio.play(parry || broke ? 'parry' : 'block');
+    if (broke) {
+      w.fx.text(this.x, this.headY, '가드 브레이크!', '#ffd23f');
+      w.fx.ring(sx, sy, { radius: 22, color: '#ffd23f', life: 0.25 });
+      this.textCd = 0.3;
+    } else if (this.textCd <= 0) {
       w.fx.text(this.x, this.headY, parry ? '쳐냄' : '막힘', parry ? '#ffe9a8' : '#c9d6e8');
       this.textCd = 0.3;
     }
     if (parry) this.parryReady = false;
-    else if (this.state !== 'windup' && this.anim?.sheet.has('block')) this.anim.playFor('block', 0.22);
+    else if (!broke && this.state !== 'windup' && this.anim?.sheet.has('block')) this.anim.playFor('block', 0.22);
     // pushback: the guard slides back a little, the attacker is nudged away
     if (this.onGround) this.vx = -this.facing * (parry ? 40 : 70);
     if (info.source && info.source !== this) info.source.vx = this.facing * 130;
     return { applied: false, amount: 0, killed: false, blocked: true };
+  }
+
+  /**
+   * Counts a hit a 'shield' guard just blocked. The `GUARD.hits`-th one within `GUARD.window` s of the one before breaks the guard:
+   * the bearer is stunned for `GUARD.stagger` s (the shield is down while it is incapacitated) and the count starts over.
+   * Returns whether this block broke it.
+   */
+  private countBlock(): boolean {
+    this.guardHits = this.guardT > 0 ? this.guardHits + 1 : 1;
+    this.guardT = GUARD.window;
+    if (this.guardHits < GUARD.hits) return false;
+    this.guardHits = 0;
+    this.guardT = 0;
+    this.status.stun = Math.max(this.status.stun, GUARD.stagger);
+    return true;
   }
 
   protected play(name: string): void {

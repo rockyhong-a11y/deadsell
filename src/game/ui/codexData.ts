@@ -16,7 +16,7 @@ import { recipeText } from '../meta/craft';
 import { SCROLL_COLORS, SCROLL_SPRITE } from '../items/pickups';
 import { COLOR_HEX } from '../combat';
 import { LEVEL_SEQUENCE, type BiomeId } from '../run';
-import { AFFIX, AFFIX_ROLL, CORPSE, CRAFT, CRIT_MULT, ELITE, FLASK, FOODS, GOLEM, GRADES, GRADE_IDS, LOOP, LOOT, SCROLL, STASH, TIER2, TIER_DMG, enemyDmgMul, enemyHpMul, golemCost, type Grade } from '../rules';
+import { AFFIX, AFFIX_ROLL, CORPSE, CRAFT, CRIT_MULT, ELITE, FLASK, FOODS, GOLEM, GRADES, GRADE_IDS, GUARD, LOOP, LOOT, SCROLL, STASH, TIER2, TIER_DMG, enemyDmgMul, enemyHpMul, golemCost, type Grade } from '../rules';
 
 /**
  * 도감 (codex) data: one entry per weapon, skill, enemy, boss and item of the game, built from the game's own tables
@@ -490,7 +490,7 @@ const BEHAVIOUR: Record<EnemyKind, (d: EnemyDef) => string> = {
   ghoul_frenzy: (d) => `빠르다(이동 ×${d.speed}). ${d.p.swipes}연타로 할퀸다. 체력은 ${pct(d.hp)}.`,
   ghoul_shackled: (d) => `쇠사슬 철퇴를 휘두른다: 사거리 ×${d.p.reach}, 피해 ×${d.dmg}, 강한 넉백. 느리다.`,
   ghoul_wraith: (d) => `공격 전에 플레이어 뒤로 순간이동(${d.p.blink}px 이내, ${secs(d.p.blinkCd)}마다)한다. 넉백 무시, 체력 ${pct(d.hp)}.`,
-  jailer: () => '정면을 방패로 막는다. 등 뒤나 패링·기절로 뚫어야 한다.',
+  jailer: () => `정면을 방패로 막는다. 등 뒤·패링·기절로 뚫거나, ${secs(GUARD.window)} 안에 ${GUARD.hits}번 막게 하면 가드가 깨져 ${secs(GUARD.stagger)} 기절한다.`,
   jailer_warden: (d) => `메이스 내려찍기가 바닥 충격파(피해 ${d.p.waveDmg}, ${d.p.waveDist}px)를 보낸다. 점프로 피한다.`,
   jailer_torch: (d) => `공격에 점화(${secs(d.p.burn)} 화상, 초당 ${d.p.burnDps}). 횃불 빛(반경 ${d.p.light}px)을 들고 다닌다.`,
   jailer_spear: (d) => `창으로 멀리 찌른다: 사거리 ×${d.p.reach}.`,
@@ -512,7 +512,7 @@ const BEHAVIOUR: Record<EnemyKind, (d: EnemyDef) => string> = {
   harpy_ember: (d) => `급강하 착지점에 ${secs(d.p.fireLife)} 동안 불길(초당 ${d.p.fireDps})이 남는다.`,
   lancer: () => '창을 겨누고 돌진해 찌른다.',
   lancer_halberd: (d) => `돌진 없이 넓은 ${d.p.hits}연타 휘두르기(사거리 약 ${d.p.reach}px).`,
-  lancer_paladin: () => '정면 방패로 막으면서도 돌진한다.',
+  lancer_paladin: () => `정면 방패로 막으면서도 돌진한다. ${GUARD.hits}번 막게 하면 가드가 깨진다.`,
   lancer_duelist: (d) => `${d.p.thrusts}연속 찌르기. 공격 직후 첫 타격을 쳐낸다(패링).`,
   lancer_dragoon: (d) => `돌진 대신 플레이어 위치로 도약(${d.p.leapMin}–${d.p.leapMax}px)해 반경 ${d.p.aoeR}px에 착지한다.`,
 };

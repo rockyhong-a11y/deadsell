@@ -52,6 +52,13 @@ export const TIER2 = { hp: 1.6, dmg: 1.4 } as const;
 export const ELITE = { hp: 3, dmg: 1.25, speed: 1.15, knockbackTaken: 0.5 } as const;
 
 /**
+ * 가드 브레이크: a frontal shield (the jailers', the paladin's - not the duelist's parry) that blocks `hits` hits, each within `window` s
+ * of the one before, breaks: the shield drops and its bearer is staggered (stunned) for `stagger` s and takes hits normally.
+ * The count starts over afterwards.
+ */
+export const GUARD = { hits: 3, window: 2.0, stagger: 1.2 } as const;
+
+/**
  * 회차 (loops, docs/CONTENT3.md §1, advanced by killing the Iron Matron: docs/CONTENT4.md §0): every loop above the first makes
  * the world harder. `k` = steps above loop 1, capped at loop `cap` (loop 5 and later play like loop 5).
  */

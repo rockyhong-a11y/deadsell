@@ -86,7 +86,7 @@ describe('variant table', () => {
   it('uses the variant hp multiplier', () => {
     expect(setup('ghoul_frenzy', 300, 100).e.maxHp).toBe(28); // 40 x 0.7
     expect(setup('ghoul_wraith', 300, 100).e.maxHp).toBe(32); // 40 x 0.8
-    expect(setup('jailer_warden', 300, 100).e.maxHp).toBe(126); // 90 x 1.4
+    expect(setup('jailer_warden', 300, 100).e.maxHp).toBe(91); // 65 x 1.4
   });
 });
 

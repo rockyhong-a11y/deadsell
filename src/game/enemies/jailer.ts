@@ -11,10 +11,15 @@ const SPEC = { hp: BASE_STATS.jailer.hp, w: 24, h: 46, patrol: 24, chase: 48, au
 
 type Mode = 'mace' | 'hook';
 
+/** Seconds the heavy swing (mace / spear) leaves it open afterwards: the shield is down for all of it. */
+const RECOVER = { mace: 1.0, spear: 0.9 } as const;
+/** Seconds it takes to turn round once the player is behind it (a roll buys that long behind its back). */
+const TURN_DELAY = { normal: 0.9, elite: 0.6 } as const;
+
 /**
- * 여간수: tower shield blocks frontal non-unblockable damage (guard logic lives in Enemy). Hurt from
- * behind, by ground slams, explosions, traps and damage over time, and while its shield is down
- * (mace swing / recovery). Attack: shield bash + mace, 0.7 s windup.
+ * 여간수: tower shield blocks frontal non-unblockable damage (guard logic lives in Enemy: blocking too many hits in a row
+ * breaks it, `GUARD`). Hurt from behind, by ground slams, explosions, traps and damage over time, and while its shield is
+ * down (mace swing / recovery, stagger). Attack: shield bash + mace, 0.7 s windup.
  * Variants: warden (mace slam sends a floor shockwave), torch (ignites), spear (reach x1.6),
  * chain (throws a hook that drags the player in, then bashes).
  */
@@ -55,7 +60,7 @@ export class Jailer extends Enemy {
       return;
     }
     this.turnT += FIXED_DT;
-    if (this.turnT >= (this.elite ? 0.4 : 0.6)) {
+    if (this.turnT >= (this.elite ? TURN_DELAY.elite : TURN_DELAY.normal)) {
       this.facing = want;
       this.turnT = 0;
     }
@@ -89,7 +94,7 @@ export class Jailer extends Enemy {
       return;
     }
     this.mode = 'mace';
-    this.beginAttack(this.ab === 'spear' ? 0.6 : 0.7, this.ab === 'spear' ? 0.16 : 0.2, this.ab === 'spear' ? 0.6 : 0.7, 'attack');
+    this.beginAttack(this.ab === 'spear' ? 0.6 : 0.7, this.ab === 'spear' ? 0.16 : 0.2, this.ab === 'spear' ? RECOVER.spear : RECOVER.mace, 'attack');
     this.attackCd = 1.2;
   }
 

@@ -36,7 +36,7 @@ describe('enemy factory', () => {
     expect(ENEMY_POOLS.prison.length).toBeGreaterThan(0);
     expect(ENEMY_POOLS.ramparts.some((e) => e.kind === 'lancer')).toBe(true);
     expect(FLYERS.prison).toContain('harpy');
-    const hp = { ghoul: 40, jailer: 90, archer: 30, bomber: 35, harpy: 30, lancer: 70 };
+    const hp = { ghoul: 40, jailer: 65, archer: 30, bomber: 35, harpy: 30, lancer: 70 };
     for (const k of KINDS) {
       const { e } = setup(k, 300, 100);
       expect(e.maxHp).toBe(hp[k]);

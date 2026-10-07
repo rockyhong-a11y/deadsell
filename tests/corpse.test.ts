@@ -569,11 +569,11 @@ describe('쉼터: Selma and the golem pile', () => {
       expect(said.size).toBeGreaterThanOrEqual(6);
       expect(a.game.save.pieces).toBe(12);
     });
-    it('while her line is up the prompt steps aside (it was drawn over the bubble), then comes back', () => {
+    it('her prompt stays while her line is up (it is the touch target; the bubble is drawn above it)', () => {
       const a = talk();
       expect(a.selma.promptText()).toBe('조합');
       a.selma.sew();
-      expect(a.selma.promptText()).toBe('');
+      expect(a.selma.promptText()).toBe('조합');
       steps(a.world, 60 * 3 + 5);
       expect(a.selma.promptText()).toBe('조합');
     });

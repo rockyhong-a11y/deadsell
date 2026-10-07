@@ -1,7 +1,7 @@
 import type { AABB } from '../../engine/math';
 import type { LevelUI } from './levelUI';
 import { Modal, hexA, type ModalKey } from './modals';
-import { COL, SZ, button, gradeBadge, gradeBadgeW, icon, panel, pieceIcon, text, textWidth, wrap } from './draw';
+import { COL, SZ, button, clampLines, gradeBadge, gradeBadgeW, icon, panel, pieceIcon, text, textWidth, wrap } from './draw';
 import { shardSummary } from './stashModal';
 import { ITEMS, itemColor, itemName, signatureText } from '../items/items';
 import { PIECE_COLOR } from '../items/pickups';
@@ -19,11 +19,12 @@ export interface CraftLayout {
   grid: AABB[];
   /** the five uniques of the grade */
   rows: AABB[];
-  /** the signature text of the selected unique */
+  /** the signature text of the selected unique (room for 3 lines) */
   detail: AABB;
   craft: AABB;
   close: AABB;
-  msg: { x: number; y: number };
+  /** the short result message between 닫기 and 조합: `y` = centre line, `w` = the free width */
+  msg: { x: number; y: number; w: number };
   titleY: number;
   gridLabelY: number;
 }
@@ -44,7 +45,8 @@ export function craftLayout(W: number, H: number): CraftLayout {
   const grid = Array.from({ length: STASH.capacity }, (_, i) => ({ x: x0 + (i % STASH.cols) * step, y: gridY + Math.floor(i / STASH.cols) * step, w: MINI, h: MINI }));
   const rx = x0 + 206 + 14;
   const rw = p.x + p.w - 12 - rx;
-  const rows = [0, 1, 2, 3, 4].map((i) => ({ x: rx, y: bodyY + i * 40, w: rw, h: 36 }));
+  // 32 px rows on a 36 px pitch: the room that is left below them holds the 3 lines the longest signature needs
+  const rows = [0, 1, 2, 3, 4].map((i) => ({ x: rx, y: bodyY + i * 36, w: rw, h: 32 }));
   const by = p.y + p.h - 44;
   return {
     panel: p,
@@ -52,10 +54,10 @@ export function craftLayout(W: number, H: number): CraftLayout {
     recipe,
     grid,
     rows,
-    detail: { x: rx, y: bodyY + 5 * 40, w: rw, h: by - 6 - (bodyY + 5 * 40) },
+    detail: { x: rx, y: bodyY + 5 * 36, w: rw, h: by - 6 - (bodyY + 5 * 36) },
     craft: { x: rx, y: by, w: rw, h: 38 },
     close: { x: x0, y: by, w: 100, h: 38 },
-    msg: { x: x0 + 110, y: by + 19 },
+    msg: { x: x0 + 110, y: by + 19, w: rx - 8 - (x0 + 110) },
     titleY: p.y + 20,
     gridLabelY: gridY - 10,
   };
@@ -222,9 +224,9 @@ export class CraftModal extends Modal {
       const on = i === this.sel[this.grade];
       panel(c, r.x, r.y, r.w, r.h, { fill: on ? COL.panelHi : COL.panel, stroke: on ? itemColor(id) : COL.line, lineWidth: on ? 2 : 1, r: 5 });
       icon(assets, c, def.icon, r.x + 20, r.y + r.h / 2, 28);
-      text(c, def.name, r.x + 40, r.y + 12, { bold: true, color: itemColor(id) });
-      gradeBadge(c, def.grade ?? this.grade, r.x + r.w - 6 - gradeBadgeW(c, def.grade ?? this.grade) / 2, r.y + 12);
-      text(c, def.desc, r.x + 40, r.y + 26, { color: COL.dim });
+      text(c, def.name, r.x + 40, r.y + 10, { bold: true, color: itemColor(id) });
+      gradeBadge(c, def.grade ?? this.grade, r.x + r.w - 6 - gradeBadgeW(c, def.grade ?? this.grade) / 2, r.y + 10);
+      text(c, def.desc, r.x + 40, r.y + 23, { color: COL.dim });
       this.hit('craft-row' + i, r, () => { this.sfx('ui_tap'); this.sel[this.grade] = i; });
     });
     // the signature of the selected unique and what the craft makes
@@ -237,7 +239,11 @@ export class CraftModal extends Modal {
     this.hit('craft-do', L.craft, () => this.craft());
     button(c, L.close, { label: '닫기', color: COL.dim });
     this.hit('craft-close', L.close, () => this.ui.closeTop(this));
-    if (this.msg) text(c, this.msg.text, L.msg.x, L.msg.y, { bold: true, color: this.msg.color, alpha: Math.min(1, this.msg.t * 2) });
+    if (this.msg) {
+      // at most two lines in the room between the two buttons (never over their borders)
+      const lines = clampLines(c, this.msg.text, L.msg.w, 2, SZ.s, true);
+      lines.forEach((l, n) => text(c, l, L.msg.x, L.msg.y + (n - (lines.length - 1) / 2) * 13, { bold: true, color: this.msg!.color, alpha: Math.min(1, this.msg!.t * 2) }));
+    }
     c.globalAlpha = 1;
   }
 }

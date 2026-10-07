@@ -127,6 +127,17 @@ export function wrap(c: CanvasRenderingContext2D, s: string, maxW: number, size:
   return lines;
 }
 
+/** `wrap` cut to at most `maxLines` lines; what does not fit ends the last line with an ellipsis (a short status message beside a button). */
+export function clampLines(c: CanvasRenderingContext2D, s: string, maxW: number, maxLines: number, size: number = SZ.s, bold = false): string[] {
+  const lines = wrap(c, s, maxW, size, bold);
+  if (lines.length <= maxLines) return lines;
+  const out = lines.slice(0, maxLines);
+  let last = out[maxLines - 1];
+  while (last.length > 1 && textWidth(c, last + '…', size, bold) > maxW) last = last.slice(0, -1);
+  out[maxLines - 1] = last.trimEnd() + '…';
+  return out;
+}
+
 /** Rounded-rect path (does not fill). */
 export function rrect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r = 4): void {
   const rr = Math.min(r, w / 2, h / 2);

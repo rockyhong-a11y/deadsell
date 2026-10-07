@@ -1,7 +1,7 @@
 import type { AABB } from '../../engine/math';
 import type { LevelUI } from './levelUI';
 import { Modal, hexA, type ModalKey } from './modals';
-import { COL, SZ, button, gradeBadge, gradeBadgeW, gradeLetter, icon, panel, pieceIcon, pulse, text, textWidth, wrap } from './draw';
+import { COL, SZ, button, clampLines, gradeBadge, gradeBadgeW, gradeLetter, icon, panel, pieceIcon, pulse, text, textWidth, wrap } from './draw';
 import { ITEMS, UNIQUE_TAG, itemColor, itemLines, itemName } from '../items/items';
 import type { ItemInstance, ItemSlot } from '../items/types';
 import { STASH } from '../rules';
@@ -29,8 +29,8 @@ export interface StashLayout {
   act: AABB;
   salvage: AABB;
   close: AABB;
-  /** where the short result message goes */
-  msg: { x: number; y: number };
+  /** where the short result message goes: `y` = centre line, `w` = the free width up to the main action button */
+  msg: { x: number; y: number; w: number };
   /** header baseline / the two cell-row labels */
   titleY: number;
   equipLabelY: number;
@@ -60,7 +60,7 @@ export function stashLayout(W: number, H: number): StashLayout {
     act: { x: cx, y: by, w: bw, h: 38 },
     salvage: { x: cx + bw + 6, y: by, w: cw - bw - 6, h: 38 },
     close: { x: x0, y: by, w: 100, h: 38 },
-    msg: { x: x0 + 110, y: by + 19 },
+    msg: { x: x0 + 110, y: by + 19, w: cx - 8 - (x0 + 110) },
     titleY: p.y + 20,
     equipLabelY: p.y + 46,
     gridLabelY: p.y + 108,
@@ -332,7 +332,11 @@ export class StashModal extends Modal {
     }
     button(c, L.close, { label: '닫기', color: COL.dim });
     this.hit('stash-close', L.close, () => this.ui.closeTop(this));
-    if (this.msg) text(c, this.msg.text, L.msg.x, L.msg.y, { bold: true, color: this.msg.color, alpha: Math.min(1, this.msg.t * 2) });
+    if (this.msg) {
+      // at most two lines in the room between 닫기 and the action button (never over their borders)
+      const lines = clampLines(c, this.msg.text, L.msg.w, 2, SZ.s, true);
+      lines.forEach((l, n) => text(c, l, L.msg.x, L.msg.y + (n - (lines.length - 1) / 2) * 13, { bold: true, color: this.msg!.color, alpha: Math.min(1, this.msg!.t * 2) }));
+    }
     c.globalAlpha = 1;
   }
 

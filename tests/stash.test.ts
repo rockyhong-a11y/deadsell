@@ -561,6 +561,39 @@ describe('StashModal: keyboard / pad, touch, drawing', () => {
     expect(a.save.stash, 'the spear was armed before the deposit, the press after it only re-arms').toHaveLength(3);
   });
 
+  it('the result message is wrapped to two lines in the room between 닫기 and the action button (never over the button border)', () => {
+    const wide = (s: string, size: number) => [...s].reduce((w, ch) => w + (ch.charCodeAt(0) > 0x2e80 ? size : size * 0.55), 0);
+    for (const W of [480, 640, 800]) {
+      const a = uiSetup(W);
+      a.save.stash = [it_('spear')];
+      const m = a.open();
+      const L = stashLayout(W, 360);
+      expect(L.msg.x + L.msg.w, 'ends before the action button').toBeLessThan(L.act.x);
+      expect(L.msg.x, 'starts after 닫기').toBeGreaterThan(L.close.x + L.close.w);
+      const drawn: { s: string; x: number }[] = [];
+      let font = '11px x';
+      const base = a.ctx as any;
+      const rec = new Proxy(base, {
+        get(t, k: string) {
+          if (k === 'measureText') return (s: string) => ({ width: wide(s, parseInt(font.match(/(\d+)px/)?.[1] ?? '11', 10)) });
+          if (k === 'fillText') return (s: string, x: number) => { drawn.push({ s, x }); };
+          return t[k];
+        },
+        set(t, k: string, v) {
+          if (k === 'font') font = v;
+          t[k] = v;
+          return true;
+        },
+      }) as CanvasRenderingContext2D;
+      (m as any).msg = { text: '여교도관의 종철퇴 분해 · 시체 조각 +55', color: '#fff', t: 20 };
+      m.draw(rec, W, 360);
+      const lines = [...new Set(drawn.filter((d) => d.x >= L.msg.x && d.x <= L.msg.x + 1).map((d) => d.s))];
+      expect(lines.length).toBeGreaterThanOrEqual(2);
+      expect(lines.length).toBeLessThanOrEqual(2);
+      for (const l of lines) expect(wide(l, 11) * 1.07, l).toBeLessThanOrEqual(L.msg.w + 4);
+    }
+  });
+
   it('Esc closes the screen; the pad Y is `special`', () => {
     const a = uiSetup();
     const m = a.open();

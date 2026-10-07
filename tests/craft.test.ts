@@ -6,7 +6,7 @@ import { CraftModal, craftLayout } from '../src/game/ui/craftModal';
 import { TapRegistry } from '../src/game/ui/taps';
 import { defaultSave } from '../src/game/meta/save';
 import { CRAFT, CRAFT_MIN_TIER, GRADES, GRADE_IDS, STASH, type Grade } from '../src/game/rules';
-import { ITEMS, itemLines } from '../src/game/items/items';
+import { ITEMS, itemLines, signatureText } from '../src/game/items/items';
 import { ITEM_IDS, UNIQUE_IDS, type ItemId, type ItemInstance } from '../src/game/items/types';
 import { craftUnique, materialLabel, planCraft, qualifies, recipeText, shardLabel, uniquesOf } from '../src/game/meta/craft';
 import { Seamstress } from '../src/game/props';
@@ -472,6 +472,55 @@ describe('CraftModal', () => {
       }
       a.ui.key('confirm');
       a.advance(0.2);
+    }
+  });
+
+  it('the whole signature of every unique shows on its tab (wrapped, inside the detail box) at every width; the result message stays between the buttons', () => {
+    const wide = (s: string, size: number) => [...s].reduce((w, ch) => w + (ch.charCodeAt(0) > 0x2e80 ? size : size * 0.55), 0);
+    for (const W of [480, 560, 640, 700, 800]) {
+      const a = uiSetup(W);
+      const L = craftLayout(W, 360);
+      expect(L.detail.h, `detail room @${W}`).toBeGreaterThanOrEqual(3 * 13);
+      const drawn: { s: string; x: number; y: number }[] = [];
+      let font = '11px x';
+      const base = a.ctx as any;
+      const rec = new Proxy(base, {
+        get(t, k: string) {
+          if (k === 'measureText') return (s: string) => ({ width: wide(s, parseInt(font.match(/(\d+)px/)?.[1] ?? '11', 10)) });
+          if (k === 'fillText') return (s: string, x: number, y: number) => { drawn.push({ s, x, y }); };
+          return t[k];
+        },
+        set(t, k: string, v) {
+          if (k === 'font') font = v;
+          t[k] = v;
+          return true;
+        },
+      }) as CanvasRenderingContext2D;
+      const m = a.open();
+      const paint = () => { drawn.length = 0; a.game.taps.clear(); m.update(1 / 60); m.draw(rec, W, 360); };
+      for (const g of GRADE_IDS) {
+        m.setGrade(GRADE_IDS.indexOf(g));
+        for (let i = 0; i < 5; i++) {
+          a.ui.key('down');
+          paint();
+          const id = m.selected;
+          const sig = signatureText(id) || ITEMS[id].desc;
+          const inBox = drawn.filter((d) => d.y >= L.detail.y && d.y < L.craft.y && d.x >= L.detail.x && d.x < L.detail.x + 3);
+          const lines = [...new Set(inBox.map((d) => d.s))];
+          expect(lines.length, `${id}@${W}`).toBeLessThanOrEqual(3);
+          expect(lines.join('').replace(/\s/g, ''), `${id}@${W}`).toBe(`${sig} · 티어 ${CRAFT[g].tier}`.replace(/\s/g, ''));
+          const last = Math.max(...inBox.map((d) => d.y));
+          expect(last + 6, `${id}@${W} inside the box`).toBeLessThanOrEqual(L.detail.y + L.detail.h);
+        }
+      }
+      // the longest result message: wrapped into the room between 닫기 and 조합
+      (m as any).msg = { text: '여교도관의 종철퇴 조합 완료', color: '#fff', t: 20 };
+      paint();
+      const msgLines = [...new Set(drawn.filter((d) => d.x >= L.msg.x && d.x <= L.msg.x + 1).map((d) => d.s))];
+      expect(msgLines.length).toBeGreaterThanOrEqual(1);
+      expect(msgLines.length).toBeLessThanOrEqual(2);
+      for (const l of msgLines) expect(wide(l, 11) * 1.07, l).toBeLessThanOrEqual(L.msg.w + 4); // (bold is a little wider)
+      expect(L.msg.x + L.msg.w, 'msg ends before the craft button').toBeLessThan(L.craft.x);
     }
   });
 

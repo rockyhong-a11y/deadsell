@@ -99,8 +99,9 @@ L or Shift roll, Q skill1, E skill2, F interact, R heal, M map, Esc pause.
 Player movement: run 150 px/s (reach full speed in ~0.08 s), gravity 1300 px/s², max fall
 540 px/s, jump height ≈ 80 px (v ≈ 456 px/s), double jump ≈ 0.9×, coyote 0.1 s,
 jump buffer 0.12 s, variable jump (release → vy × 0.4). Roll 0.32 s at 300 px/s,
-invulnerable 0.04–0.30 s, cancels attack recovery. Ground slam: dive 620 px/s,
-AoE damage + stun on landing. Ledge grab & auto-climb. One-way platforms.
+invulnerable 0.04–0.30 s, cancels attack recovery. Ground slam (SLAM in
+player.ts): dive 620 px/s, on landing 16 damage + 0.5 s stun + a small knock-up in an 84 px wide box, then a 0.45 s recovery that a buffered action cancels only after 0.28 s.
+Ledge grab & auto-climb. One-way platforms.
 No ladders (vertical travel = platforms and jumps).
 Sprint (질주, docs/CONTENT4.md §1): holding a direction on the ground for 0.9 s sprints at ×1.6 (240 px/s); stopping, turning, a wall, an attack / skill / roll / slam / ledge grab / hit ends it,
 a jump keeps the speed until landing. Three kills within 2.5 s of each other start the 광란 질주 (frenzy, 5 s, every movement a sprint at once, each kill refreshes it). A sprint has its own

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestWorld, steps, flatMap } from './helpers';
-import { Player } from '../src/game/player/player';
+import { Player, SLAM } from '../src/game/player/player';
 import { Actor, Entity } from '../src/game/entity';
 import type { DamageInfo } from '../src/game/combat';
 import { T, TileMap } from '../src/game/tilemap';
@@ -189,12 +189,13 @@ describe('movement', () => {
     input.tap('down');
     steps(world, 1);
     expect(p.state).toBe('slam');
-    expect(p.vy).toBe(620);
+    expect(p.vy).toBe(SLAM.speed);
     let n = 0;
     while (e.log.length === 0 && n++ < 60) steps(world, 1);
     expect(e.log.length).toBe(1);
-    expect(e.status.stun).toBeGreaterThan(0.5);
-    expect(e.log[0].amount).toBeGreaterThan(20);
+    expect(e.status.stun).toBeGreaterThan(SLAM.stun - 0.1);
+    expect(e.status.stun).toBeLessThanOrEqual(SLAM.stun);
+    expect(e.log[0].amount).toBe(SLAM.damage);
     expect(p.state).toBe('slam_land');
   });
 
@@ -241,6 +242,112 @@ describe('movement', () => {
     expect(p.hp).toBe(88);
     expect(p.vy).toBeLessThan(0);
     expect(p.state).toBe('hurt');
+  });
+});
+
+describe('ground slam (내려찍기)', () => {
+  /** drop her onto the floor with a dummy `dx` px beside her (none for null); returns once the landing blow has been dealt (state `slam_land`) and its hit-stop is over */
+  function dive(dx: number | null, tweak?: (e: Dummy) => void) {
+    const t = setup();
+    const e = new Dummy(t.p.x + (dx ?? 0), FLOOR);
+    tweak?.(e);
+    if (dx !== null) t.world.spawn(e);
+    t.p.y = 250;
+    steps(t.world, 2);
+    t.input.tap('down');
+    steps(t.world, 1);
+    expect(t.p.state).toBe('slam');
+    let n = 0;
+    while (t.p.state !== 'slam_land' && n++ < 90) steps(t.world, 1);
+    expect(t.p.state).toBe('slam_land');
+    while (t.world.hitstop > 0) steps(t.world, 1); // (the landing freezes the world for a few frames: count the live ones only)
+    return { ...t, e };
+  }
+
+  /** frames (1/60 s) from the landing until `done` holds; it fails if that takes more than a second */
+  function framesUntil(t: ReturnType<typeof dive>, done: () => boolean): number {
+    let n = 0;
+    while (!done() && n < 60) { steps(t.world, 1); n++; }
+    return n;
+  }
+
+  it('numbers: 16 damage, stun 0.5 s, knockup 120, an 84 px wide box, 0.45 s recovery that a buffered action cancels after 0.28 s', () => {
+    expect(SLAM.damage).toBe(16);
+    expect(SLAM.stun).toBe(0.5);
+    expect(SLAM.knockup).toBe(120);
+    expect(SLAM.halfW * 2).toBe(84);
+    expect(SLAM.recover).toBe(0.45);
+    expect(SLAM.cancelAfter).toBe(0.28);
+  });
+
+  it('the blow hits for 16 (a rusty sword, no bonus), stuns for 0.5 s, throws the enemy up by 120 and is unblockable melee', () => {
+    const t = dive(30, (e) => { e.knockbackTaken = 1; });
+    expect(t.e.log).toHaveLength(1);
+    const hit = t.e.log[0];
+    expect(hit.amount).toBe(16);
+    expect(hit.stun).toBe(0.5);
+    expect(hit.knockup).toBe(120);
+    expect(hit.kind).toBe('melee');
+    expect(hit.unblockable).toBe(true);
+    expect(t.e.vy).toBe(-120);
+    expect(t.e.status.stun).toBeGreaterThan(0.4);
+    expect(t.e.status.stun).toBeLessThanOrEqual(0.5);
+  });
+
+  it('the box reaches 42 px either side of her (an enemy 49 px away is hit, 51 px away is not) and the ring has the same radius', () => {
+    for (const side of [1, -1]) {
+      const near = dive(side * 49);
+      expect(near.e.log.length, `49 px ${side > 0 ? 'right' : 'left'}`).toBe(1);
+      const far = dive(side * 51);
+      expect(far.e.log.length, `51 px ${side > 0 ? 'right' : 'left'}`).toBe(0);
+    }
+    const t = setup();
+    const rings: { radius?: number }[] = [];
+    const ring = t.world.fx.ring.bind(t.world.fx);
+    t.world.fx.ring = (x, y, o) => { rings.push(o); ring(x, y, o); };
+    t.p.y = 250;
+    steps(t.world, 2);
+    t.input.tap('down');
+    let n = 0;
+    while (t.p.state !== 'slam_land' && n++ < 90) steps(t.world, 1);
+    expect(rings.map((r) => r.radius)).toContain(42);
+  });
+
+  it('the landing recovery lasts 0.45 s (she is back on her feet by 0.5 s, not by 0.4 s)', () => {
+    const t = dive(null);
+    const f = framesUntil(t, () => t.p.state !== 'slam_land');
+    expect(f / 60).toBeGreaterThanOrEqual(0.45 - 1 / 60);
+    expect(f / 60).toBeLessThanOrEqual(0.45 + 2 / 60);
+    expect(t.p.state).not.toBe('slam_land');
+  });
+
+  it('a held attack cancels the recovery only after 0.28 s', () => {
+    const t = dive(null);
+    t.input.press('attack1');
+    const f = framesUntil(t, () => t.p.state !== 'slam_land');
+    expect(f / 60).toBeGreaterThanOrEqual(0.28 - 1 / 60);
+    expect(f / 60).toBeLessThanOrEqual(0.28 + 2 / 60);
+    expect(t.p.state).toBe('attack');
+  });
+
+  it('an attack tapped early (0.2 s in) is buffered and cancels the recovery at 0.28 s, not before', () => {
+    const t = dive(null);
+    steps(t.world, 12);
+    expect(t.p.state).toBe('slam_land');
+    t.input.tap('attack1');
+    const f = 12 + framesUntil(t, () => t.p.state !== 'slam_land');
+    expect(f / 60).toBeGreaterThanOrEqual(0.28 - 1 / 60);
+    expect(f / 60).toBeLessThanOrEqual(0.28 + 2 / 60);
+    expect(t.p.state).toBe('attack');
+  });
+
+  it('a jump tapped after 0.28 s cancels the recovery at once', () => {
+    const t = dive(null);
+    steps(t.world, 18);
+    expect(t.p.state).toBe('slam_land');
+    t.input.tap('jump');
+    steps(t.world, 2);
+    expect(['jump', 'fall']).toContain(t.p.state);
   });
 });
 

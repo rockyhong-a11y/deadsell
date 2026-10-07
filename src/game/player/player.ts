@@ -42,8 +42,19 @@ const ROLL_DUR = 0.32;
 const ROLL_SPEED = 300;
 const ROLL_I0 = 0.04;
 const ROLL_I1 = 0.3;
-const SLAM_SPEED = 620;
-const SLAM_BASE_DAMAGE = 26;
+/** 내려찍기 (ground slam): the dive, the blow on landing (a box `halfW` either side of her feet; the ring has the same radius) and the recovery after it. */
+export const SLAM = {
+  speed: 620,
+  damage: 16,
+  knockback: 200,
+  knockup: 120,
+  stun: 0.5,
+  halfW: 42,
+  h: 36,
+  /** landing recovery (s), and the time after which a buffered jump / attack / skill cancels it */
+  recover: 0.45,
+  cancelAfter: 0.28,
+} as const;
 const DROP_TIME = 0.25;
 const HURT_INVULN = 0.6;
 const HEAL_TIME = FLASK.healTime;
@@ -350,7 +361,7 @@ export class Player extends Actor {
   }
 
   stepPhysics(dt: number): void {
-    const maxFall = this.mode === 'slam' ? SLAM_SPEED : MAX_FALL;
+    const maxFall = this.mode === 'slam' ? SLAM.speed : MAX_FALL;
     this.vy = Math.min(maxFall, this.vy + GRAVITY * this.gravityScale * dt);
     moveBody(this, this.world.map, dt);
   }
@@ -781,7 +792,7 @@ export class Player extends Actor {
     this.cancelActions();
     this.mode = 'slam';
     this.vx = 0;
-    this.vy = SLAM_SPEED;
+    this.vy = SLAM.speed;
     this.jumpCut = false;
     this.anim?.play('slam_dive');
     this.world.audio.play('swing_heavy', { vol: 0.5, pitch: 0.8 });
@@ -789,7 +800,7 @@ export class Player extends Actor {
   }
 
   private tickSlam(dt: number): void {
-    this.vy = SLAM_SPEED;
+    this.vy = SLAM.speed;
     this.vx = approach(this.vx, 0, 3000 * dt);
     this.anim?.play('slam_dive');
     if (Math.random() < dt * 40) this.world.particles.emit('dust', this.x, this.y - 20, { count: 1, vy: -60 });
@@ -800,28 +811,28 @@ export class Player extends Actor {
     const run = w.run;
     const item = run.weapons[0] ?? { id: 'rusty_sword' as const, tier: run.tier, affix: null };
     const infos = new Map<Actor, DamageInfo>();
-    const box = { x: this.x - 56, y: this.y - 34, w: 112, h: 36 };
+    const box = { x: this.x - SLAM.halfW, y: this.y - 34, w: SLAM.halfW * 2, h: SLAM.h };
     const reports = hitArea(w, box, 'player', (t) => {
-      const info = this.damageInfo(item, SLAM_BASE_DAMAGE, { dir: sign(t.x - this.x) || this.facing, knockback: 200, knockup: 180, stun: 1.2, kind: 'melee', unblockable: true });
+      const info = this.damageInfo(item, SLAM.damage, { dir: sign(t.x - this.x) || this.facing, knockback: SLAM.knockback, knockup: SLAM.knockup, stun: SLAM.stun, kind: 'melee', unblockable: true });
       infos.set(t, info);
       return info;
     });
     for (const r of reports) this.onDealt(r, item, infos.get(r.target)!, { hitstop: 0.08, shake: 3, sfx: 'hit_heavy' });
     w.particles.emit('slam', this.x, this.y, { count: 14 });
-    w.fx.ring(this.x, this.y - 4, { radius: 56, color: '#ffe9a8', life: 0.3 });
+    w.fx.ring(this.x, this.y - 4, { radius: SLAM.halfW, color: '#ffe9a8', life: 0.3 });
     w.shake(6, 0.28);
     w.addHitstop(reports.length ? 0.08 : 0.04);
     w.audio.play('slam');
     this.mode = 'slam_land';
     this.slamT = 0;
     this.vx = 0;
-    this.anim?.playFor('slam_land', 0.3);
+    this.anim?.playFor('slam_land', SLAM.recover);
   }
 
   private tickSlamLand(dt: number): void {
     this.slamT += dt;
     this.steer(dt, 0, false);
-    if (this.slamT >= 0.14) {
+    if (this.slamT >= SLAM.cancelAfter) {
       // buffered actions break the landing recovery early
       const inp = this.world.input;
       if (inp.pressedWithin('jump', JUMP_BUFFER) || inp.isDown('attack1') || inp.pressedWithin('attack1', ACTION_BUFFER) || inp.pressedWithin('attack2', ACTION_BUFFER) || inp.pressedWithin('skill1', ACTION_BUFFER) || inp.pressedWithin('skill2', ACTION_BUFFER)) {
@@ -830,7 +841,7 @@ export class Player extends Actor {
         return;
       }
     }
-    if (this.slamT >= 0.3) this.mode = 'free';
+    if (this.slamT >= SLAM.recover) this.mode = 'free';
   }
 
   private onLanded(vy: number): void {

@@ -942,8 +942,68 @@ function inCone(x: number, y: number, dir: number, range: number, spread: number
   return b.y < y + half && b.y + b.h > y - half;
 }
 
-/** A flame cone's numbers: length (px), fan-out, damage base per tick, seconds of burning. */
-export interface ConeSpec { range: number; spread: number; base: number; burn: number }
+/** A flame cone's numbers: length (px), fan-out, damage base per tick, seconds of burning, seconds until the next tick (how long the drawn flame lingers). */
+export interface ConeSpec { range: number; spread: number; base: number; burn: number; interval: number }
+
+/** The three nested layers of a drawn flame: length and width as a share of the cone, opacity, the colour at the nozzle and at the far end (r,g,b). */
+const FLAME_LAYERS = [
+  { len: 1, wid: 1, a: 0.34, c0: '255,120,30', c1: '220,60,16' },
+  { len: 0.8, wid: 0.74, a: 0.5, c0: '255,176,48', c1: '255,106,26' },
+  { len: 0.52, wid: 0.46, a: 0.7, c0: '255,248,208', c1: '255,224,96' },
+] as const;
+
+/**
+ * The flame of one `flameBurst` tick as a picture: a soft additive cone with exactly the size that hurts (so the 64 / 70 px reach
+ * can be read off the screen), three nested layers, the far end licking, fading until the next tick takes over. Looks only.
+ */
+class FlameJet extends Entity {
+  z = 32;
+  physics = false;
+  alwaysActive = true;
+  private t = 0;
+
+  constructor(x: number, y: number, dir: 1 | -1, private readonly range: number, private readonly spread: number, private readonly life: number) {
+    super(x, y);
+    this.facing = dir;
+  }
+
+  update(dt: number): void {
+    this.t += dt;
+    if (this.t >= this.life) this.dead = true;
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    const fade = 1 - this.t / this.life;
+    const grow = Math.min(1, 0.6 + (this.t / this.life) * 2.5);
+    const d = this.facing;
+    const x = Math.round(this.x);
+    const y = Math.round(this.y);
+    const time = this.world.time;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    FLAME_LAYERS.forEach((L, li) => {
+      const len = this.range * L.len * grow;
+      const half = (f: number) => (NOZZLE + this.range * L.len * f * this.spread) * L.wid;
+      const lick = (i: number) => 1 + 0.14 * Math.sin(time * 46 + i * 2.1 + li * 1.3);
+      const g = ctx.createLinearGradient(x, y, x + d * len, y);
+      g.addColorStop(0, `rgba(${L.c0},${L.a * fade})`);
+      g.addColorStop(0.55, `rgba(${L.c1},${L.a * fade * 0.6})`);
+      g.addColorStop(1, `rgba(${L.c1},${L.a * fade * 0.15})`); // (not to nothing: the far end stays readable as the reach)
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(x, y - NOZZLE * L.wid);
+      ctx.lineTo(x + d * len * 0.5, y - half(0.5 * grow) * lick(0));
+      ctx.lineTo(x + d * len, y - half(grow) * lick(1));
+      ctx.lineTo(x + d * len, y + half(grow) * lick(2));
+      ctx.lineTo(x + d * len * 0.5, y + half(0.5 * grow) * lick(3));
+      ctx.lineTo(x, y + NOZZLE * L.wid);
+      ctx.closePath();
+      ctx.fill();
+    });
+    ctx.restore();
+    this.world.lights.add(x + d * this.range * 0.45, y, this.range * 0.9, '#ff8a2a', 0.8 * fade, 0.12);
+  }
+}
 
 /**
  * One tick of a flame cone from (x, y) toward `dir` (화염 지팡이, 화염 포탑): every enemy inside takes `base` and burns. Flames are not
@@ -961,9 +1021,11 @@ export function flameBurst(owner: Player, item: ItemInstance, x: number, y: numb
     return info;
   });
   for (const r of reports) owner.onDealt(r, item, infos.get(r.target)!, { hitstop: 0, shake: 0, sfx: 'hit', vol: 0.25 });
-  for (let i = 0; i < 3; i++) {
-    const d = 6 + Math.random() * (o.range - 6);
-    w.particles.emit('fire', x + dir * d, y + (Math.random() - 0.5) * 2 * (NOZZLE + d * o.spread), { count: 1, vx: dir * 70 });
+  // the picture: a cone as long as the reach (it fades until the next tick) and a spray of flames running along it
+  w.spawn(new FlameJet(x, y, dir, o.range, o.spread, o.interval * 1.7)); // (two ticks overlap: no flicker between them)
+  for (let i = 0; i < 10; i++) {
+    const d = 4 + Math.random() * (o.range - 4);
+    w.particles.emit('fire', x + dir * d * 0.5, y + (Math.random() - 0.5) * 1.6 * (NOZZLE + d * 0.5 * o.spread), { count: 1, vx: dir * (50 + d * 1.6), power: 0.25 });
   }
   return reports;
 }
@@ -1133,7 +1195,7 @@ export class FlameTurret extends Entity {
     if (this.cd > 0) return;
     this.cd += sp.interval;
     const m = this.muzzle;
-    flameBurst(this.owner, this.item, m.x, m.y, this.facing, { range: sp.range, spread: sp.spread, base: this.base, burn: sp.burn });
+    flameBurst(this.owner, this.item, m.x, m.y, this.facing, { range: sp.range, spread: sp.spread, base: this.base, burn: sp.burn, interval: sp.interval });
   }
 
   draw(ctx: CanvasRenderingContext2D): void {

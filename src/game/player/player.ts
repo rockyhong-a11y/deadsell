@@ -1341,7 +1341,7 @@ export class Player extends Actor {
       if (s.def.kind === 'staff') {
         const f = s.def.flame;
         s.tick += f.interval * speed;
-        flameBurst(this, s.item, tipX, tipY, this.facing, { range: f.range, spread: f.spread, base: f.damage, burn: f.burn });
+        flameBurst(this, s.item, tipX, tipY, this.facing, { range: f.range, spread: f.spread, base: f.damage, burn: f.burn, interval: f.interval * speed });
         if (s.n++ % 2 === 0) this.world.audio.play('swing', { vol: 0.15, pitch: 0.6 });
       } else {
         // 폭풍 지팡이: a chain lightning at the nearest enemy ahead (nothing in reach: only a crackle at the tip)

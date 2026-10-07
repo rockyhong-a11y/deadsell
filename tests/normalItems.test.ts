@@ -720,6 +720,74 @@ describe('화염 지팡이: hold for a flame cone (64 px), 9 dmg / 0.15 s + burn
   });
 });
 
+describe('the flame is drawn: a cone as long as the reach plus a spray of flames (화염 지팡이, 화염 포탑)', () => {
+  /** the farthest x a flame jet paints, over all its layers (a recording 2D context) */
+  function reach(jet: { draw(c: CanvasRenderingContext2D): void }, dir: 1 | -1): { far: number; paths: number } {
+    let far = -Infinity;
+    let paths = 0;
+    const grad = { addColorStop() {} };
+    const ctx = new Proxy({} as Record<string, unknown>, {
+      get(tg, k: string) {
+        if (k === 'createLinearGradient') return () => grad;
+        if (k === 'moveTo') return () => { paths++; };
+        if (k === 'lineTo') return (x: number) => { far = Math.max(far, x * dir); };
+        return k in tg ? tg[k] : () => {};
+      },
+      set(tg, k: string, v) { tg[k] = v; return true; },
+    }) as unknown as CanvasRenderingContext2D;
+    jet.draw(ctx);
+    return { far, paths };
+  }
+  const jets = (t: Ctx) => t.world.entities.filter((e) => e.constructor.name === 'FlameJet');
+  /** the oldest jet that has grown to its full length (it takes 0.04 s) */
+  const grown = (t: Ctx) => {
+    for (let i = 0; i < 30; i++) {
+      const j = jets(t).find((e) => (e as any).t >= 0.05);
+      if (j) return j;
+      steps(t.world, 1);
+    }
+    throw new Error('no grown flame jet');
+  };
+
+  it('the staff: every 0.15 s tick adds a drawn cone reaching her 64 px (from the staff tip) and at least 8 flame particles', () => {
+    const t = setup();
+    equip(t, 'fire_staff');
+    expect(jets(t)).toHaveLength(0);
+    t.input.press('attack1');
+    steps(t.world, 14);
+    const before = t.world.particles.count;
+    expect(jets(t).length, 'a flame jet is up while she breathes').toBeGreaterThanOrEqual(1);
+    steps(t.world, 12); // (at least one more tick)
+    expect(t.world.particles.count, 'a spray of flames, not three dots').toBeGreaterThanOrEqual(before + 8);
+    const jet = grown(t);
+    const tipX = t.p.x + t.p.facing * 16;
+    const r = reach(jet as any, 1);
+    expect(r.paths, 'three layers').toBe(3);
+    expect(r.far, 'the cone reaches the 64 px of the hit area').toBeGreaterThanOrEqual(tipX + 64 * 0.95);
+    expect(r.far, '... and not farther').toBeLessThanOrEqual(tipX + 64 + 0.5);
+    t.input.release('attack1');
+    steps(t.world, 40);
+    expect(jets(t), 'it dies out soon after she lets go').toHaveLength(0);
+  });
+
+  it('the turret: its cone is 70 px long, drawn facing the way it faces (left too), and it dies out with the turret', () => {
+    const t = setup(flatMap(), 400);
+    for (const face of [1, -1] as const) {
+      const f = new FlameTurret(400, FLOOR, t.p, item('flame_turret'), SKILL_BASE.flame_turret, face, FLAME_TURRET);
+      t.world.spawn(f);
+      steps(t.world, 30);
+      const jet = grown(t);
+      const r = reach(jet as any, face);
+      const m = f.muzzle;
+      expect(r.far * 1, `facing ${face}`).toBeGreaterThanOrEqual(m.x * face + FLAME_TURRET.range * 0.95);
+      expect(r.far).toBeLessThanOrEqual(m.x * face + FLAME_TURRET.range + 0.5);
+      f.dead = true;
+    }
+    steps(t.world, 40);
+    expect(jets(t)).toHaveLength(0);
+  });
+});
+
 describe('가시 방패: parry deals 40 + bleed; block 75 %', () => {
   const guard = (id: ItemId = 'spiked_shield') => {
     const t = setup();

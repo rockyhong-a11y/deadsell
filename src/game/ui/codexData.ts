@@ -585,9 +585,9 @@ function miniBossAttacks(id: MiniBossId, dmgMult: number): string[] {
       ];
     case 'mb_arachne':
       return [
-        `거미줄 덩이: 피해 ${d(ARACHNE.web.dmg)}, 맞으면 ${secs(ARACHNE.web.root)} 속박`,
-        `도약: 플레이어 위치로 점프(그림자 표시), 반경 ${ARACHNE.leap.radius}px 피해 ${d(ARACHNE.leap.dmg)}`,
-        `물기 돌진: 짧게 덮쳐 피해 ${d(ARACHNE.bite.dmg)} + 출혈`,
+        `거미줄 덩이: ${ARACHNE.web.shots}발 부채꼴(격분 시 ${ARACHNE.web.rageShots}발), 한 발 피해 ${d(ARACHNE.web.dmg)}, 맞으면 ${secs(ARACHNE.web.root)} 속박`,
+        `도약: 플레이어 위치로 점프(그림자 표시), 반경 ${ARACHNE.leap.radius}px 피해 ${d(ARACHNE.leap.dmg)} · 격분 시 착지 직후 한 번 더 뛴다`,
+        `물기 돌진: 짧게 덮쳐 피해 ${d(ARACHNE.bite.dmg)} + 출혈 · 격분 시 2연속`,
       ];
     case 'mb_valkyrie':
       return [

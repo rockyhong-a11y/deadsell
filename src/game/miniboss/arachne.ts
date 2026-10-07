@@ -11,7 +11,7 @@ export const ARACHNE_SPEC: MiniBossSpec = {
   id: 'mb_arachne',
   name: '거미 여왕',
   biome: 'prison',
-  hp: 650,
+  hp: 820,
   w: 112,
   h: 70,
   walk: 96,
@@ -21,17 +21,19 @@ export const ARACHNE_SPEC: MiniBossSpec = {
 };
 
 export const ARACHNE = {
-  /** web blob: a little damage + roots the player */
-  web: { w: 0.75, a: 0.2, r: 0.7, dmg: 5, speed: 300, root: 1.2, aimLock: 0.7 },
-  /** leap to the player's position (shadow marker follows until `track` s before takeoff) */
-  leap: { w: 0.95, air: 0.65, r: 0.85, rise: 150, radius: 64, dmg: 20, track: 0.3 },
-  /** short lunge + bite */
-  bite: { w: 0.5, a: 0.28, r: 0.65, dmg: 17, lunge: 340, reach: 70 },
+  /** web blobs: a fan of `shots` (enraged `rageShots`), `spread` rad apart; a little damage + roots the player */
+  web: { w: 0.75, a: 0.2, r: 0.7, dmg: 5, speed: 360, root: 1.2, aimLock: 0.7, shots: 3, rageShots: 5, spread: 0.22 },
+  /** leap to the player's position (shadow marker follows until `track` s before takeoff); enraged she leaps again right after landing, at where the player stood when she touched down (`w2` = that second windup, the marker stays put) */
+  leap: { w: 0.95, w2: 0.45, air: 0.65, r: 0.85, rise: 150, radius: 76, dmg: 24, track: 0.3 },
+  /** short lunge + bite; enraged it is a double bite (`w2` = the second windup) */
+  bite: { w: 0.42, w2: 0.4, a: 0.28, r: 0.65, dmg: 17, lunge: 340, reach: 70 },
 } as const;
 
 export type ArachneAttack = 'web' | 'leap' | 'bite';
 
 export class Arachne extends MiniBoss {
+  /** index of the swing of the leap / bite chain in progress (1 = the follow-up of an enraged chain) */
+  swing = 0;
   private aim = { x: 0, y: 0 };
   private leapTx = 0;
   private leapX0 = 0;
@@ -65,8 +67,25 @@ export class Arachne extends MiniBoss {
     const ws = this.ws;
     const rs = this.rs;
     if (name === 'web') return { w: ARACHNE.web.w * ws, a: ARACHNE.web.a, r: ARACHNE.web.r * rs };
-    if (name === 'leap') return { w: ARACHNE.leap.w * ws, a: ARACHNE.leap.air, r: ARACHNE.leap.r * rs, anim: null };
-    return { w: ARACHNE.bite.w * ws, a: ARACHNE.bite.a, r: ARACHNE.bite.r * rs };
+    if (name === 'leap') {
+      const L = ARACHNE.leap;
+      if (!this.rage) return { w: L.w * ws, a: L.air, r: L.r * rs, anim: null };
+      // enraged: a second leap right after the landing
+      this.queue.push({ w: L.w2 * ws, a: L.air, r: L.r * rs, anim: null });
+      return { w: L.w * ws, a: L.air, r: 0, anim: null };
+    }
+    const B = ARACHNE.bite;
+    if (!this.rage) return { w: B.w * ws, a: B.a, r: B.r * rs };
+    // enraged: a second bite right after the first
+    this.queue.push({ w: B.w2 * ws, a: B.a, r: B.r * rs });
+    return { w: B.w * ws, a: B.a, r: 0 };
+  }
+
+  /** The angles (rad, relative to the aim) the web blobs leave at; the warning lines use the same ones. */
+  private webAngles(): number[] {
+    const W = ARACHNE.web;
+    const n = this.rage ? W.rageShots : W.shots;
+    return Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * W.spread);
   }
 
   /** where the web leaves her (mouth) */
@@ -75,6 +94,7 @@ export class Arachne extends MiniBoss {
   }
 
   protected onAttackBegin(name: string, p: Player): void {
+    this.swing = 0;
     if (name === 'web') this.aim = { x: p.x, y: p.cy };
     else if (name === 'leap') {
       this.leapTx = this.inArena(p.x, 60);
@@ -83,12 +103,26 @@ export class Arachne extends MiniBoss {
     }
   }
 
+  /** The follow-up of an enraged chain just entered its windup: the second leap is aimed where the player is as she lands, the second bite turns to him. */
+  protected onChainStep(): void {
+    this.swing = 1;
+    const p = this.world.player;
+    if (this.attack === 'leap') {
+      this.leapTx = this.inArena(p.x, 60);
+      const s = this.atk!;
+      this.anim?.playFor('leap', s.w + s.a);
+      this.faceToward({ x: this.leapTx });
+    } else this.faceToward(p);
+    this.lockedFacing = this.facing;
+  }
+
   protected windup(name: string, dt: number, p: Player): void {
     super.windup(name, dt, p);
     const s = this.atk!;
     if (name === 'web' && this.stateT < s.w * ARACHNE.web.aimLock && p.targetable) this.aim = { x: p.x, y: p.cy };
     else if (name === 'leap') {
-      if (this.stateT < s.w - ARACHNE.leap.track && p.targetable) this.leapTx = this.inArena(p.x, 60);
+      // the first leap follows the player until `track` s before takeoff; the second one stays where it was aimed
+      if (this.swing === 0 && this.stateT < s.w - ARACHNE.leap.track && p.targetable) this.leapTx = this.inArena(p.x, 60);
       this.faceToward({ x: this.leapTx });
     }
   }
@@ -98,8 +132,7 @@ export class Arachne extends MiniBoss {
     if (name === 'web') {
       const m = this.mouth();
       const base = Math.atan2(this.aim.y - m.y, this.aim.x - m.x);
-      const shots = this.rage ? [-0.22, 0, 0.22] : [0];
-      for (const off of shots) {
+      for (const off of this.webAngles()) {
         const a = base + off;
         const blob = new WebBlob(m.x, m.y, Math.cos(a) * ARACHNE.web.speed, Math.sin(a) * ARACHNE.web.speed, this.dmg(ARACHNE.web.dmg), ARACHNE.web.root, this);
         this.blobs = this.blobs.filter((b) => !b.dead);
@@ -176,8 +209,7 @@ export class Arachne extends MiniBoss {
     if (name === 'web') {
       const m = this.mouth();
       const a = Math.atan2(this.aim.y - m.y, this.aim.x - m.x);
-      const shots = this.rage ? [-0.22, 0, 0.22] : [0];
-      for (const off of shots) warnLine(ctx, m.x, m.y, m.x + Math.cos(a + off) * 360, m.y + Math.sin(a + off) * 360, 0.3 + 0.5 * p, 2, '#ff3b30', 4);
+      for (const off of this.webAngles()) warnLine(ctx, m.x, m.y, m.x + Math.cos(a + off) * 360, m.y + Math.sin(a + off) * 360, 0.3 + 0.5 * p, 2, '#ff3b30', 4);
     } else if (name === 'bite') {
       const b = this.biteBox();
       warnRect(ctx, b.x, b.y, b.w, b.h, p, t);

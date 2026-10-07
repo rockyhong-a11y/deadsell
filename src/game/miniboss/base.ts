@@ -17,7 +17,7 @@ export interface MiniBossSpec {
   /** Korean display name (name card + HP bar) */
   name: string;
   biome: 'prison' | 'ramparts';
-  /** hp before tier scaling (prison ~650, ramparts ~900) */
+  /** hp before tier scaling (prison ~650-820, ramparts ~900) */
   hp: number;
   /** hurt box (px) */
   w: number;

@@ -34,7 +34,7 @@ const NAMES: Record<MiniBossId, string> = {
   mb_valkyrie: '발키리 기사단장',
   mb_witch: '달의 마녀',
 };
-const HP: Record<MiniBossId, number> = { mb_abbess: 650, mb_arachne: 650, mb_valkyrie: 900, mb_witch: 900 };
+const HP: Record<MiniBossId, number> = { mb_abbess: 650, mb_arachne: 820, mb_valkyrie: 900, mb_witch: 900 };
 
 /** One probe per attack: where the player stands (dx in front of the boss) so that attack can reach it. */
 const PROBES: Record<MiniBossId, { attack: string; dx: number; damages: boolean }[]> = {
@@ -153,9 +153,9 @@ describe('mid-boss factory', () => {
     expect(isMiniBoss(null)).toBe(false);
   });
 
-  it('prison bosses ~650 hp, ramparts bosses ~900 hp before tier scaling', () => {
+  it('prison bosses 650 / 820 hp (abbess / spider queen), ramparts bosses ~900 hp before tier scaling', () => {
     expect(HP.mb_abbess).toBe(650);
-    expect(HP.mb_arachne).toBe(650);
+    expect(HP.mb_arachne).toBe(820);
     expect(HP.mb_valkyrie).toBe(900);
     expect(HP.mb_witch).toBe(900);
   });
@@ -231,7 +231,8 @@ describe.each(MINIBOSS_IDS)('%s: attacks are telegraphed', (id) => {
       const pin = place(t, probe.dx);
       t.boss.facing = 1;
       const w = t.boss.windupOf(probe.attack);
-      expect(w).toBeGreaterThanOrEqual(0.5);
+      // the quickest warning of any mid-boss attack is the spider queen's bite (0.42 s)
+      expect(w).toBeGreaterThanOrEqual(0.4);
       const f0 = t.now();
       const bx0 = t.boss.x;
       const ghouls = () => t.world.entities.filter((e) => (e as any).kind === 'ghoul').length;

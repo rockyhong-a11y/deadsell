@@ -58,7 +58,7 @@ One mid-boss per biome per run, picked from that biome's two by the run seed, fo
 room on the main path (template tag `miniboss`, marker `N`). On engage: name card + a mid-boss HP bar
 (event `{type:'minibossStart', boss, name}`; on death `{type:'minibossDefeated', boss}`).
 **Drop on death: one weapon AND one skill** (tier + 1, affix guaranteed) via spawnItemDrop, plus
-cells ×10–15 and gold ×60–100. HP ≈ 650 (prison) / 900 (ramparts) before tier scaling. Knockback 0,
+cells ×10–15 and gold ×60–100. HP ≈ 650–820 (prison) / 900 (ramparts) before tier scaling. Knockback 0,
 hitstun only on parry/stun. Every attack is telegraphed (wind-up pose + flash + markers).
 
 Sheets: frame **224×176, anchor (112,164)** (feet/base centre), facing +X, 32 px/unit.

@@ -14,6 +14,12 @@ export const SELMA_LINES = [
 
 /** how long she sews (s) after a craft */
 const SEW_TIME = 1.2;
+/**
+ * How far above her feet the banter bubble's tail ends (world px): clear of the interact prompt, whose top edge is 100 to 122
+ * px above them at the three world resolutions (HUD `drawPrompt`: the anchor 60 px up, 12 px gap, the 38 px bubble, scaled by
+ * UI px per world px = 1.25 / 1 / 0.83).
+ */
+const BUBBLE_Y = -122;
 
 /**
  * Selma (셀마), the corpse seamstress of every 쉼터 (docs/CONTENT4.md §4): she crafts unique items from what the heroine keeps
@@ -41,8 +47,8 @@ export class Seamstress extends Prop implements Interactable {
   }
 
   promptText(): string {
-    // while her line is up the bubble has the stage: the prompt (drawn over the same spot) steps aside, an empty label is not drawn
-    return this.lineT > 0 ? '' : '조합';
+    // always there, also while her line is up (the bubble sits above it): the prompt is the tap target of the craft screen
+    return '조합';
   }
 
   promptSub(): string | null {
@@ -89,7 +95,7 @@ export class Seamstress extends Prop implements Interactable {
     this.anim?.draw(ctx, this.x, this.y, this.facing < 0);
     const flick = 0.2 + 0.06 * Math.sin(this.world.time * 3) + (this.sewT > 0 ? 0.25 : 0);
     drawSoftGlow(ctx, this.x - 10 * this.facing, this.y - 40, 28, '#ff5a6e', flick);
-    if (this.lineT > 0) drawBubble(ctx, this.line, this.x, this.y - 78);
+    if (this.lineT > 0) drawBubble(ctx, this.line, this.x, this.y + BUBBLE_Y);
     this.world.lights.add(this.x, this.y - 40, 84, '#ff7a86', 0.65 + (this.sewT > 0 ? 0.4 : 0), 0.1);
   }
 }

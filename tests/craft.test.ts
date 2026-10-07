@@ -565,11 +565,58 @@ describe('Selma opens the craft screen', () => {
     expect(cb).toBeTypeOf('function');
     expect(selma.promptText()).toBe('조합'); // she says nothing before the craft
     cb!('bone_cleaver');
-    expect(selma.promptText()).toBe(''); // her line is up
+    expect(selma.promptText()).toBe('조합'); // her line is up: the prompt (the touch target) stays
     steps(t.world, 2);
     expect(selma.anim?.name).toBe('sew');
     steps(t.world, 100);
     expect(selma.anim?.name).not.toBe('sew');
+  });
+});
+
+describe('Selma keeps her prompt up while she talks after a craft (qa#3)', () => {
+  it('the hud-interact tap region stays registered for the whole banter, and her bubble is drawn above the prompt (all three world resolutions)', () => {
+    for (const worldH of [288, 360, 432]) {
+      const a = uiSetup(640);
+      const k = 360 / worldH;
+      a.game.display = { W: 640, H: 360, scale: 1, canvas: null, worldH } as any;
+      const selma = new Seamstress(300, FLOOR);
+      a.world.spawn(selma);
+      steps(a.world, 2);
+      (a.world.player as any).nearInteract = selma;
+      // Selma's feet 230 UI px down the screen, so that neither clamp of the prompt interferes
+      a.world.camera.x = 0;
+      a.world.camera.y = FLOOR - 230 / k;
+      selma.sew();
+      expect(selma.promptText()).toBe('조합');
+      const bubble: { by: number; h: number }[] = [];
+      const wc = ctxFake();
+      const rec = new Proxy(wc as any, {
+        get(t, key: string) {
+          if (key === 'fillRect') return (_x: number, y: number, _w: number, h: number) => { bubble.push({ by: y, h }); };
+          return t[key];
+        },
+        set(t, key: string, v) { t[key] = v; return true; },
+      }) as CanvasRenderingContext2D;
+      for (let f = 0; f < 150; f++) {
+        a.world.camera.y = FLOOR - 230 / k;
+        a.frame();
+        if (f % 30 === 0) {
+          const r = a.game.taps.byId('hud-interact');
+          expect(r, `tap region at frame ${f} (lineT ${(selma as any).lineT.toFixed(2)}, worldH ${worldH})`).toBeTruthy();
+          bubble.length = 0;
+          selma.draw(rec);
+          const bg = bubble.find((b) => b.h === 20); // (the bubble is 20 px high; the glow is a bigger fillRect)
+          expect(bg, 'the bubble background is drawn while she talks').toBeTruthy();
+          // bubble bottom edge (world px, y down) vs the top of the prompt (UI px -> world px)
+          const bubbleBottom = bg.by + bg.h;
+          const promptTop = a.world.camera.viewY + (r!.rect.y + 1) / k;
+          expect(bubbleBottom, `bubble above the prompt @worldH ${worldH}`).toBeLessThanOrEqual(promptTop);
+        }
+      }
+      steps(a.world, 200);
+      expect((selma as any).lineT, 'the line ran out and she is quiet again').toBeLessThanOrEqual(0);
+      expect(selma.promptText()).toBe('조합');
+    }
   });
 });
 

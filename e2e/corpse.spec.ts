@@ -282,7 +282,7 @@ test('loot that dropped just before the exit is not lost to the fade', async ({ 
   expect(c.errors).toEqual([]);
 });
 
-test('쉼터 details: Selma\'s banter bubble (after a craft) is not covered by the prompt, the golem\'s hp bar sits above its head', async ({ page }) => {
+test('쉼터 details: Selma\'s banter bubble (after a craft) sits above her prompt (which stays, with its tap region), the golem\'s hp bar sits above its head', async ({ page }) => {
   const c = await boot(page, { query: '?seed=5&god=1' });
   await recordText(page);
   await startRun(page, 5);
@@ -295,9 +295,10 @@ test('쉼터 details: Selma\'s banter bubble (after a craft) is not covered by t
   await page.waitForTimeout(400);
   const texts = await drawn(page);
   expect(texts.some((t) => /[가-힣]/.test(t) && t.length > 8 && !t.startsWith('재봉사')), 'her line is drawn').toBe(true);
-  expect(texts, 'the prompt steps aside while she talks').not.toContain('조합');
+  expect(texts, 'the prompt stays while she talks (it is the touch target)').toContain('조합');
+  expect(await page.evaluate(() => !!(window as any).__ds.game.taps.byId('hud-interact')), 'its tap region too').toBe(true);
   await shot(page, '16_selma_banter');
-  // the prompt returns when the line is gone
+  // and after the line is gone
   await page.waitForTimeout(3300);
   await clearText(page);
   await page.waitForTimeout(300);

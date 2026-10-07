@@ -395,7 +395,7 @@ function skillEntry(id: ItemId): CodexEntry {
   } else if (id === 'phaser') {
     const p = PHASER;
     rows.push(
-      { label: '효과', text: `반경 ${p.range}px 안의 가장 가까운 적의 등 뒤로 순간이동해 ${secs(p.stun)} 기절시킨다 (적이 없으면 쿨다운도 쓰지 않는다)` },
+      { label: '효과', text: `반경 ${p.range}px 안에서 보이는 가장 가까운 적의 등 뒤로 순간이동해 ${secs(p.stun)} 기절시킨다 (벽 너머이거나 내려설 바닥이 없으면 건너뛴다 · 갈 곳이 없으면 쿨다운도 쓰지 않는다)` },
       { label: '', text: `이동한 뒤 ${secs(p.critWindow)} 안의 첫 무기 공격은 치명타 (피해 ×${CRIT_MULT})` },
     );
   } else if (id === 'wave_of_denial') {

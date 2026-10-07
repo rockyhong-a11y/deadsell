@@ -1263,6 +1263,105 @@ describe('위상 전이: teleport behind the nearest enemy within 160 px, stun i
   });
 });
 
+describe('위상 전이 only goes where she can see and stand (spec#3, qa#6)', () => {
+  const COL = (x: number) => Math.floor(x / 24);
+  /** a flat map where the floor is missing in the columns of x0..x1 (a pit) */
+  const pitMap = (x0: number, x1: number) => {
+    const m = flatMap();
+    for (let c = COL(x0); c <= COL(x1); c++) { m.set(c, 16, T.Empty); m.set(c, 17, T.Empty); }
+    return m;
+  };
+  const cast = (t: Ctx) => {
+    t.input.tap('skill1');
+    steps(t.world, 30);
+  };
+  const dummy = (t: Ctx, x: number, y = FLOOR, o: { flyer?: boolean; grounded?: boolean; facing?: 1 | -1 } = {}) => {
+    const e = new Dummy(x, y);
+    e.facing = o.facing ?? -1;
+    if (o.flyer) e.gravityScale = 0;
+    if (o.grounded) e.onGround = true;
+    t.world.spawn(e);
+    return e;
+  };
+
+  it('an enemy behind a wall is not a target: she stays and keeps the cooldown; with a second enemy in sight she goes to that one instead', () => {
+    const m = flatMap();
+    for (let y = 1; y < 16; y++) m.set(COL(348), y, T.Solid);
+    const t = setup(m, 300);
+    equip(t, 'phaser');
+    const behindWall = dummy(t, 380);
+    steps(t.world, 1);
+    cast(t);
+    expect(t.p.x, 'through the wall: no').toBe(300);
+    expect(t.p.skillCooldown[0]).toBe(0);
+    expect(behindWall.status.stun).toBe(0);
+    // another enemy on her side, farther away than the one behind the wall
+    const seen = dummy(t, 180);
+    steps(t.world, 1);
+    cast(t);
+    expect(Math.abs(t.p.x - seen.x), 'next nearest in sight').toBeLessThan(30);
+    expect(t.p.x).toBeLessThan(300);
+    expect(seen.status.stun).toBeGreaterThan(0.4);
+    expect(behindWall.status.stun).toBe(0);
+    expect(t.p.skillCooldown[0]).toBeGreaterThan(5);
+  });
+
+  it('a flyer over a pit: nothing happens (no cooldown); over the floor she lands on the floor, not in the air at its height', () => {
+    const t = setup(pitMap(300, 380), 230);
+    equip(t, 'phaser');
+    dummy(t, 330, FLOOR - 60, { flyer: true });
+    steps(t.world, 1);
+    cast(t);
+    expect(t.p.x).toBe(230);
+    expect(t.p.skillCooldown[0]).toBe(0);
+    // the same flyer above the floor
+    const u = setup(flatMap(), 230);
+    equip(u, 'phaser');
+    const f = dummy(u, 330, FLOOR - 60, { flyer: true });
+    steps(u.world, 1);
+    cast(u);
+    expect(Math.abs(u.p.x - f.x)).toBeLessThan(30);
+    expect(u.p.skillCooldown[0]).toBeGreaterThan(5);
+    expect(u.p.y, 'on the floor').toBe(FLOOR);
+    expect(u.p.vy).toBeGreaterThanOrEqual(0);
+  });
+
+  it('spikes beside the enemy are no landing: with spikes on both sides she does not go, with spikes only at its back she appears at its front', () => {
+    const both = flatMap();
+    for (let c = COL(300); c <= COL(360); c++) both.set(c, 15, T.Spikes);
+    const t = setup(both, 230);
+    equip(t, 'phaser');
+    dummy(t, 330, FLOOR, { grounded: true });
+    steps(t.world, 1);
+    cast(t);
+    expect(t.p.x).toBe(230);
+    expect(t.p.skillCooldown[0]).toBe(0);
+    // spikes only behind it (it looks at her, so its back is the right side)
+    const back = flatMap();
+    for (let c = COL(341); c <= COL(380); c++) back.set(c, 15, T.Spikes);
+    const u = setup(back, 230);
+    equip(u, 'phaser');
+    const e = dummy(u, 330, FLOOR, { grounded: true });
+    steps(u.world, 1);
+    cast(u);
+    expect(u.p.x, 'in front of it').toBeLessThan(e.x);
+    expect(Math.abs(u.p.x - e.x)).toBeLessThan(30);
+    expect(u.p.skillCooldown[0]).toBeGreaterThan(5);
+  });
+
+  it('a pit behind a grounded enemy at a ledge: she lands in front of it, on the floor', () => {
+    const t = setup(pitMap(340, 500), 230);
+    equip(t, 'phaser');
+    const e = dummy(t, 330, FLOOR, { grounded: true });
+    steps(t.world, 1);
+    cast(t);
+    expect(t.p.x).toBeLessThan(e.x);
+    expect(Math.abs(t.p.x - e.x)).toBeLessThan(30);
+    expect(t.p.y).toBe(FLOOR);
+    expect(t.p.skillCooldown[0]).toBeGreaterThan(5);
+  });
+});
+
 describe('거부의 파동: pushes every enemy in r 110 away (knockback 420), 12 dmg, destroys enemy projectiles in range', () => {
   function wave() {
     const t = setup(flatMap(), 300);

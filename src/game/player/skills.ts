@@ -4,6 +4,8 @@ import type { ItemId, ItemInstance } from '../items/types';
 import type { Player } from './player';
 import { BoneSpikes, ChainHook, FlameTurret, Grenade, SoulFlames, TeslaCoil, Tornado, Turret, WolfTrap, denialWave, type GrenadeSpec, type GrenadeType } from './projectiles';
 import { ChainPrison, DeathOrb, NeedleRain, PlagueAura, lastBell, summonDoll } from './uniques';
+import { TILE } from '../../engine/config';
+import { T } from '../tilemap';
 
 /**
  * Skills (skill1 / skill2). Cooldown lives in ITEMS[id].cooldown; numbers here.
@@ -90,42 +92,64 @@ function lob(p: Player, item: ItemInstance, type: GrenadeType, base: number, spe
   p.world.spawn(new Grenade(p.x + p.facing * 8, p.y - 30, vx, -270, p, item, type, base, spec));
 }
 
+/** how far (px) below a flying target a phaser landing may look for the floor */
+const PHASE_DROP = 4 * TILE;
+
 /**
- * 위상 전이: she appears right behind the nearest enemy in reach (the side it does not face; the other side when a wall is there),
- * stunning it, and her next weapon hit crits. False when there is no enemy to reach or no room behind or in front of it.
+ * Where she would stand at `x` beside `target`: on its own level when it stands on the floor, else on the floor below that spot
+ * (a flyer hangs in the air). Null when there is no floor under it (a pit) or the box would overlap a wall or spikes.
+ */
+function phaseSpot(p: Player, target: Actor, x: number): number | null {
+  const map = p.world.map;
+  let y = target.y;
+  if (!target.onGround) {
+    const f = map.floorBelow(x, target.y, PHASE_DROP);
+    if (f === null) return null;
+    y = f;
+  } else {
+    const f = map.floorBelow(x, y - 4, 12);
+    if (f === null || Math.abs(f - y) > 6) return null;
+  }
+  const box = { x: x - p.w / 2, y: y - p.h, w: p.w, h: p.h };
+  if (map.boxSolid({ ...box, h: box.h - 2 }) || map.boxHas(box, T.Spikes)) return null;
+  // not through a wall: the spot is in sight of the enemy
+  return map.lineOfSight(target.cx, target.cy, x, y - p.h / 2) ? y : null;
+}
+
+/**
+ * 위상 전이: she appears right behind the nearest enemy in reach and in sight (the side it does not face; the other side when that
+ * has no room or no floor), stunning it, and her next weapon hit crits. A target behind a wall, or one with no floor to land on at
+ * either side (a pit, spikes), is skipped for the next nearest. False when none is left: nothing happens and the cooldown is kept.
  */
 function phase(p: Player): boolean {
   const w = p.world;
-  let target: Actor | null = null;
-  let bd: number = PHASER.range;
-  for (const a of w.actors) {
-    if (a.team !== 'enemy' || !a.targetable) continue;
-    const d = Math.hypot(a.cx - p.x, a.cy - (p.y - p.h / 2));
-    if (d < bd) {
-      bd = d;
-      target = a;
+  const cy = p.y - p.h / 2;
+  const targets = w.actors
+    .filter((a) => a.team === 'enemy' && a.targetable)
+    .map((a) => ({ a, d: Math.hypot(a.cx - p.x, a.cy - cy) }))
+    .filter(({ a, d }) => d < PHASER.range && w.map.lineOfSight(p.x, cy, a.cx, a.cy))
+    .sort((u, v) => u.d - v.d);
+  for (const { a: target } of targets) {
+    const gap = target.w / 2 + p.w / 2 + 4;
+    const behind = -target.facing;
+    for (const side of [behind, -behind]) {
+      const x = target.x + side * gap;
+      const y = phaseSpot(p, target, x);
+      if (y === null) continue;
+      w.particles.emit('magic', p.x, p.y - 20, { count: 10, color: '#c690ff' });
+      w.fx.ring(p.x, p.y - 20, { radius: 24, color: '#c690ff', life: 0.25 });
+      p.x = x;
+      p.y = y;
+      p.vx = p.vy = 0;
+      p.facing = (-side) as 1 | -1; // turned toward its back
+      target.status.stun = Math.max(target.status.stun, PHASER.stun);
+      p.armCrit(PHASER.critWindow);
+      w.particles.emit('magic', p.x, p.y - 20, { count: 10, color: '#c690ff' });
+      w.fx.ring(p.x, p.y - 20, { radius: 30, color: '#e8d8ff', life: 0.3 });
+      w.fx.screenFlash('#c690ff', 0.08, 0.25);
+      w.audio.play('roll', { pitch: 1.6 });
+      return true;
     }
-  }
-  if (!target) return false;
-  const gap = target.w / 2 + p.w / 2 + 4;
-  const behind = -target.facing;
-  for (const side of [behind, -behind]) {
-    const x = target.x + side * gap;
-    const y = target.y;
-    if (w.map.boxSolid({ x: x - p.w / 2, y: y - p.h, w: p.w, h: p.h - 2 })) continue;
-    w.particles.emit('magic', p.x, p.y - 20, { count: 10, color: '#c690ff' });
-    w.fx.ring(p.x, p.y - 20, { radius: 24, color: '#c690ff', life: 0.25 });
-    p.x = x;
-    p.y = y;
-    p.vx = p.vy = 0;
-    p.facing = (-side) as 1 | -1; // turned toward its back
-    target.status.stun = Math.max(target.status.stun, PHASER.stun);
-    p.armCrit(PHASER.critWindow);
-    w.particles.emit('magic', p.x, p.y - 20, { count: 10, color: '#c690ff' });
-    w.fx.ring(p.x, p.y - 20, { radius: 30, color: '#e8d8ff', life: 0.3 });
-    w.fx.screenFlash('#c690ff', 0.08, 0.25);
-    w.audio.play('roll', { pitch: 1.6 });
-    return true;
   }
   return false;
 }

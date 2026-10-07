@@ -7,7 +7,8 @@ import { T, type TileMap } from '../src/game/tilemap';
 import { defaultSave, loadSave } from '../src/game/meta/save';
 import { META_UPGRADES, buyUpgrade, unlockedCount } from '../src/game/meta/progression';
 import { CRIT_MULT, AFFIX } from '../src/game/rules';
-import { ITEMS, itemLines, rollItem } from '../src/game/items/items';
+import { HOLD_HINT, ITEMS, holdHint, itemLines, rollItem } from '../src/game/items/items';
+import { spawnItemDrop } from '../src/game/items/pickups';
 import { ITEM_IDS, STARTER_UNLOCKS, UNIQUE_IDS, type ItemId, type ItemInstance } from '../src/game/items/types';
 import { Rng } from '../src/engine/rng';
 import { WEAPONS, type BowWeapon, type MeleeWeapon, type ShieldWeapon, type StaffWeapon, type WeaponDef } from '../src/game/player/weapons';
@@ -785,6 +786,38 @@ describe('the flame is drawn: a cone as long as the reach plus a spray of flames
     }
     steps(t.world, 40);
     expect(jets(t)).toHaveLength(0);
+  });
+});
+
+describe('hold weapons say where they work best while the controls are gestures (qa#2, spec#4)', () => {
+  it('holdHint: the 철 도 charge, both staffs and every bow, in gesture mode only; no other weapon, no skill', () => {
+    const hold = new Set<string>();
+    for (const id of ITEM_IDS) {
+      const h = holdHint(id, 'gesture');
+      const w = (WEAPONS as Record<string, WeaponDef>)[id];
+      const wants = !!w && (w.kind === 'bow' || w.kind === 'staff' || w.kind === 'wand' || (w.kind === 'melee' && !!w.dash));
+      expect(h, id).toBe(wants ? HOLD_HINT : null);
+      if (h) hold.add(id);
+      for (const mode of ['buttons', 'gamepad', 'keyboard']) expect(holdHint(id, mode), `${id} in ${mode}`).toBeNull();
+    }
+    expect(HOLD_HINT).toBe('길게 눌러 쓰는 무기: 보조 칸에서 최대 효과');
+    for (const id of ['iron_katana', 'fire_staff', 'hunter_bow', 'multi_bow', 'ice_bow', 'heavy_crossbow', 'storm_staff', 'soulfire_bow'] as const) expect(hold.has(id), id).toBe(true);
+    for (const id of ['rusty_sword', 'broadsword', 'old_shield', 'turret'] as const) expect(hold.has(id), id).toBe(false);
+  });
+
+  it('the pickup choice (both slots taken) carries the line for a hold weapon in gesture mode, not in virtual-button mode or for a sword', () => {
+    for (const [id, mode, want] of [['iron_katana', 'gesture', true], ['fire_staff', 'gesture', true], ['hunter_bow', 'gesture', true], ['iron_katana', 'buttons', false], ['broadsword', 'gesture', false]] as const) {
+      const t = setup();
+      t.game.save.settings.controlMode = mode;
+      t.run.weapons = [item('rusty_sword'), item('old_shield')];
+      let note: string | undefined | null = null;
+      (t.world as any).ui.openChoice = (_t: string, _o: unknown, pick: (i: number) => void, _c?: boolean, n?: string) => { note = n; pick(-1); };
+      spawnItemDrop(t.world, t.p.x + 8, FLOOR, item(id));
+      steps(t.world, 40);
+      t.input.tap('interact');
+      steps(t.world, 3);
+      expect(note, `${id} in ${mode}`).toBe(want ? HOLD_HINT : undefined);
+    }
   });
 });
 

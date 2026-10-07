@@ -7,7 +7,7 @@ import { GRAVITY, MAX_FALL } from '../../engine/config';
 import { approach, overlaps } from '../../engine/math';
 import { moveBody } from '../physics';
 import type { ItemInstance } from './types';
-import { ITEMS, COLOR_NAMES, itemColor, itemLines, itemName, AFFIX_NAMES } from './items';
+import { ITEMS, COLOR_NAMES, holdHint, itemColor, itemLines, itemName, AFFIX_NAMES } from './items';
 import { CORPSE, FOODS, SCROLL, STASH } from '../rules';
 import { addToStash, stashFull } from '../meta/stash';
 
@@ -345,7 +345,7 @@ class ItemDrop extends Drop implements Interactable {
       const old = slots[i];
       slots[i] = this.inst;
       this.finish(old);
-    }, true);
+    }, true, holdHint(this.inst.id, save.settings.controlMode) ?? undefined); // (a hold weapon: say where it works best)
   }
 
   private finish(replaced: ItemInstance | null, stashed = false): void {

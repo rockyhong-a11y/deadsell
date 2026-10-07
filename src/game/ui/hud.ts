@@ -4,7 +4,7 @@ import type { LevelUI } from './levelUI';
 import type { Entity } from '../entity';
 import type { Interactable } from '../world';
 import type { ItemInstance } from '../items/types';
-import { ITEMS, UNIQUE_COLOR, UNIQUE_TAG, itemColor, itemName, itemLines, signatureText } from '../items/items';
+import { ITEMS, UNIQUE_COLOR, UNIQUE_TAG, holdHint, itemColor, itemName, itemLines, signatureText } from '../items/items';
 import { COLOR_HEX } from '../combat';
 import { touchView } from './touch';
 import { drawVButtons, vbLayout, type VSkillView } from './vbuttons';
@@ -582,6 +582,9 @@ export class Hud {
     const sig = def.unique && signatureText(item.id) ? itemLines(item).length - 1 : -1; // the signature line of a unique item is its last
     const accent = itemColor(item.id);
     const lines = itemLines(item).flatMap((l, i) => wrap(c, l, textW, SZ.s).map((s) => ({ s, color: i === 0 ? COL.text : i === sig ? accent : COL.amber })));
+    // a weapon that has to be held, with the gesture controls: where it works best
+    const hint = holdHint(item.id, this.ui.game.save.settings.controlMode);
+    if (hint) lines.push(...wrap(c, hint, textW, SZ.s).map((s) => ({ s, color: COL.cyan })));
     const h = Math.max(46, 24 + lines.length * 13 + 8);
     const x = clamp(Math.round(bubble.x + bubble.w / 2 - w / 2), 4, W - 4 - w);
     const y = Math.max(4, bubble.y - h - 8);

@@ -118,9 +118,9 @@ export class LevelUI {
   }
 
   /** Modal choice (scrolls, item swap). Calls onPick with the chosen index, or -1 if cancelled. */
-  openChoice(title: string, options: ChoiceOption[], onPick: (i: number) => void, cancellable = true): void {
+  openChoice(title: string, options: ChoiceOption[], onPick: (i: number) => void, cancellable = true, note?: string): void {
     this.game.audio.play('ui_open');
-    this.push(new ChoiceModal(this, title, options, onPick, cancellable));
+    this.push(new ChoiceModal(this, title, options, onPick, cancellable, note));
   }
 
   openAlchemist(): void {

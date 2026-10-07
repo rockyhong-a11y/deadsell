@@ -77,7 +77,8 @@ export class ChoiceModal extends Modal {
   sel = 0;
   private done = false;
 
-  constructor(ui: LevelUI, readonly title: string, readonly options: ChoiceOption[], private onPick: (i: number) => void, readonly cancellable: boolean) {
+  /** `note`: one more line of advice under the cards (amber) */
+  constructor(ui: LevelUI, readonly title: string, readonly options: ChoiceOption[], private onPick: (i: number) => void, readonly cancellable: boolean, readonly note?: string) {
     super(ui);
     const first = options.findIndex((o) => !o.disabled);
     this.sel = Math.max(0, first);
@@ -147,7 +148,8 @@ export class ChoiceModal extends Modal {
       this.hit('choice' + i, r, () => this.pick(i));
     });
     const hintY = (rects[0]?.y ?? 0) + (rects[0]?.h ?? 0) + 22;
-    text(c, this.cancellable ? '카드를 터치해 선택 · 빈 곳을 터치하면 취소' : '카드를 터치해 선택', W / 2, hintY, { align: 'center', color: COL.dim });
+    if (this.note) text(c, this.note, W / 2, hintY, { align: 'center', color: COL.amber });
+    text(c, this.cancellable ? '카드를 터치해 선택 · 빈 곳을 터치하면 취소' : '카드를 터치해 선택', W / 2, hintY + (this.note ? 16 : 0), { align: 'center', color: COL.dim });
     c.globalAlpha = 1;
   }
 }

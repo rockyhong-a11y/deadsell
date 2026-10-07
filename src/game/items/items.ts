@@ -211,6 +211,21 @@ function higherSignature(id: ItemId, dmg: (base: number) => number): string {
   }
 }
 
+/** What the card of a weapon that has to be held says while the controls are gestures (a tap is all the primary slot gets). */
+export const HOLD_HINT = '길게 눌러 쓰는 무기: 보조 칸에서 최대 효과';
+
+/**
+ * Hold weapons (the 철 도 charge, the staffs, every bow) need the button held. With the gesture controls the right half of the screen taps
+ * the primary slot and long-presses the secondary one, so they only show their full effect in the secondary slot. Returns the line for
+ * their item cards in that mode, else null.
+ */
+export function holdHint(id: ItemId, controlMode: string): string | null {
+  if (controlMode !== 'gesture') return null;
+  const w = (WEAPONS as Record<string, (typeof WEAPONS)[keyof typeof WEAPONS]>)[id];
+  const hold = !!w && (w.kind === 'bow' || w.kind === 'staff' || w.kind === 'wand' || (w.kind === 'melee' && !!w.dash));
+  return hold ? HOLD_HINT : null;
+}
+
 /** Lines for the item card (description, numbers, signature of a unique, affix). */
 export function itemLines(inst: ItemInstance): string[] {
   const def = ITEMS[inst.id];

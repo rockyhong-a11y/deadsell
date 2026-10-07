@@ -2,7 +2,7 @@ import type { AABB } from '../../engine/math';
 import type { LevelUI } from './levelUI';
 import { Modal, hexA, type ModalKey } from './modals';
 import { COL, SZ, button, clampLines, gradeBadge, gradeBadgeW, gradePill, icon, panel, pieceIcon, pulse, text, textWidth, wrap } from './draw';
-import { ITEMS, UNIQUE_TAG, itemColor, itemLines, itemName } from '../items/items';
+import { ITEMS, UNIQUE_TAG, holdHint, itemColor, itemLines, itemName } from '../items/items';
 import type { ItemInstance, ItemSlot } from '../items/types';
 import { STASH } from '../rules';
 import { depositEquipped, emptySlotFor, equipFromStash, salvageEntry, salvageValue, slotsOf, stashFull } from '../meta/stash';
@@ -427,6 +427,8 @@ export class StashModal extends Modal {
     const sig = def.unique ? lines.length - 1 : -1;
     const wrapped = lines.flatMap((l, i) => wrap(c, l, textW, SZ.s).map((s) => ({ s, color: i === 0 ? COL.text : i === sig ? accent : COL.amber })));
     if (inst.mb) wrapped.push({ s: '중간 보스 아이템', color: '#ff8a5c' });
+    const hint = holdHint(inst.id, this.ui.game.save.settings.controlMode);
+    if (hint) wrapped.push(...wrap(c, hint, textW, SZ.s).map((s) => ({ s, color: COL.cyan })));
     const y0 = r.y + 62;
     const maxLines = Math.max(1, Math.floor((r.y + r.h - 8 - y0) / 13));
     wrapped.slice(0, maxLines).forEach((l, n) => text(c, l.s, r.x + 10, y0 + n * 13, { color: l.color }));

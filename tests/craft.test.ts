@@ -673,6 +673,57 @@ describe('the grade in the HUD is a tiny pill, not 11 px letters over the icon (
   });
 });
 
+describe('the item card of a hold weapon says where it works best in the gesture controls (qa#2, spec#4)', () => {
+  it('the floor card draws the line for a katana / staff / bow in gesture mode; not in button mode, not for a sword', () => {
+    for (const [id, mode, want] of [['iron_katana', 'gesture', true], ['fire_staff', 'gesture', true], ['ice_bow', 'gesture', true], ['iron_katana', 'buttons', false], ['broadsword', 'gesture', false], ['selma_shears', 'gesture', false]] as const) {
+      const t = makeTestWorld(flatMap());
+      (t.world as any).player = { hp: 60, maxHp: 100, recoverable: 0, nearInteract: null, skillCooldown: [0, 3], skillCooldownMax: [10, 10], x: 200, y: 200, h: 40, w: 14, dying: false };
+      t.game.display = { W: 640, H: 360, scale: 1, canvas: null };
+      t.game.taps = new TapRegistry();
+      t.game.scene = null;
+      t.game.save.settings.controlMode = mode;
+      const ui = new LevelUI(t.game, t.world);
+      t.world.ui = ui;
+      const strs: string[] = [];
+      const rec = new Proxy(ctxFake() as any, {
+        get(tg, k: string) {
+          if (k === 'fillText') return (s: string) => { strs.push(s); };
+          return tg[k];
+        },
+        set(tg, k: string, v) { tg[k] = v; return true; },
+      }) as CanvasRenderingContext2D;
+      (t.world.player as any).nearInteract = { x: 210, y: 200, h: 14, dead: false, inst: mk(id, 2), promptText: () => '줍기', promptSub: () => null, interact() {}, canInteract: () => true };
+      t.game.taps.clear();
+      ui.update(1 / 60);
+      ui.hud.draw(rec, 640, 360, true);
+      // (the card wraps the line, so look for its first words)
+      expect(strs.some((s) => s.startsWith('길게 눌러 쓰는 무기')), `${id} in ${mode}`).toBe(want);
+    }
+  });
+
+  it('the stash card of a hold weapon too', () => {
+    const a = uiSetup();
+    a.save.stash = [mk('iron_katana'), mk('rusty_sword')];
+    const strs: string[] = [];
+    const rec = new Proxy(a.ctx as any, {
+      get(tg, k: string) {
+        if (k === 'fillText') return (s: string) => { strs.push(s); };
+        return tg[k];
+      },
+      set(tg, k: string, v) { tg[k] = v; return true; },
+    }) as CanvasRenderingContext2D;
+    a.ui.openStash();
+    a.advance(0.3);
+    const m = a.ui.top as any;
+    m.draw(rec, 640, 360);
+    expect(strs.some((s) => s.startsWith('길게 눌러 쓰는 무기'))).toBe(true);
+    strs.length = 0;
+    a.ui.key('right'); // the rusty sword
+    m.draw(rec, 640, 360);
+    expect(strs.some((s) => s.startsWith('길게 눌러 쓰는 무기'))).toBe(false);
+  });
+});
+
 // ---------------------------------------------------------------------------------------------------------------------
 describe('grade badges and the codex', () => {
   it('weapon and skill pages: ordinary items under 일반, uniques grade by grade with the recipe from CRAFT', () => {

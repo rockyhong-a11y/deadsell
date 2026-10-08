@@ -40,7 +40,17 @@ export async function botWalk(opts: BotOpts): Promise<BotResult> {
     ds.step(n);
     steps += n;
   };
-  const nodeOf = () => Math.floor((P.y - 1) / TS) * W + Math.floor(P.x / TS);
+  // The standing node of the player, as the movement model defines it (nav.ts lands a jump on the cell that carries the feet, whichever
+  // cell the centre is in): when a landing overshoots a plank / ledge end by a few px the centre is already over the void, the hull
+  // still rests on the neighbouring cell. Reporting the empty cell made the bot "align" to a cell without floor and walk off the plank.
+  const nodeOf = () => {
+    const cy = Math.floor((P.y - 1) / TS), cx = Math.floor(P.x / TS);
+    if (nav.standable(grid, cx, cy)) return cy * W + cx;
+    for (const nx of [cx - 1, cx + 1]) {
+      if (nav.standable(grid, nx, cy) && Math.abs(P.x - (nx * TS + TS / 2)) < TS / 2 + 7) return cy * W + nx;
+    }
+    return cy * W + cx;
+  };
   const tcy = Math.floor((opts.target.y - 1) / TS);
   const isGoal = (n: number) => {
     const x = n % W, y = (n - x) / W;

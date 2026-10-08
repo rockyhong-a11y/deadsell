@@ -387,6 +387,10 @@ test.describe('full run', () => {
     });
 
     await test.step('boss: fight with real attacks, then kill -> bossDefeated -> victory', async () => {
+      // the loot of the run is random (what a chest / pedestal / shop rolls depends on the generated levels, and the swap modal's
+      // first option replaces the primary weapon): make sure the primary slot holds a weapon the attack key swings, so this step
+      // really tests real attacks on the boss (an old shield only blocks)
+      await page.evaluate(() => (window as any).__ds.give('rusty_sword', 0));
       // soften her to ~40% so the fight is short, then keep hitting for real (dodging is not needed in god mode)
       await page.evaluate(() => { const b = (window as any).__ds.world.entities.find((e: any) => e.constructor.name === 'Matron'); b.hp = Math.round(b.maxHp * 0.4); });
       const hpStart = (await entitiesOf(page, 'Matron'))[0].hp!;

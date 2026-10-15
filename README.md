@@ -4,8 +4,8 @@
 바이옴 → 쉼터 → 바이옴 → 보스)를 모바일 웹으로 재현한 2D 로그라이트입니다.
 메커니즘은 원작을 충실히 따르고, **이름·캐릭터·아트는 전부 오리지널**이며 **등장인물은 모두 여성**입니다.
 
-- **플레이**: Claude 아티팩트 링크(공유 메뉴에서 지정한 사람만 접근). 빌드 전용 저장소 `deadsell-play`는 비공개이며,
-  깃허브 Pro 이상에서 Pages를 켜면 https://rockyhong-a11y.github.io/deadsell-play/ 로 다시 열 수 있습니다.
+- **플레이**: https://rockyhong-a11y.github.io/deadsell-play/ (공개, 빌드 전용 저장소 `deadsell-play`의 GitHub Pages).
+  새 빌드 배포: `tools/deploy_pages.sh` (현재 브랜치의 HEAD를 빌드해 `gh-pages`에 푸시).
 - 휴대폰 브라우저 가로 화면 권장. PC에서는 키보드로도 플레이 가능.
 
 ## 게임 구성

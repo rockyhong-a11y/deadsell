@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the game and publish dist/ to the gh-pages branch (GitHub Pages).
 #   tools/deploy_pages.sh [git-ref]     default: HEAD
-# Site: https://rockyhong-a11y.github.io/deadsell-play/  (build-only public repo; the source repo is private)
+# Site: https://rockyhong-a11y.github.io/deadsell-play/  (build-only public repo)
 PLAY_REPO=${PLAY_REPO:-https://github.com/rockyhong-a11y/deadsell-play}
 set -euo pipefail
 cd "$(dirname "$0")/.."

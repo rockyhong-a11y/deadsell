@@ -1,0 +1,59 @@
+{
+ "image": "mb_witch.png",
+ "frameW": 224,
+ "frameH": 176,
+ "anchor": [
+  112,
+  164
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 8,
+   "fps": 7,
+   "loop": true
+  },
+  "float": {
+   "row": 1,
+   "frames": 8,
+   "fps": 10,
+   "loop": true
+  },
+  "orb": {
+   "row": 2,
+   "frames": 14,
+   "fps": 12,
+   "loop": false,
+   "windup": 6,
+   "active": 3,
+   "recover": 5
+  },
+  "blink": {
+   "row": 3,
+   "frames": 12,
+   "fps": 14,
+   "loop": false
+  },
+  "shards": {
+   "row": 4,
+   "frames": 15,
+   "fps": 12,
+   "loop": false,
+   "windup": 7,
+   "active": 3,
+   "recover": 5
+  },
+  "hurt": {
+   "row": 5,
+   "frames": 4,
+   "fps": 12,
+   "loop": false
+  },
+  "death": {
+   "row": 6,
+   "frames": 14,
+   "fps": 8,
+   "loop": false
+  }
+ }
+}

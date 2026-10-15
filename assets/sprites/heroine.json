@@ -243,6 +243,66 @@
    "windup": 2,
    "active": 2,
    "recover": 2
+  },
+  "sprint": {
+   "row": 31,
+   "frames": 8,
+   "fps": 14,
+   "loop": true
+  },
+  "whip_1": {
+   "row": 32,
+   "frames": 7,
+   "fps": 16,
+   "loop": false,
+   "windup": 3,
+   "active": 2,
+   "recover": 2
+  },
+  "whip_2": {
+   "row": 33,
+   "frames": 7,
+   "fps": 16,
+   "loop": false,
+   "windup": 2,
+   "active": 2,
+   "recover": 3
+  },
+  "heavy_1": {
+   "row": 34,
+   "frames": 8,
+   "fps": 14,
+   "loop": false,
+   "windup": 3,
+   "active": 2,
+   "recover": 3
+  },
+  "heavy_2": {
+   "row": 35,
+   "frames": 9,
+   "fps": 12,
+   "loop": false,
+   "windup": 4,
+   "active": 2,
+   "recover": 3
+  },
+  "heavy_3": {
+   "row": 36,
+   "frames": 9,
+   "fps": 12,
+   "loop": false,
+   "windup": 3,
+   "active": 3,
+   "recover": 3
+  },
+  "cast": {
+   "row": 37,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "windup": 2,
+   "active": 1,
+   "recover": 3
   }
  }
 }

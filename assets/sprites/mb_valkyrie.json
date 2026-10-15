@@ -1,0 +1,68 @@
+{
+ "image": "mb_valkyrie.png",
+ "frameW": 224,
+ "frameH": 176,
+ "anchor": [
+  112,
+  164
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 8,
+   "fps": 7,
+   "loop": true
+  },
+  "walk": {
+   "row": 1,
+   "frames": 10,
+   "fps": 9,
+   "loop": true
+  },
+  "slash": {
+   "row": 2,
+   "frames": 15,
+   "fps": 14,
+   "loop": false,
+   "windup": 5,
+   "active": 6,
+   "recover": 4
+  },
+  "fly": {
+   "row": 3,
+   "frames": 8,
+   "fps": 12,
+   "loop": true
+  },
+  "dive": {
+   "row": 4,
+   "frames": 17,
+   "fps": 12,
+   "loop": false,
+   "windup": 8,
+   "active": 4,
+   "recover": 5
+  },
+  "wave": {
+   "row": 5,
+   "frames": 14,
+   "fps": 12,
+   "loop": false,
+   "windup": 6,
+   "active": 3,
+   "recover": 5
+  },
+  "hurt": {
+   "row": 6,
+   "frames": 4,
+   "fps": 12,
+   "loop": false
+  },
+  "death": {
+   "row": 7,
+   "frames": 14,
+   "fps": 8,
+   "loop": false
+  }
+ }
+}
